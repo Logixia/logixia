@@ -1,15 +1,23 @@
 import { ITransport, TransportLogEntry, ConsoleTransportConfig } from '../types/transport.types';
 
+/**
+ * ConsoleTransport
+ * 
+ * Logs entries to the console with optional formatting and colors.
+ */
 export class ConsoleTransport implements ITransport {
   public readonly name = 'console';
   
   constructor(private config: ConsoleTransportConfig = {}) {}
 
+  /**
+   * Write a log entry to the console
+   */
   async write(entry: TransportLogEntry): Promise<void> {
     const formattedEntry = this.formatEntry(entry);
-    
-    // Use appropriate console method based on log level
-    switch (entry.level.toLowerCase()) {
+    const level = entry.level.toLowerCase();
+
+    switch (level) {
       case 'error':
         console.error(formattedEntry);
         break;
@@ -27,6 +35,9 @@ export class ConsoleTransport implements ITransport {
     }
   }
 
+  /**
+   * Format a log entry for output
+   */
   private formatEntry(entry: TransportLogEntry): string {
     if (this.config.format === 'json') {
       return JSON.stringify({
@@ -41,44 +52,48 @@ export class ConsoleTransport implements ITransport {
       }, null, 2);
     }
 
-    // Text format
+    return this.formatTextEntry(entry);
+  }
+
+  /**
+   * Format a text entry with colors and structured output
+   */
+  private formatTextEntry(entry: TransportLogEntry): string {
     const parts: string[] = [];
-    
+
     // Timestamp
     if (this.config.timestamp !== false) {
-      const timestamp = entry.timestamp.toISOString();
-      parts.push(this.colorize(timestamp, 'gray'));
+      parts.push(this.colorize(entry.timestamp.toISOString(), 'gray'));
     }
-    
+
     // Level
     const level = entry.level.toUpperCase().padEnd(5);
-    const coloredLevel = this.colorize(level, this.getLevelColor(entry.level));
-    parts.push(coloredLevel);
-    
+    parts.push(this.colorize(level, this.getLevelColor(entry.level)));
+
     // Context
     if (entry.context) {
-      const context = `[${entry.context}]`;
-      parts.push(this.colorize(context, 'cyan'));
+      parts.push(this.colorize(`[${entry.context}]`, 'cyan'));
     }
-    
+
     // Trace ID
     if (entry.traceId) {
-      const traceId = `(${entry.traceId})`;
-      parts.push(this.colorize(traceId, 'magenta'));
+      parts.push(this.colorize(`(${entry.traceId})`, 'magenta'));
     }
-    
+
     // Message
     parts.push(entry.message);
-    
+
     // Data
     if (entry.data && Object.keys(entry.data).length > 0) {
-      const data = JSON.stringify(entry.data);
-      parts.push(this.colorize(data, 'blue'));
+      parts.push(this.colorize(JSON.stringify(entry.data), 'blue'));
     }
-    
+
     return parts.join(' ');
   }
 
+  /**
+   * Map log level to console color
+   */
   private getLevelColor(level: string): string {
     const colors: Record<string, string> = {
       error: 'red',
@@ -89,14 +104,14 @@ export class ConsoleTransport implements ITransport {
       trace: 'magenta',
       verbose: 'cyan'
     };
-    
     return colors[level.toLowerCase()] || 'white';
   }
 
+  /**
+   * Colorize text for console output
+   */
   private colorize(text: string, color: string): string {
-    if (this.config.colorize === false) {
-      return text;
-    }
+    if (this.config.colorize === false) return text;
 
     const colors: Record<string, string> = {
       red: '\x1b[31m',
@@ -114,7 +129,10 @@ export class ConsoleTransport implements ITransport {
     return `${colorCode}${text}${colors.reset}`;
   }
 
+  /**
+   * Close transport (noop for console)
+   */
   async close(): Promise<void> {
-    // Console transport doesn't need cleanup
+    // No cleanup required
   }
 }
