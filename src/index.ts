@@ -20,6 +20,7 @@ export * from './core/logitron-logger.module';
 export * from './formatters';
 export * from './utils/trace.utils';
 export * from './utils/error.utils';
+export * from './security';
 
 // Core exports
 export { LogixiaLogger, LogixiaLoggerService, DEFAULT_CONFIG };

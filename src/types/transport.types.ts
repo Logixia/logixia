@@ -14,6 +14,9 @@ export interface TransportLogEntry {
   traceId?: string;
   appName?: string;
   environment?: string;
+  encryptedFields?: Record<string, any>; // Fields that have been encrypted
+  piiDetected?: boolean; // Flag indicating PII was detected and masked
+  auditId?: string; // Reference to audit trail entry
 }
 
 // File Transport Configuration
