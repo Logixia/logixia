@@ -3,6 +3,7 @@
  */
 
 import { HttpRequest, HttpResponse } from './http.types';
+import { SecurityConfig } from './security.types';
 
 // Log levels const object for better flexibility
 export const LogLevel = {
@@ -58,6 +59,7 @@ export interface LoggerConfig<TLevels extends Record<string, number> = Record<st
   } | undefined;
   fields?: Partial<Record<LogFieldKey, string | boolean>>; // Enable/disable fields or customize their format
   // Example: { timestamp: '[yyyy-mm-dd HH:MM:ss.MS]', level: true, appName: false, message: true }
+  security?: SecurityConfig; // Security configuration for encryption, PII detection, and audit trails
   [key: string]: any;
 }
 
@@ -132,6 +134,11 @@ export interface LogEntry {
   payload?: Record<string, any>;
   context?: string;
   error?: Error;
+  encryptedFields?: Record<string, any>; // Fields that have been encrypted
+  piiDetected?: boolean; // Flag indicating PII was detected and masked
+  auditId?: string; // Reference to audit trail entry
+  quarantined?: boolean; // Flag indicating the log was quarantined due to DLP policy
+  metadata?: Record<string, any>; // Additional metadata for security features
 }
 
 // Error serialization options
@@ -199,3 +206,6 @@ export type { LoggerConfig as LoggerConfigInterface };
 
 // Export all HTTP types
 export * from './http.types';
+
+// Export all security types
+export * from './security.types';

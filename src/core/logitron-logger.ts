@@ -11,12 +11,14 @@ import {
   LogEntry,
   TimingEntry,
   ContextData,
-  LoggerWithLevels
+  LoggerWithLevels,
+  SecurityConfig
 } from '../types';
 import { getCurrentTraceId, generateTraceId } from '../utils/trace.utils';
 import { serializeError, isError, normalizeError } from '../utils/error.utils';
 import { TransportManager } from '../transports/transport.manager';
 import { TransportConfig } from '../types/transport.types';
+import { SecurityManager, ISecurityManager } from '../security/security-manager';
 
 export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig> implements ILoggerDefault {
   [K: string]: any; // Allow dynamic custom level methods
@@ -26,6 +28,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig> imp
   private contextData: ContextData = {};
   private transportManager?: TransportManager;
   private fieldState: Map<string, boolean> = new Map(); // Track field enable/disable state
+  private securityManager?: ISecurityManager;
 
   constructor(config: TConfig, context?: string) {
     const defaultConfig: LoggerConfig = {
@@ -79,6 +82,11 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig> imp
     // Initialize transport manager if transports are configured
     if ((this.config as any).transports) {
       this.transportManager = new TransportManager((this.config as any).transports);
+    }
+    
+    // Initialize security manager if security is configured
+    if (this.config.security) {
+      this.securityManager = new SecurityManager(this.config.security);
     }
     
     // Create dynamic methods for custom levels
@@ -378,6 +386,11 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig> imp
     // Add trace ID if enabled
     if (this.config.traceId) {
       entry.traceId = getCurrentTraceId() || generateTraceId();
+    }
+
+    // Apply security processing if security manager is enabled
+    if (this.securityManager?.isEnabled()) {
+      entry = await this.securityManager.processLogEntry(entry);
     }
 
     // Format and output log
