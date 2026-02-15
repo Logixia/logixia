@@ -1,10 +1,15 @@
-import { IAsyncTransport, IBatchTransport, TransportLogEntry, DatabaseTransportConfig } from '../types/transport.types';
+import {
+  IAsyncTransport,
+  IBatchTransport,
+  TransportLogEntry,
+  DatabaseTransportConfig,
+} from "../types/transport.types";
 
 export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
-  public readonly name = 'database';
+  public readonly name = "database";
   public readonly batchSize: number;
   public readonly flushInterval: number;
-  
+
   private batch: TransportLogEntry[] = [];
   private flushTimer?: NodeJS.Timeout;
   private connection: any;
@@ -23,7 +28,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
     }
 
     this.addToBatch(entry);
-    
+
     if (this.batch.length >= this.batchSize) {
       await this.flush();
     }
@@ -41,23 +46,23 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
 
     try {
       switch (this.config.type) {
-        case 'mongodb':
+        case "mongodb":
           await this.flushToMongoDB(entriesToFlush);
           break;
-        case 'postgresql':
+        case "postgresql":
           await this.flushToPostgreSQL(entriesToFlush);
           break;
-        case 'mysql':
+        case "mysql":
           await this.flushToMySQL(entriesToFlush);
           break;
-        case 'sqlite':
+        case "sqlite":
           await this.flushToSQLite(entriesToFlush);
           break;
         default:
           throw new Error(`Unsupported database type: ${this.config.type}`);
       }
     } catch (error) {
-      console.error('Database flush error:', error);
+      console.error("Database flush error:", error);
       // Re-add failed entries to batch for retry
       this.batch.unshift(...entriesToFlush);
       throw error;
@@ -87,16 +92,16 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
   private async establishConnection(): Promise<void> {
     try {
       switch (this.config.type) {
-        case 'mongodb':
+        case "mongodb":
           await this.connectMongoDB();
           break;
-        case 'postgresql':
+        case "postgresql":
           await this.connectPostgreSQL();
           break;
-        case 'mysql':
+        case "mysql":
           await this.connectMySQL();
           break;
-        case 'sqlite':
+        case "sqlite":
           await this.connectSQLite();
           break;
       }
@@ -109,15 +114,18 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
 
   private async connectMongoDB(): Promise<void> {
     try {
-      const { MongoClient } = await import('mongodb').catch(() => {
-        throw new Error('MongoDB driver not installed. Run: npm install mongodb');
+      const { MongoClient } = await import("mongodb").catch(() => {
+        throw new Error(
+          "MongoDB driver not installed. Run: npm install mongodb",
+        );
       });
-      const connectionString = this.config.connectionString || 
+      const connectionString =
+        this.config.connectionString ||
         `mongodb://${this.config.host}:${this.config.port}/${this.config.database}`;
-      
+
       this.connection = new MongoClient(connectionString);
       await this.connection.connect();
-      
+
       // Test connection
       await this.connection.db(this.config.database).admin().ping();
     } catch (error) {
@@ -127,23 +135,27 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
 
   private async connectPostgreSQL(): Promise<void> {
     try {
-      const { Client } = await import('pg').catch(() => {
-        throw new Error('PostgreSQL driver not installed. Run: npm install pg @types/pg');
+      const { Client } = await import("pg").catch(() => {
+        throw new Error(
+          "PostgreSQL driver not installed. Run: npm install pg @types/pg",
+        );
       });
-      
+
       const config: any = {
         connectionString: this.config.connectionString,
         host: this.config.host,
         port: this.config.port,
-        database: this.config.database
+        database: this.config.database,
       };
-      
+
       if (this.config.username) config.user = this.config.username;
       if (this.config.password) config.password = this.config.password;
-      if (this.config.ssl) config.ssl = typeof this.config.ssl === 'boolean' ? {} : this.config.ssl;
-      
+      if (this.config.ssl)
+        config.ssl =
+          typeof this.config.ssl === "boolean" ? {} : this.config.ssl;
+
       this.connection = new Client(config);
-      
+
       await this.connection.connect();
       await this.createPostgreSQLTable();
     } catch (error) {
@@ -153,22 +165,24 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
 
   private async connectMySQL(): Promise<void> {
     try {
-      const mysql = await import('mysql2/promise').catch(() => {
-        throw new Error('MySQL driver not installed. Run: npm install mysql2');
+      const mysql = await import("mysql2/promise").catch(() => {
+        throw new Error("MySQL driver not installed. Run: npm install mysql2");
       });
-      
+
       const config: any = {
         host: this.config.host,
         port: this.config.port,
-        database: this.config.database
+        database: this.config.database,
       };
-      
+
       if (this.config.username) config.user = this.config.username;
       if (this.config.password) config.password = this.config.password;
-      if (this.config.ssl) config.ssl = typeof this.config.ssl === 'boolean' ? {} : this.config.ssl;
-      
+      if (this.config.ssl)
+        config.ssl =
+          typeof this.config.ssl === "boolean" ? {} : this.config.ssl;
+
       this.connection = await mysql.createConnection(config);
-      
+
       await this.createMySQLTable();
     } catch (error) {
       throw new Error(`MySQL connection failed: ${error}`);
@@ -177,18 +191,22 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
 
   private async connectSQLite(): Promise<void> {
     try {
-      const sqlite3 = await import('sqlite3').catch(() => {
-        throw new Error('SQLite driver not installed. Run: npm install sqlite3 sqlite');
+      const sqlite3 = await import("sqlite3").catch(() => {
+        throw new Error(
+          "SQLite driver not installed. Run: npm install sqlite3 sqlite",
+        );
       });
-      const { open } = await import('sqlite').catch(() => {
-        throw new Error('SQLite driver not installed. Run: npm install sqlite3 sqlite');
+      const { open } = await import("sqlite").catch(() => {
+        throw new Error(
+          "SQLite driver not installed. Run: npm install sqlite3 sqlite",
+        );
       });
-      
+
       this.connection = await open({
         filename: this.config.database,
-        driver: sqlite3.Database
+        driver: sqlite3.Database,
       });
-      
+
       await this.createSQLiteTable();
     } catch (error) {
       throw new Error(`SQLite connection failed: ${error}`);
@@ -197,9 +215,9 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
 
   private async flushToMongoDB(entries: TransportLogEntry[]): Promise<void> {
     const db = this.connection.db(this.config.database);
-    const collection = db.collection(this.config.collection || 'logs');
-    
-    const documents = entries.map(entry => ({
+    const collection = db.collection(this.config.collection || "logs");
+
+    const documents = entries.map((entry) => ({
       timestamp: entry.timestamp,
       level: entry.level,
       message: entry.message,
@@ -207,15 +225,15 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       context: entry.context,
       traceId: entry.traceId,
       appName: entry.appName,
-      environment: entry.environment
+      environment: entry.environment,
     }));
-    
+
     await collection.insertMany(documents);
   }
 
   private async flushToPostgreSQL(entries: TransportLogEntry[]): Promise<void> {
-    const tableName = this.config.table || 'logs';
-    const values = entries.map(entry => [
+    const tableName = this.config.table || "logs";
+    const values = entries.map((entry) => [
       entry.timestamp,
       entry.level,
       entry.message,
@@ -223,25 +241,28 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       entry.context,
       entry.traceId,
       entry.appName,
-      entry.environment
+      entry.environment,
     ]);
-    
-    const placeholders = values.map((_, i) => 
-      `($${i * 9 + 1}, $${i * 9 + 2}, $${i * 9 + 3}, $${i * 9 + 4}, $${i * 9 + 5}, $${i * 9 + 6}, $${i * 9 + 7}, $${i * 9 + 8}, $${i * 9 + 9})`
-    ).join(', ');
-    
+
+    const placeholders = values
+      .map(
+        (_, i) =>
+          `($${i * 9 + 1}, $${i * 9 + 2}, $${i * 9 + 3}, $${i * 9 + 4}, $${i * 9 + 5}, $${i * 9 + 6}, $${i * 9 + 7}, $${i * 9 + 8}, $${i * 9 + 9})`,
+      )
+      .join(", ");
+
     const query = `
       INSERT INTO ${tableName} 
       (timestamp, level, message, payload, context, trace_id, app_name, environment)
       VALUES ${placeholders}
     `;
-    
+
     await this.connection.query(query, values.flat());
   }
 
   private async flushToMySQL(entries: TransportLogEntry[]): Promise<void> {
-    const tableName = this.config.table || 'logs';
-    const values = entries.map(entry => [
+    const tableName = this.config.table || "logs";
+    const values = entries.map((entry) => [
       entry.timestamp,
       entry.level,
       entry.message,
@@ -249,45 +270,47 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       entry.context,
       entry.traceId,
       entry.appName,
-      entry.environment
+      entry.environment,
     ]);
-    
+
     const query = `
       INSERT INTO ${tableName} 
       (timestamp, level, message, payload, context, trace_id, app_name, environment)
       VALUES ?
     `;
-    
+
     await this.connection.query(query, [values]);
   }
 
   private async flushToSQLite(entries: TransportLogEntry[]): Promise<void> {
-    const tableName = this.config.table || 'logs';
-    
+    const tableName = this.config.table || "logs";
+
     const stmt = await this.connection.prepare(`
       INSERT INTO ${tableName} 
       (timestamp, level, message, payload, context, trace_id, app_name, environment)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    
+
     for (const entry of entries) {
       await stmt.run(
-        entry.timestamp instanceof Date ? entry.timestamp.toISOString() : entry.timestamp,
+        entry.timestamp instanceof Date
+          ? entry.timestamp.toISOString()
+          : entry.timestamp,
         entry.level,
         entry.message,
         JSON.stringify(entry.data || {}),
         entry.context,
         entry.traceId,
         entry.appName,
-        entry.environment
+        entry.environment,
       );
     }
-    
+
     await stmt.finalize();
   }
 
   private async createPostgreSQLTable(): Promise<void> {
-    const tableName = this.config.table || 'logs';
+    const tableName = this.config.table || "logs";
     const query = `
       CREATE TABLE IF NOT EXISTS ${tableName} (
         id SERIAL PRIMARY KEY,
@@ -303,17 +326,23 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `;
-    
+
     await this.connection.query(query);
-    
+
     // Create indexes for better performance
-    await this.connection.query(`CREATE INDEX IF NOT EXISTS idx_${tableName}_timestamp ON ${tableName} (timestamp)`);
-    await this.connection.query(`CREATE INDEX IF NOT EXISTS idx_${tableName}_level ON ${tableName} (level)`);
-    await this.connection.query(`CREATE INDEX IF NOT EXISTS idx_${tableName}_trace_id ON ${tableName} (trace_id)`);
+    await this.connection.query(
+      `CREATE INDEX IF NOT EXISTS idx_${tableName}_timestamp ON ${tableName} (timestamp)`,
+    );
+    await this.connection.query(
+      `CREATE INDEX IF NOT EXISTS idx_${tableName}_level ON ${tableName} (level)`,
+    );
+    await this.connection.query(
+      `CREATE INDEX IF NOT EXISTS idx_${tableName}_trace_id ON ${tableName} (trace_id)`,
+    );
   }
 
   private async createMySQLTable(): Promise<void> {
-    const tableName = this.config.table || 'logs';
+    const tableName = this.config.table || "logs";
     const query = `
       CREATE TABLE IF NOT EXISTS ${tableName} (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -332,12 +361,12 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
         INDEX idx_trace_id (trace_id)
       )
     `;
-    
+
     await this.connection.execute(query);
   }
 
   private async createSQLiteTable(): Promise<void> {
-    const tableName = this.config.table || 'logs';
+    const tableName = this.config.table || "logs";
     const query = `
       CREATE TABLE IF NOT EXISTS ${tableName} (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -353,19 +382,25 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `;
-    
+
     await this.connection.exec(query);
-    
+
     // Create indexes
-    await this.connection.exec(`CREATE INDEX IF NOT EXISTS idx_${tableName}_timestamp ON ${tableName} (timestamp)`);
-    await this.connection.exec(`CREATE INDEX IF NOT EXISTS idx_${tableName}_level ON ${tableName} (level)`);
-    await this.connection.exec(`CREATE INDEX IF NOT EXISTS idx_${tableName}_trace_id ON ${tableName} (trace_id)`);
+    await this.connection.exec(
+      `CREATE INDEX IF NOT EXISTS idx_${tableName}_timestamp ON ${tableName} (timestamp)`,
+    );
+    await this.connection.exec(
+      `CREATE INDEX IF NOT EXISTS idx_${tableName}_level ON ${tableName} (level)`,
+    );
+    await this.connection.exec(
+      `CREATE INDEX IF NOT EXISTS idx_${tableName}_trace_id ON ${tableName} (trace_id)`,
+    );
   }
 
   private setupFlushTimer(): void {
     this.flushTimer = setInterval(() => {
-      this.flush().catch(error => {
-        console.error('Scheduled flush error:', error);
+      this.flush().catch((error) => {
+        console.error("Scheduled flush error:", error);
       });
     }, this.flushInterval);
   }
@@ -381,16 +416,16 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
     // Close connection
     if (this.connection) {
       switch (this.config.type) {
-        case 'mongodb':
+        case "mongodb":
           await this.connection.close();
           break;
-        case 'postgresql':
+        case "postgresql":
           await this.connection.end();
           break;
-        case 'mysql':
+        case "mysql":
           await this.connection.end();
           break;
-        case 'sqlite':
+        case "sqlite":
           await this.connection.close();
           break;
       }
@@ -405,7 +440,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       batchSize: this.batchSize,
       currentBatchLength: this.batch.length,
       flushInterval: this.flushInterval,
-      isConnected: this.isConnected
+      isConnected: this.isConnected,
     };
   }
 
@@ -414,17 +449,21 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
 
     try {
       switch (this.config.type) {
-        case 'mongodb':
-          const collection = this.connection.db(this.config.database).collection(this.config.collection || 'logs');
+        case "mongodb":
+          const collection = this.connection
+            .db(this.config.database)
+            .collection(this.config.collection || "logs");
           return await collection.countDocuments();
-        
-        case 'postgresql':
-        case 'mysql':
-        case 'sqlite':
-          const tableName = this.config.table || 'logs';
-          const result = await this.connection.query(`SELECT COUNT(*) as count FROM ${tableName}`);
+
+        case "postgresql":
+        case "mysql":
+        case "sqlite":
+          const tableName = this.config.table || "logs";
+          const result = await this.connection.query(
+            `SELECT COUNT(*) as count FROM ${tableName}`,
+          );
           return result.rows?.[0]?.count || result[0]?.count || 0;
-        
+
         default:
           return 0;
       }

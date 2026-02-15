@@ -2,12 +2,15 @@
  * Trace ID utilities for Logitron
  */
 
-import { v4 as uuidv4 } from 'uuid';
-import { AsyncLocalStorage } from 'async_hooks';
-import { TraceIdConfig, TraceIdExtractorConfig } from '../types';
+import { v4 as uuidv4 } from "uuid";
+import { AsyncLocalStorage } from "async_hooks";
+import { TraceIdConfig, TraceIdExtractorConfig } from "../types";
 
 // Async local storage for trace context
-export const traceStorage = new AsyncLocalStorage<{ traceId: string; [key: string]: any }>();
+export const traceStorage = new AsyncLocalStorage<{
+  traceId: string;
+  [key: string]: any;
+}>();
 
 /**
  * Default trace ID generator using UUID v4
@@ -38,7 +41,7 @@ export function setTraceId(traceId: string, data?: Record<string, any>): void {
 export function runWithTraceId<T>(
   traceId: string,
   fn: () => T,
-  data?: Record<string, any>
+  data?: Record<string, any>,
 ): T {
   return traceStorage.run({ traceId, ...data }, fn);
 }
@@ -48,11 +51,13 @@ export function runWithTraceId<T>(
  */
 export function extractTraceId(
   request: any,
-  config: TraceIdExtractorConfig
+  config: TraceIdExtractorConfig,
 ): string | undefined {
   // Try headers first
   if (config.header) {
-    const headers = Array.isArray(config.header) ? config.header : [config.header];
+    const headers = Array.isArray(config.header)
+      ? config.header
+      : [config.header];
     for (const header of headers) {
       const value = request.headers?.[header.toLowerCase()];
       if (value) {
@@ -85,7 +90,9 @@ export function extractTraceId(
 
   // Try route parameters
   if (config.params) {
-    const paramFields = Array.isArray(config.params) ? config.params : [config.params];
+    const paramFields = Array.isArray(config.params)
+      ? config.params
+      : [config.params];
     for (const param of paramFields) {
       const value = request.params?.[param];
       if (value) {
@@ -118,11 +125,15 @@ export function createTraceMiddleware(config: TraceIdConfig) {
     req.traceId = traceId;
 
     // Set response header
-    res.setHeader('X-Trace-Id', traceId);
+    res.setHeader("X-Trace-Id", traceId);
 
     // Run with trace context
-    runWithTraceId(traceId, () => {
-      next();
-    }, { requestId: req.id || generateTraceId() });
+    runWithTraceId(
+      traceId,
+      () => {
+        next();
+      },
+      { requestId: req.id || generateTraceId() },
+    );
   };
 }

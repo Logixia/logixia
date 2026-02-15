@@ -5,23 +5,27 @@ import {
   ExecutionContext,
   Injectable,
   NestInterceptor,
-} from '@nestjs/common';
-import { Observable } from 'rxjs';
-import { runWithTraceId, getCurrentTraceId, extractTraceId } from '../utils/trace.utils';
-import type { TraceIdConfig } from '../types';
+} from "@nestjs/common";
+import { Observable } from "rxjs";
+import {
+  runWithTraceId,
+  getCurrentTraceId,
+  extractTraceId,
+} from "../utils/trace.utils";
+import type { TraceIdConfig } from "../types";
 
 @Injectable()
 export class WebSocketTraceInterceptor implements NestInterceptor {
   constructor(private readonly config?: TraceIdConfig) {
     this.config = {
       enabled: true,
-      contextKey: 'traceId',
+      contextKey: "traceId",
       extractor: {
-        body: ['traceId', 'trace_id', 'x-trace-id'],
-        header: ['x-trace-id', 'trace-id'],
-        query: ['traceId', 'trace_id']
+        body: ["traceId", "trace_id", "x-trace-id"],
+        header: ["x-trace-id", "trace-id"],
+        query: ["traceId", "trace_id"],
       },
-      ...config
+      ...config,
     };
   }
 
@@ -44,7 +48,7 @@ export class WebSocketTraceInterceptor implements NestInterceptor {
         body: data,
         headers: client?.handshake?.headers || {},
         query: client?.handshake?.query || {},
-        params: {}
+        params: {},
       };
       traceId = extractTraceId(requestLike, this.config.extractor);
     }
@@ -61,23 +65,27 @@ export class WebSocketTraceInterceptor implements NestInterceptor {
 
     // Set up WebSocket-specific context data
     const wsContextData = {
-      messageType: 'websocket',
+      messageType: "websocket",
       event: data?.event,
       socketId: client?.id,
       rooms: client?.rooms ? Array.from(client.rooms) : [],
-      clientAddress: client?.handshake?.address
+      clientAddress: client?.handshake?.address,
     };
 
     // Run the handler with trace ID context
-    return new Observable(observer => {
-      runWithTraceId(traceId!, () => {
-        const result = next.handle();
-        result.subscribe({
-          next: value => observer.next(value),
-          error: err => observer.error(err),
-          complete: () => observer.complete()
-        });
-      }, wsContextData);
+    return new Observable((observer) => {
+      runWithTraceId(
+        traceId!,
+        () => {
+          const result = next.handle();
+          result.subscribe({
+            next: (value) => observer.next(value),
+            error: (err) => observer.error(err),
+            complete: () => observer.complete(),
+          });
+        },
+        wsContextData,
+      );
     });
   }
 }

@@ -153,6 +153,228 @@ const result = await logger.timeAsync('api-call', async () => {
 });
 ```
 
+## CLI Tool
+
+Logixia includes a powerful command-line interface for log management, analysis, and monitoring. The CLI provides tools for analyzing log files, searching for patterns, exporting data, and monitoring logs in real-time.
+
+### Installation
+
+The CLI is included when you install Logixia globally:
+
+```bash
+npm install -g logixia
+```
+
+Or use it directly from your project:
+
+```bash
+npx logixia --help
+```
+
+### Available Commands
+
+#### Analyze Command
+
+Analyze log files for patterns, statistics, and insights:
+
+```bash
+# Basic analysis
+logixia analyze examples/sample.log
+
+# Filter by log level
+logixia analyze app.log --level error
+
+# Analyze logs from the last 24 hours
+logixia analyze app.log --last 24h
+
+# Output as JSON
+logixia analyze app.log --format json
+```
+
+**Options:**
+- `--level <level>`: Filter by log level (info, warn, error, debug)
+- `--last <range>`: Time range (e.g., 24h, 7d, 30m)
+- `--format <fmt>`: Output format (table, json) - default: table
+
+#### Stats Command
+
+Display detailed statistics for log files:
+
+```bash
+# Show statistics with pretty formatting
+logixia stats examples/sample.log
+
+# Group by different field
+logixia stats app.log --group-by service
+
+# Output as JSON
+logixia stats app.log --format json
+```
+
+**Output Example:**
+```
+Log Statistics for sample.log
+==================================================
+Total Entries: 20
+Time Range: 2025-10-15T08:00:00.000Z - 2025-10-15T08:19:23.456Z
+
+Level Distribution:
+  INFO             11 ( 55.0%) ████████████████
+  ERROR             5 ( 25.0%) ███████
+  WARN              3 ( 15.0%) ████
+  DEBUG             1 (  5.0%) █
+```
+
+**Options:**
+- `--group-by <field>`: Field to group by (default: level)
+- `--format <fmt>`: Output format (pretty, json) - default: pretty
+
+#### Search Command
+
+Search log files with powerful query syntax:
+
+```bash
+# Search for specific user
+logixia search app.log --query "user_id:123"
+
+# Search for error messages
+logixia search app.log --query "error"
+
+# Output as table
+logixia search app.log --query "user_id:123" --format table
+
+# Output as JSON
+logixia search app.log --query "level:error" --format json
+```
+
+**Query Syntax:**
+- `field:value`: Search specific field (e.g., `user_id:123`, `level:error`)
+- `text`: Search across all fields
+
+**Options:**
+- `--query <query>`: Search query (required)
+- `--format <fmt>`: Output format (line, table, json) - default: line
+- `--context <lines>`: Lines of context around matches - default: 0
+
+#### Export Command
+
+Export log files to different formats:
+
+```bash
+# Export to CSV
+logixia export app.log --format csv --output logs.csv
+
+# Export specific fields
+logixia export app.log --format csv --fields "timestamp,level,message"
+
+# Export to JSON
+logixia export app.log --format json --output logs.json
+
+# Export to stdout
+logixia export app.log --format csv --fields "timestamp,level,message"
+```
+
+**Options:**
+- `--format <fmt>`: Output format (csv, json) - default: json
+- `--fields <fields>`: Comma-separated list of fields to export
+- `--output <file>`: Output file path (default: stdout)
+
+#### Tail Command
+
+Monitor log files in real-time:
+
+```bash
+# View last 10 lines
+logixia tail app.log
+
+# Follow file changes
+logixia tail app.log --follow
+
+# Filter by log level
+logixia tail app.log --follow --filter level:error
+
+# Filter by user ID
+logixia tail app.log --follow --filter user_id:123
+
+# Highlight patterns with colors
+logixia tail app.log --follow --highlight level
+```
+
+**Options:**
+- `--follow`: Follow file changes (like `tail -f`)
+- `--filter <filter>`: Filter criteria (e.g., `level:error`, `user_id:123`)
+- `--highlight <pattern>`: Highlight pattern or color by level
+
+### CLI Examples
+
+#### Daily Operations
+
+```bash
+# Morning log review - check errors from yesterday
+logixia analyze yesterday.log --level error
+
+# Check stats for the week
+logixia stats app.log
+
+# Find all logs for a specific user
+logixia search app.log --query "user_id:456" --format table
+```
+
+#### Development Workflow
+
+```bash
+# Debug session - follow logs for specific user
+logixia tail debug.log --follow --filter user_id:123 --highlight level
+
+# Export logs for analysis
+logixia export app.log --format csv --fields "timestamp,level,message,user_id" --output analysis.csv
+
+# Search for specific errors
+logixia search app.log --query "Database connection timeout"
+```
+
+#### Production Monitoring
+
+```bash
+# Monitor production logs in real-time
+logixia tail production.log --follow --filter level:error
+
+# Analyze error patterns
+logixia analyze production.log --level error --last 24h
+
+# Generate daily report
+logixia stats production.log --format json > daily-report.json
+```
+
+### Sample Log File
+
+A sample log file is included at `examples/sample.log` for testing CLI commands:
+
+```bash
+# Try the CLI with the sample file
+logixia analyze examples/sample.log
+logixia stats examples/sample.log
+logixia search examples/sample.log --query "user_id:123" --format table
+logixia export examples/sample.log --format csv --fields "timestamp,level,message"
+```
+
+### CLI Development
+
+To contribute to the CLI or run it in development mode:
+
+```bash
+# Run CLI in development (uses ts-node)
+npm run cli:dev -- --help
+
+# Build CLI
+npm run cli:build
+
+# Run compiled CLI
+node dist/cli/index.js --help
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for more details on CLI development.
+
 ## Custom Log Levels
 
 Define application-specific log levels with custom priorities and visual styling:

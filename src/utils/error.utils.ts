@@ -2,24 +2,20 @@
  * Error serialization utilities for Logitron
  */
 
-import { ErrorSerializationOptions } from '../types';
+import { ErrorSerializationOptions } from "../types";
 
 /**
  * Serialize error object to JSON-safe format
  */
 export function serializeError(
   error: Error,
-  options: ErrorSerializationOptions = {}
+  options: ErrorSerializationOptions = {},
 ): Record<string, any> {
-  const {
-    includeStack = true,
-    maxDepth = 3,
-    excludeFields = []
-  } = options;
+  const { includeStack = true, maxDepth = 3, excludeFields = [] } = options;
 
   const serialized: Record<string, any> = {
     name: error.name,
-    message: error.message
+    message: error.message,
   };
 
   // Add stack trace if requested
@@ -31,9 +27,9 @@ export function serializeError(
   const errorKeys = Object.getOwnPropertyNames(error);
   for (const key of errorKeys) {
     if (
-      key !== 'name' &&
-      key !== 'message' &&
-      key !== 'stack' &&
+      key !== "name" &&
+      key !== "message" &&
+      key !== "stack" &&
       !excludeFields.includes(key)
     ) {
       try {
@@ -53,14 +49,18 @@ export function serializeError(
  */
 function serializeValue(value: any, maxDepth: number, currentDepth = 0): any {
   if (currentDepth >= maxDepth) {
-    return '[Max Depth Reached]';
+    return "[Max Depth Reached]";
   }
 
   if (value === null || value === undefined) {
     return value;
   }
 
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
     return value;
   }
 
@@ -73,16 +73,18 @@ function serializeValue(value: any, maxDepth: number, currentDepth = 0): any {
   }
 
   if (Array.isArray(value)) {
-    return value.map(item => serializeValue(item, maxDepth, currentDepth + 1));
+    return value.map((item) =>
+      serializeValue(item, maxDepth, currentDepth + 1),
+    );
   }
 
-  if (typeof value === 'object') {
+  if (typeof value === "object") {
     const serialized: Record<string, any> = {};
     for (const [key, val] of Object.entries(value)) {
       try {
         serialized[key] = serializeValue(val, maxDepth, currentDepth + 1);
       } catch {
-        serialized[key] = '[Unserializable]';
+        serialized[key] = "[Unserializable]";
       }
     }
     return serialized;
@@ -95,8 +97,13 @@ function serializeValue(value: any, maxDepth: number, currentDepth = 0): any {
  * Check if value is an Error instance
  */
 export function isError(value: any): value is Error {
-  return value instanceof Error || 
-    (value && typeof value === 'object' && 'name' in value && 'message' in value);
+  return (
+    value instanceof Error ||
+    (value &&
+      typeof value === "object" &&
+      "name" in value &&
+      "message" in value)
+  );
 }
 
 /**
@@ -107,12 +114,12 @@ export function normalizeError(error: any): Error {
     return error;
   }
 
-  if (typeof error === 'string') {
+  if (typeof error === "string") {
     return new Error(error);
   }
 
-  if (typeof error === 'object' && error !== null) {
-    const err = new Error(error.message || 'Unknown error');
+  if (typeof error === "object" && error !== null) {
+    const err = new Error(error.message || "Unknown error");
     Object.assign(err, error);
     return err;
   }

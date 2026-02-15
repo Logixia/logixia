@@ -2,8 +2,12 @@
  * Request context tracking for Logitron
  */
 
-import { RequestContext, HttpRequest, HttpResponse } from '../types';
-import { generateTraceId, getCurrentTraceId, setTraceId } from '../utils/trace.utils';
+import { RequestContext, HttpRequest, HttpResponse } from "../types";
+import {
+  generateTraceId,
+  getCurrentTraceId,
+  setTraceId,
+} from "../utils/trace.utils";
 
 export class RequestContextManager {
   private static contexts = new Map<string, RequestContext>();
@@ -11,29 +15,26 @@ export class RequestContextManager {
   /**
    * Create a new request context
    */
-  static createContext(
-    request: HttpRequest,
-    traceId?: string
-  ): RequestContext {
+  static createContext(request: HttpRequest, traceId?: string): RequestContext {
     const requestId = generateTraceId();
     const contextTraceId = traceId || getCurrentTraceId() || generateTraceId();
-    
+
     const context: RequestContext = {
       requestId,
       traceId: contextTraceId,
       startTime: Date.now(),
       request,
       ...(request.userAgent && { userAgent: request.userAgent }),
-      ...(request.ip && { ip: request.ip })
+      ...(request.ip && { ip: request.ip }),
     };
 
     this.contexts.set(requestId, context);
-    
+
     // Set trace ID in async context
     setTraceId(contextTraceId, {
       requestId,
       method: request.method,
-      url: request.url
+      url: request.url,
     });
 
     return context;
@@ -45,7 +46,7 @@ export class RequestContextManager {
   static updateContext(
     requestId: string,
     response?: HttpResponse,
-    error?: Error
+    error?: Error,
   ): RequestContext | undefined {
     const context = this.contexts.get(requestId);
     if (!context) {
@@ -55,11 +56,11 @@ export class RequestContextManager {
     const endTime = Date.now();
     context.endTime = endTime;
     context.duration = endTime - context.startTime;
-    
+
     if (response) {
       context.response = response;
     }
-    
+
     if (error) {
       context.error = error;
     }
@@ -104,33 +105,36 @@ export class RequestContextManager {
     completedRequests: number;
   } {
     const contexts = Array.from(this.contexts.values());
-    const completedContexts = contexts.filter(ctx => ctx.endTime);
-    
-    const averageDuration = completedContexts.length > 0
-      ? completedContexts.reduce((sum, ctx) => sum + (ctx.duration || 0), 0) / completedContexts.length
-      : 0;
+    const completedContexts = contexts.filter((ctx) => ctx.endTime);
+
+    const averageDuration =
+      completedContexts.length > 0
+        ? completedContexts.reduce((sum, ctx) => sum + (ctx.duration || 0), 0) /
+          completedContexts.length
+        : 0;
 
     return {
       activeContexts: contexts.length,
       averageDuration,
-      completedRequests: completedContexts.length
+      completedRequests: completedContexts.length,
     };
   }
 
   /**
    * Cleanup old completed contexts (older than specified time)
    */
-  static cleanup(maxAgeMs: number = 300000): number { // 5 minutes default
+  static cleanup(maxAgeMs: number = 300000): number {
+    // 5 minutes default
     const now = Date.now();
     let cleaned = 0;
-    
+
     for (const [requestId, context] of this.contexts.entries()) {
-      if (context.endTime && (now - context.endTime) > maxAgeMs) {
+      if (context.endTime && now - context.endTime > maxAgeMs) {
         this.contexts.delete(requestId);
         cleaned++;
       }
     }
-    
+
     return cleaned;
   }
 }
@@ -148,7 +152,7 @@ export function createHttpRequest(
     body?: any;
     ip?: string;
     userAgent?: string;
-  } = {}
+  } = {},
 ): HttpRequest {
   return {
     method: method.toUpperCase(),
@@ -159,7 +163,7 @@ export function createHttpRequest(
     ...(options.body !== undefined && { body: options.body }),
     ...(options.ip && { ip: options.ip }),
     ...(options.userAgent && { userAgent: options.userAgent }),
-    timestamp: Date.now()
+    timestamp: Date.now(),
   };
 }
 
@@ -170,13 +174,13 @@ export function createHttpResponse(
   statusCode: number,
   headers: Record<string, string | string[]> = {},
   body?: any,
-  contentLength?: number
+  contentLength?: number,
 ): HttpResponse {
   return {
     statusCode,
     headers,
     ...(body !== undefined && { body }),
     ...(contentLength !== undefined && { contentLength }),
-    timestamp: Date.now()
+    timestamp: Date.now(),
   };
 }

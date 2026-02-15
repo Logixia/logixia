@@ -1,11 +1,18 @@
-import { ITransport, IBatchTransport, TransportLogEntry, AnalyticsTransportConfig } from '../types/transport.types';
+import {
+  ITransport,
+  IBatchTransport,
+  TransportLogEntry,
+  AnalyticsTransportConfig,
+} from "../types/transport.types";
 
-export abstract class AnalyticsTransport implements ITransport, IBatchTransport {
+export abstract class AnalyticsTransport
+  implements ITransport, IBatchTransport
+{
   public readonly name: string;
   public readonly level?: string | undefined;
   public readonly batchSize?: number;
   public readonly flushInterval?: number;
-  
+
   protected config: AnalyticsTransportConfig;
   protected batch: TransportLogEntry[] = [];
   protected batchTimer?: NodeJS.Timeout;
@@ -18,12 +25,12 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
       flushInterval: 10000, // 10 seconds
       enableUserTracking: true,
       enableEventTracking: true,
-      ...config
+      ...config,
     };
     this.level = config.level;
     this.batchSize = this.config.batchSize || 50;
     this.flushInterval = this.config.flushInterval || 10000;
-    
+
     this.initialize();
   }
 
@@ -45,7 +52,7 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
 
   addToBatch(entry: TransportLogEntry): void {
     this.batch.push(entry);
-    
+
     if (this.batch.length >= (this.config.batchSize || 50)) {
       this.flush().catch(console.error);
     } else if (!this.batchTimer && this.config.flushInterval) {
@@ -57,10 +64,10 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
 
   async flush(): Promise<void> {
     if (this.batch.length === 0) return;
-    
+
     const entriesToSend = [...this.batch];
     this.batch = [];
-    
+
     if (this.batchTimer) {
       clearTimeout(this.batchTimer);
       this.batchTimer = undefined as any;
@@ -85,7 +92,7 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
 
   protected shouldSkipEntry(entry: TransportLogEntry): boolean {
     // Skip debug/trace logs for analytics by default
-    const skipLevels = ['debug', 'trace'];
+    const skipLevels = ["debug", "trace"];
     return skipLevels.includes(entry.level.toLowerCase());
   }
 
@@ -123,11 +130,13 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
 
   protected async waitForReady(timeout: number = 5000): Promise<void> {
     const startTime = Date.now();
-    while (!this.isReady && (Date.now() - startTime) < timeout) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+    while (!this.isReady && Date.now() - startTime < timeout) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
     if (!this.isReady) {
-      throw new Error(`Analytics transport ${this.name} failed to initialize within ${timeout}ms`);
+      throw new Error(
+        `Analytics transport ${this.name} failed to initialize within ${timeout}ms`,
+      );
     }
   }
 

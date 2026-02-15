@@ -2,11 +2,11 @@
  * NestJS Service integration for Logitron Logger
  */
 
-import { Injectable, LoggerService, Scope } from '@nestjs/common';
-import { LogixiaLogger } from './logitron-logger';
-import type { LoggerConfig } from '../types';
-import { LogLevel, LogLevelString } from '../types';
-import { getCurrentTraceId } from '../utils/trace.utils';
+import { Injectable, LoggerService, Scope } from "@nestjs/common";
+import { LogixiaLogger } from "./logitron-logger";
+import type { LoggerConfig } from "../types";
+import { LogLevel, LogLevelString } from "../types";
+import { getCurrentTraceId } from "../utils/trace.utils";
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class LogixiaLoggerService implements LoggerService {
@@ -15,13 +15,13 @@ export class LogixiaLoggerService implements LoggerService {
 
   constructor(config?: LoggerConfig) {
     const defaultConfig: LoggerConfig = {
-      appName: 'NestJS-App',
-      environment: 'development',
+      appName: "NestJS-App",
+      environment: "development",
       traceId: true,
       format: {
         timestamp: true,
         colorize: true,
-        json: false
+        json: false,
       },
       silent: false,
       levelOptions: {
@@ -31,25 +31,25 @@ export class LogixiaLoggerService implements LoggerService {
           warn: 1,
           log: 2,
           debug: 3,
-          verbose: 4
+          verbose: 4,
         },
         colors: {
-          error: 'red',
-          warn: 'yellow',
-          log: 'green',
-          debug: 'blue',
-          verbose: 'cyan'
-        }
+          error: "red",
+          warn: "yellow",
+          log: "green",
+          debug: "blue",
+          verbose: "cyan",
+        },
       },
       fields: {
-        timestamp: '[yyyy-mm-dd HH:MM:ss.MS]',
-        level: '[log_level]',
-        appName: '[app_name]',
-        traceId: '[trace_id]',
-        message: '[message]',
-        payload: '[payload]',
-        timeTaken: '[time_taken_MS]'
-      }
+        timestamp: "[yyyy-mm-dd HH:MM:ss.MS]",
+        level: "[log_level]",
+        appName: "[app_name]",
+        traceId: "[trace_id]",
+        message: "[message]",
+        payload: "[payload]",
+        timeTaken: "[time_taken_MS]",
+      },
     };
 
     this.logger = new LogixiaLogger({ ...defaultConfig, ...config });
@@ -66,15 +66,17 @@ export class LogixiaLoggerService implements LoggerService {
   error(message: any, trace?: string, context?: string): void {
     this.setContextIfProvided(context);
     const errorData: any = {};
-    
+
     if (trace) {
       errorData.stack = trace;
     }
-    
-    if (typeof message === 'object' && message instanceof Error) {
+
+    if (typeof message === "object" && message instanceof Error) {
       this.logger.error(message, errorData).catch(console.error);
     } else {
-      this.logger.error(this.formatMessage(message), errorData).catch(console.error);
+      this.logger
+        .error(this.formatMessage(message), errorData)
+        .catch(console.error);
     }
   }
 
@@ -104,7 +106,11 @@ export class LogixiaLoggerService implements LoggerService {
     return this.logger.trace(message, data);
   }
 
-  logLevel(level: string, message: string, data?: Record<string, any>): Promise<void> {
+  logLevel(
+    level: string,
+    message: string,
+    data?: Record<string, any>,
+  ): Promise<void> {
     return this.logger.logLevel(level, message, data);
   }
 
@@ -177,14 +183,14 @@ export class LogixiaLoggerService implements LoggerService {
   }
 
   private formatMessage(message: any): string {
-    if (typeof message === 'string') {
+    if (typeof message === "string") {
       return message;
     }
-    
-    if (typeof message === 'object') {
+
+    if (typeof message === "object") {
       return JSON.stringify(message);
     }
-    
+
     return String(message);
   }
 

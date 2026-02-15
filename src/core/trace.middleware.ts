@@ -2,15 +2,15 @@
  * Trace ID middleware for NestJS integration
  */
 
-import { Injectable, NestMiddleware } from '@nestjs/common';
-import { Request, Response, NextFunction } from 'express';
+import { Injectable, NestMiddleware } from "@nestjs/common";
+import { Request, Response, NextFunction } from "express";
 import {
   generateTraceId,
   extractTraceId,
   runWithTraceId,
-  getCurrentTraceId
-} from '../utils/trace.utils';
-import type { TraceIdConfig } from '../types';
+  getCurrentTraceId,
+} from "../utils/trace.utils";
+import type { TraceIdConfig } from "../types";
 
 // Extend Express Request interface
 declare global {
@@ -28,12 +28,12 @@ export class TraceMiddleware implements NestMiddleware {
     this.config = {
       enabled: true,
       generator: generateTraceId,
-      contextKey: 'traceId',
+      contextKey: "traceId",
       extractor: {
-        header: ['x-trace-id', 'x-request-id', 'trace-id'],
-        query: ['traceId', 'trace_id']
+        header: ["x-trace-id", "x-request-id", "trace-id"],
+        query: ["traceId", "trace_id"],
       },
-      ...config
+      ...config,
     };
   }
 
@@ -51,7 +51,9 @@ export class TraceMiddleware implements NestMiddleware {
 
     // Generate new trace ID if not found
     if (!traceId) {
-      traceId = this.config.generator ? this.config.generator() : generateTraceId();
+      traceId = this.config.generator
+        ? this.config.generator()
+        : generateTraceId();
     }
 
     // Set trace ID in request
@@ -59,19 +61,23 @@ export class TraceMiddleware implements NestMiddleware {
     req.requestId = req.requestId || generateTraceId();
 
     // Set response headers
-    res.setHeader('X-Trace-Id', traceId);
-    res.setHeader('X-Request-Id', req.requestId);
+    res.setHeader("X-Trace-Id", traceId);
+    res.setHeader("X-Request-Id", req.requestId);
 
     // Run with trace context
-    runWithTraceId(traceId, () => {
-      next();
-    }, { 
-      requestId: req.requestId,
-      method: req.method,
-      url: req.url,
-      userAgent: req.get('User-Agent'),
-      ip: req.ip || req.connection.remoteAddress
-    });
+    runWithTraceId(
+      traceId,
+      () => {
+        next();
+      },
+      {
+        requestId: req.requestId,
+        method: req.method,
+        url: req.url,
+        userAgent: req.get("User-Agent"),
+        ip: req.ip || req.connection.remoteAddress,
+      },
+    );
   }
 }
 
@@ -89,12 +95,12 @@ export function traceMiddleware(config?: TraceIdConfig) {
   const traceConfig = {
     enabled: true,
     generator: generateTraceId,
-    contextKey: 'traceId',
+    contextKey: "traceId",
     extractor: {
-      header: ['x-trace-id', 'x-request-id', 'trace-id'],
-      query: ['traceId', 'trace_id']
+      header: ["x-trace-id", "x-request-id", "trace-id"],
+      query: ["traceId", "trace_id"],
     },
-    ...config
+    ...config,
   };
 
   return (req: Request, res: Response, next: NextFunction) => {
@@ -111,7 +117,9 @@ export function traceMiddleware(config?: TraceIdConfig) {
 
     // Generate new trace ID if not found
     if (!traceId) {
-      traceId = traceConfig.generator ? traceConfig.generator() : generateTraceId();
+      traceId = traceConfig.generator
+        ? traceConfig.generator()
+        : generateTraceId();
     }
 
     // Set trace ID in request
@@ -119,18 +127,22 @@ export function traceMiddleware(config?: TraceIdConfig) {
     req.requestId = req.requestId || generateTraceId();
 
     // Set response headers
-    res.setHeader('X-Trace-Id', traceId);
-    res.setHeader('X-Request-Id', req.requestId);
+    res.setHeader("X-Trace-Id", traceId);
+    res.setHeader("X-Request-Id", req.requestId);
 
     // Run with trace context
-    runWithTraceId(traceId, () => {
-      next();
-    }, { 
-      requestId: req.requestId,
-      method: req.method,
-      url: req.url,
-      userAgent: req.get('User-Agent'),
-      ip: req.ip || req.connection.remoteAddress
-    });
+    runWithTraceId(
+      traceId,
+      () => {
+        next();
+      },
+      {
+        requestId: req.requestId,
+        method: req.method,
+        url: req.url,
+        userAgent: req.get("User-Agent"),
+        ip: req.ip || req.connection.remoteAddress,
+      },
+    );
   };
 }

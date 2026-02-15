@@ -1,12 +1,19 @@
-import { TransportLogEntry, MixpanelTransportConfig } from '../types/transport.types';
-import { AnalyticsTransport, AnalyticsEvent, AnalyticsUser } from './analytics.transport';
+import {
+  TransportLogEntry,
+  MixpanelTransportConfig,
+} from "../types/transport.types";
+import {
+  AnalyticsTransport,
+  AnalyticsEvent,
+  AnalyticsUser,
+} from "./analytics.transport";
 
 export class MixpanelTransport extends AnalyticsTransport {
   private mixpanelConfig: MixpanelTransportConfig;
-  private baseUrl: string = 'https://api.mixpanel.com';
+  private baseUrl: string = "https://api.mixpanel.com";
 
   constructor(config: MixpanelTransportConfig) {
-    super('mixpanel', config);
+    super("mixpanel", config);
     this.mixpanelConfig = config;
   }
 
@@ -14,14 +21,14 @@ export class MixpanelTransport extends AnalyticsTransport {
     try {
       // Validate required configuration
       if (!this.mixpanelConfig.token) {
-        throw new Error('Mixpanel token is required');
+        throw new Error("Mixpanel token is required");
       }
-      
+
       // Test connection with a simple request
       await this.testConnection();
       this.isReady = true;
     } catch (error) {
-      console.error('Mixpanel transport initialization failed:', error);
+      console.error("Mixpanel transport initialization failed:", error);
       throw error;
     }
   }
@@ -32,7 +39,7 @@ export class MixpanelTransport extends AnalyticsTransport {
   }
 
   protected async sendBatch(entries: TransportLogEntry[]): Promise<void> {
-    const events = entries.map(entry => this.transformToMixpanelEvent(entry));
+    const events = entries.map((entry) => this.transformToMixpanelEvent(entry));
     await this.trackEvents(events);
   }
 
@@ -42,18 +49,20 @@ export class MixpanelTransport extends AnalyticsTransport {
 
   private transformToMixpanelEvent(entry: TransportLogEntry): AnalyticsEvent {
     const transformed = this.transformEntry(entry);
-    
+
     return {
       name: `log_${entry.level}`,
       properties: {
         ...transformed,
-        distinct_id: this.mixpanelConfig.distinct_id || 'anonymous',
+        distinct_id: this.mixpanelConfig.distinct_id || "anonymous",
         time: entry.timestamp.getTime(),
         $insert_id: this.generateInsertId(entry),
         // Add super properties if enabled
-        ...(this.mixpanelConfig.enableSuperProperties ? this.mixpanelConfig.superProperties : {})
+        ...(this.mixpanelConfig.enableSuperProperties
+          ? this.mixpanelConfig.superProperties
+          : {}),
       },
-      timestamp: entry.timestamp
+      timestamp: entry.timestamp,
     };
   }
 
@@ -62,70 +71,74 @@ export class MixpanelTransport extends AnalyticsTransport {
       event: event.name,
       properties: {
         token: this.mixpanelConfig.token,
-        ...event.properties
-      }
+        ...event.properties,
+      },
     };
 
-    await this.makeRequest('/track', [payload]);
+    await this.makeRequest("/track", [payload]);
   }
 
   private async trackEvents(events: AnalyticsEvent[]): Promise<void> {
-    const payload = events.map(event => ({
+    const payload = events.map((event) => ({
       event: event.name,
       properties: {
         token: this.mixpanelConfig.token,
-        ...event.properties
-      }
+        ...event.properties,
+      },
     }));
 
-    await this.makeRequest('/track', payload);
+    await this.makeRequest("/track", payload);
   }
 
   private async makeRequest(endpoint: string, data: any): Promise<void> {
     const url = `${this.mixpanelConfig.endpoint || this.baseUrl}${endpoint}`;
-    
+
     try {
       const response = await fetch(url, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'text/plain'
+          "Content-Type": "application/json",
+          Accept: "text/plain",
         },
-        body: JSON.stringify(data)
+        body: JSON.stringify(data),
       });
 
       if (!response.ok) {
-        throw new Error(`Mixpanel API error: ${response.status} ${response.statusText}`);
+        throw new Error(
+          `Mixpanel API error: ${response.status} ${response.statusText}`,
+        );
       }
 
       const result = await response.text();
-      if (result !== '1') {
+      if (result !== "1") {
         throw new Error(`Mixpanel API returned error: ${result}`);
       }
     } catch (error) {
-      throw new Error(`Failed to send data to Mixpanel: ${(error as Error).message}`);
+      throw new Error(
+        `Failed to send data to Mixpanel: ${(error as Error).message}`,
+      );
     }
   }
 
   private async testConnection(): Promise<void> {
     // Send a test event to validate the connection
     const testEvent = {
-      event: 'logitron_test',
+      event: "logitron_test",
       properties: {
         token: this.mixpanelConfig.token,
-        distinct_id: 'test_user',
+        distinct_id: "test_user",
         test: true,
-        time: Date.now()
-      }
+        time: Date.now(),
+      },
     };
 
-    await this.makeRequest('/track', [testEvent]);
+    await this.makeRequest("/track", [testEvent]);
   }
 
   private generateInsertId(entry: TransportLogEntry): string {
     // Generate a unique insert ID to prevent duplicate events
     const timestamp = entry.timestamp.getTime();
-    const hash = this.simpleHash(entry.message + (entry.traceId || ''));
+    const hash = this.simpleHash(entry.message + (entry.traceId || ""));
     return `${timestamp}_${hash}`;
   }
 
@@ -133,7 +146,7 @@ export class MixpanelTransport extends AnalyticsTransport {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash; // Convert to 32-bit integer
     }
     return Math.abs(hash).toString(36);
@@ -148,13 +161,16 @@ export class MixpanelTransport extends AnalyticsTransport {
     const payload = {
       $token: this.mixpanelConfig.token,
       $distinct_id: user.id,
-      $set: user.properties || {}
+      $set: user.properties || {},
     };
 
-    await this.makeRequest('/engage', [payload]);
+    await this.makeRequest("/engage", [payload]);
   }
 
-  public async setUserProperties(userId: string, properties: Record<string, any>): Promise<void> {
+  public async setUserProperties(
+    userId: string,
+    properties: Record<string, any>,
+  ): Promise<void> {
     if (!this.mixpanelConfig.enableUserTracking) {
       return;
     }
@@ -162,13 +178,16 @@ export class MixpanelTransport extends AnalyticsTransport {
     const payload = {
       $token: this.mixpanelConfig.token,
       $distinct_id: userId,
-      $set: properties
+      $set: properties,
     };
 
-    await this.makeRequest('/engage', [payload]);
+    await this.makeRequest("/engage", [payload]);
   }
 
-  public async trackCustomEvent(eventName: string, properties: Record<string, any> = {}): Promise<void> {
+  public async trackCustomEvent(
+    eventName: string,
+    properties: Record<string, any> = {},
+  ): Promise<void> {
     if (!this.mixpanelConfig.enableEventTracking) {
       return;
     }
@@ -177,13 +196,15 @@ export class MixpanelTransport extends AnalyticsTransport {
       event: eventName,
       properties: {
         token: this.mixpanelConfig.token,
-        distinct_id: this.mixpanelConfig.distinct_id || 'anonymous',
+        distinct_id: this.mixpanelConfig.distinct_id || "anonymous",
         time: Date.now(),
         ...properties,
-        ...(this.mixpanelConfig.enableSuperProperties ? this.mixpanelConfig.superProperties : {})
-      }
+        ...(this.mixpanelConfig.enableSuperProperties
+          ? this.mixpanelConfig.superProperties
+          : {}),
+      },
     };
 
-    await this.makeRequest('/track', [payload]);
+    await this.makeRequest("/track", [payload]);
   }
 }

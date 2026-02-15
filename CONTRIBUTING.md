@@ -127,6 +127,33 @@ Run example scripts to test your changes:
 - `npm run dev:performance` - Performance monitoring example
 - `npm run dev:fields` - Field configuration example
 
+### CLI Development
+
+This repository now includes a basic `logixia` CLI implemented in TypeScript under `src/cli`.
+
+- Run the CLI in development mode (uses ts-node):
+****
+   ```bash
+   npm run cli:dev
+   # or
+   npx ts-node src/cli/index.ts --help
+   ```
+
+- Build the CLI (compiles to `dist/cli`):
+
+   ```bash
+   npm run cli:build
+   npx tsc -p tsconfig.json --outDir dist --rootDir src
+   ```
+
+- After building, run the compiled CLI (help):
+
+   ```bash
+   node dist/cli/index.js --help
+   ```
+
+If you'd like to add new commands, create files under `src/cli/commands/` and export a Commander `Command` instance, then add it to `src/cli/index.ts`.
+
 ## Code Style
 
 We use ESLint and Prettier to maintain code quality and consistency:

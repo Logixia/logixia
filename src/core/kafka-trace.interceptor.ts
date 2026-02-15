@@ -1,21 +1,30 @@
 /** @format */
 
-import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
-import { Observable } from 'rxjs';
-import { runWithTraceId, getCurrentTraceId, extractTraceId } from '../utils/trace.utils';
-import type { TraceIdConfig } from '../types';
+import {
+  CallHandler,
+  ExecutionContext,
+  Injectable,
+  NestInterceptor,
+} from "@nestjs/common";
+import { Observable } from "rxjs";
+import {
+  runWithTraceId,
+  getCurrentTraceId,
+  extractTraceId,
+} from "../utils/trace.utils";
+import type { TraceIdConfig } from "../types";
 
 @Injectable()
 export class KafkaTraceInterceptor implements NestInterceptor {
   constructor(private readonly config?: TraceIdConfig) {
     this.config = {
       enabled: true,
-      contextKey: 'traceId',
+      contextKey: "traceId",
       extractor: {
-        body: ['traceId', 'trace_id', 'x-trace-id'],
-        header: ['x-trace-id', 'trace-id']
+        body: ["traceId", "trace_id", "x-trace-id"],
+        header: ["x-trace-id", "trace-id"],
       },
-      ...config
+      ...config,
     };
   }
 
@@ -38,7 +47,7 @@ export class KafkaTraceInterceptor implements NestInterceptor {
         body: data,
         headers: rpcData?.headers || {},
         query: {},
-        params: {}
+        params: {},
       };
       traceId = extractTraceId(requestLike, this.config.extractor);
     }
@@ -55,23 +64,27 @@ export class KafkaTraceInterceptor implements NestInterceptor {
 
     // Set up Kafka-specific context data
     const kafkaContext = {
-      messageType: 'kafka',
+      messageType: "kafka",
       topic: rpcData?.topic,
       partition: rpcData?.partition,
       offset: rpcData?.offset,
       key: rpcData?.key,
-      timestamp: rpcData?.timestamp
+      timestamp: rpcData?.timestamp,
     };
 
     // Run the handler with trace ID context
     return new Observable((subscriber) => {
-      runWithTraceId(traceId!, () => {
-        next.handle().subscribe({
-          next: (value) => subscriber.next(value),
-          error: (err) => subscriber.error(err),
-          complete: () => subscriber.complete(),
-        });
-      }, kafkaContext);
+      runWithTraceId(
+        traceId!,
+        () => {
+          next.handle().subscribe({
+            next: (value) => subscriber.next(value),
+            error: (err) => subscriber.error(err),
+            complete: () => subscriber.complete(),
+          });
+        },
+        kafkaContext,
+      );
     });
   }
 }

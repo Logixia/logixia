@@ -2,7 +2,7 @@
  * Text formatter for Logixia
  */
 
-import { ILogFormatter, LogEntry, LogLevel } from '../types';
+import { ILogFormatter, LogEntry, LogLevel } from "../types";
 
 export class TextFormatter implements ILogFormatter {
   private colorize: boolean;
@@ -10,35 +10,37 @@ export class TextFormatter implements ILogFormatter {
   private includeAppName: boolean;
   private includeTraceId: boolean;
   private includeContext: boolean;
-  private timestampFormat: 'iso' | 'locale' | 'short';
+  private timestampFormat: "iso" | "locale" | "short";
   private colors: Record<string, string>;
 
-  constructor(options: {
-    colorize?: boolean;
-    includeTimestamp?: boolean;
-    includeAppName?: boolean;
-    includeTraceId?: boolean;
-    includeContext?: boolean;
-    timestampFormat?: 'iso' | 'locale' | 'short';
-    colors?: Record<string, string>;
-  } = {}) {
+  constructor(
+    options: {
+      colorize?: boolean;
+      includeTimestamp?: boolean;
+      includeAppName?: boolean;
+      includeTraceId?: boolean;
+      includeContext?: boolean;
+      timestampFormat?: "iso" | "locale" | "short";
+      colors?: Record<string, string>;
+    } = {},
+  ) {
     this.colorize = options.colorize ?? true;
     this.includeTimestamp = options.includeTimestamp ?? true;
     this.includeAppName = options.includeAppName ?? true;
     this.includeTraceId = options.includeTraceId ?? true;
     this.includeContext = options.includeContext ?? true;
-    this.timestampFormat = options.timestampFormat ?? 'locale';
+    this.timestampFormat = options.timestampFormat ?? "locale";
     this.colors = {
-      error: '\x1b[31m',    // Red
-      warn: '\x1b[33m',     // Yellow
-      info: '\x1b[32m',     // Green
-      debug: '\x1b[34m',    // Blue
-      trace: '\x1b[35m',    // Magenta
-      verbose: '\x1b[36m',  // Cyan
-      reset: '\x1b[0m',     // Reset
-      bold: '\x1b[1m',      // Bold
-      dim: '\x1b[2m',       // Dim
-      ...options.colors
+      error: "\x1b[31m", // Red
+      warn: "\x1b[33m", // Yellow
+      info: "\x1b[32m", // Green
+      debug: "\x1b[34m", // Blue
+      trace: "\x1b[35m", // Magenta
+      verbose: "\x1b[36m", // Cyan
+      reset: "\x1b[0m", // Reset
+      bold: "\x1b[1m", // Bold
+      dim: "\x1b[2m", // Dim
+      ...options.colors,
     };
   }
 
@@ -48,20 +50,24 @@ export class TextFormatter implements ILogFormatter {
     // Add timestamp
     if (this.includeTimestamp) {
       const timestamp = this.formatTimestamp(entry.timestamp);
-      parts.push(this.colorize ? `${this.colors.dim}${timestamp}${this.colors.reset}` : timestamp);
+      parts.push(
+        this.colorize
+          ? `${this.colors.dim}${timestamp}${this.colors.reset}`
+          : timestamp,
+      );
     }
 
     // Add log level
     const levelName = entry.level.toLowerCase();
     const levelColor = this.colors[levelName] || this.colors.reset;
-    const formattedLevel = this.colorize 
+    const formattedLevel = this.colorize
       ? `${levelColor}${this.colors.bold}${levelName.toUpperCase().padEnd(5)}${this.colors.reset}`
       : levelName.toUpperCase().padEnd(5);
     parts.push(`[${formattedLevel}]`);
 
     // Add app name
     if (this.includeAppName) {
-      const appName = this.colorize 
+      const appName = this.colorize
         ? `${this.colors.bold}${entry.appName}${this.colors.reset}`
         : entry.appName;
       parts.push(`[${appName}]`);
@@ -69,7 +75,7 @@ export class TextFormatter implements ILogFormatter {
 
     // Add trace ID
     if (this.includeTraceId && entry.traceId) {
-      const traceId = this.colorize 
+      const traceId = this.colorize
         ? `${this.colors.dim}${entry.traceId}${this.colors.reset}`
         : entry.traceId;
       parts.push(`[${traceId}]`);
@@ -77,38 +83,43 @@ export class TextFormatter implements ILogFormatter {
 
     // Add context
     if (this.includeContext && entry.context) {
-      const context = this.colorize 
+      const context = this.colorize
         ? `${this.colors.cyan}${entry.context}${this.colors.reset}`
         : entry.context;
       parts.push(`[${context}]`);
     }
 
     // Add message
-    const message = this.colorize && entry.level === LogLevel.ERROR
-      ? `${this.colors.error}${entry.message}${this.colors.reset}`
-      : entry.message;
+    const message =
+      this.colorize && entry.level === LogLevel.ERROR
+        ? `${this.colors.error}${entry.message}${this.colors.reset}`
+        : entry.message;
     parts.push(message);
 
     // Add payload
     if (entry.payload && Object.keys(entry.payload).length > 0) {
       const payload = this.formatPayload(entry.payload);
       if (payload) {
-        parts.push(this.colorize ? `${this.colors.dim}${payload}${this.colors.reset}` : payload);
+        parts.push(
+          this.colorize
+            ? `${this.colors.dim}${payload}${this.colors.reset}`
+            : payload,
+        );
       }
     }
 
-    return parts.join(' ');
+    return parts.join(" ");
   }
 
   private formatTimestamp(timestamp: string): string {
     const date = new Date(timestamp);
-    
+
     switch (this.timestampFormat) {
-      case 'iso':
+      case "iso":
         return date.toISOString();
-      case 'short':
+      case "short":
         return date.toLocaleTimeString();
-      case 'locale':
+      case "locale":
       default:
         return date.toLocaleString();
     }
@@ -121,7 +132,11 @@ export class TextFormatter implements ILogFormatter {
         const entry = Object.entries(payload)[0];
         if (entry) {
           const [key, value] = entry;
-          if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+          if (
+            typeof value === "string" ||
+            typeof value === "number" ||
+            typeof value === "boolean"
+          ) {
             return `${key}=${value}`;
           }
         }
@@ -133,21 +148,21 @@ export class TextFormatter implements ILogFormatter {
           if (value === null || value === undefined) {
             return `${key}=${value}`;
           }
-          if (typeof value === 'string') {
+          if (typeof value === "string") {
             return `${key}="${value}"`;
           }
-          if (typeof value === 'number' || typeof value === 'boolean') {
+          if (typeof value === "number" || typeof value === "boolean") {
             return `${key}=${value}`;
           }
           if (value instanceof Date) {
             return `${key}=${value.toISOString()}`;
           }
-          if (typeof value === 'object') {
+          if (typeof value === "object") {
             return `${key}=${JSON.stringify(value)}`;
           }
           return `${key}=${String(value)}`;
         })
-        .join(' ');
+        .join(" ");
 
       return formatted;
     } catch {
@@ -165,7 +180,7 @@ export class TextFormatter implements ILogFormatter {
       includeAppName: false,
       includeTraceId: false,
       includeContext: true,
-      timestampFormat: 'short'
+      timestampFormat: "short",
     });
   }
 
@@ -176,7 +191,7 @@ export class TextFormatter implements ILogFormatter {
       includeAppName: true,
       includeTraceId: true,
       includeContext: true,
-      timestampFormat: 'locale'
+      timestampFormat: "locale",
     });
   }
 
@@ -186,7 +201,7 @@ export class TextFormatter implements ILogFormatter {
       includeTimestamp: false,
       includeAppName: false,
       includeTraceId: false,
-      includeContext: false
+      includeContext: false,
     });
   }
 }
