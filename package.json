@@ -35,7 +35,9 @@
     "dev:nestjs": "ts-node examples/nestjs-example.ts",
     "dev:custom-levels": "ts-node examples/custom-levels.ts",
     "dev:performance": "ts-node examples/performance-monitoring.ts",
-    "dev:fields": "ts-node examples/field-configuration.ts"
+    "dev:fields": "ts-node examples/field-configuration.ts",
+    "dev:search": "ts-node examples/search-quickstart.ts",
+    "dev:intelligent-search": "ts-node examples/intelligent-search.ts"
   },
   "keywords": [
     "logging",
@@ -62,7 +64,17 @@
     "log-rotation",
     "custom-levels",
     "child-logger",
-    "error-tracking"
+    "error-tracking",
+    "log-search",
+    "intelligent-search",
+    "nlp",
+    "natural-language",
+    "log-aggregation",
+    "pattern-recognition",
+    "anomaly-detection",
+    "log-correlation",
+    "ai-powered",
+    "search-engine"
   ],
   "author": {
     "name": "Logixia Contributors",

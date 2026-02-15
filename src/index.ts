@@ -7,6 +7,9 @@
  * - Performance monitoring
  * - NestJS integration
  * - Customizable log levels and colors
+ * - Intelligent log search and aggregation
+ * - Natural language query processing
+ * - Pattern recognition and anomaly detection
  */
 
 import { LogixiaLogger, createLogger as createLoggerFromCore } from './core/logitron-logger';
@@ -20,6 +23,9 @@ export * from './core/logitron-logger.module';
 export * from './formatters';
 export * from './utils/trace.utils';
 export * from './utils/error.utils';
+
+// Search module exports
+export * from './search';
 
 // Core exports
 export { LogixiaLogger, LogixiaLoggerService, DEFAULT_CONFIG };
