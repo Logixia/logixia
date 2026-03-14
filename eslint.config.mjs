@@ -1,14 +1,32 @@
-import globals from 'globals';
 import pluginJs from '@eslint/js';
-import tseslint from 'typescript-eslint';
 import eslintConfigPrettier from 'eslint-config-prettier';
+import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import sonarjs from 'eslint-plugin-sonarjs';
 import unicorn from 'eslint-plugin-unicorn';
-import simpleImportSort from 'eslint-plugin-simple-import-sort';
+import globals from 'globals';
+import tseslint from 'typescript-eslint';
 
 export default [
   // ── Ignore patterns ────────────────────────────────────────────
-  { ignores: ['dist/', 'node_modules/', 'coverage/', 'examples/'] },
+  {
+    ignores: [
+      // Build outputs
+      'dist/',
+      'release/',
+      'coverage/',
+      // Dependencies
+      'node_modules/',
+      // Demo / docs / scratch
+      'examples/',
+      'docs/',
+      'todo/',
+      // Generated declaration files inside dist
+      '**/*.d.ts',
+      // Root config files that don't need linting
+      'jest.config.js',
+      'commitlint.config.mjs',
+    ],
+  },
 
   // ── File patterns ──────────────────────────────────────────────
   { files: ['**/*.{js,mjs,cjs,ts}'] },
