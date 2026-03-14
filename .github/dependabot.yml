@@ -1,0 +1,70 @@
+version: 2
+
+updates:
+  # ── npm dependencies ─────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 10
+    # Group all non-major updates into a single PR to reduce noise
+    groups:
+      eslint-and-plugins:
+        patterns:
+          - 'eslint*'
+          - '@eslint/*'
+          - 'typescript-eslint'
+          - '@typescript-eslint/*'
+          - 'eslint-plugin-*'
+          - 'eslint-config-*'
+      testing:
+        patterns:
+          - 'jest*'
+          - '@jest/*'
+          - 'ts-jest'
+          - '@types/jest'
+      typescript:
+        patterns:
+          - 'typescript'
+          - 'tsdown'
+          - 'ts-node'
+          - '@types/*'
+      husky-and-commitlint:
+        patterns:
+          - 'husky'
+          - '@commitlint/*'
+          - 'commitizen'
+          - 'cz-*'
+          - 'lint-staged'
+    labels:
+      - 'dependencies'
+      - 'automated'
+    commit-message:
+      prefix: 'chore'
+      prefix-development: 'chore'
+      include: scope
+    # Ignore major updates for stable core deps — review manually
+    ignore:
+      - dependency-name: 'typescript'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@nestjs/*'
+        update-types: ['version-update:semver-major']
+
+  # ── GitHub Actions ────────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    labels:
+      - 'github-actions'
+      - 'automated'
+    commit-message:
+      prefix: 'ci'
+      include: scope
