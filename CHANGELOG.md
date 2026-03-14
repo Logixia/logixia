@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.1.1](https://github.com/Logixia/logixia/compare/v1.1.0...v1.1.1) (2026-03-14)
+
+### ♻️ Code Refactoring
+
+- **core:** enhance LogitronLogger and transports, update benchmarks ([e22b113](https://github.com/Logixia/logixia/commit/e22b1134a1af2c6e71c45a613abdafbf3cf49104))
+
 ## [1.1.0](https://github.com/Logixia/logixia/compare/v1.0.4...v1.1.0) (2026-03-14)
 
 ### ✨ Features
