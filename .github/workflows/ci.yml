@@ -15,14 +15,28 @@ concurrency:
 
 jobs:
   # ─────────────────────────────────────────────────────────
-  # 1. Quality — lint · format · typecheck
+  # 1. Quality — auto-fix → lint · typecheck
+  #
+  # Strategy:
+  #   a) Auto-fix  — run format + lint:fix so trivial style drift never
+  #                  blocks a PR.  Any changes are committed back to the
+  #                  branch (same-repo PRs + direct pushes only; fork PRs
+  #                  gracefully skip the commit step).
+  #   b) Hard gate — lint:check catches errors that can't be auto-fixed
+  #                  (real code issues), typecheck catches type errors.
+  #                  These still fail the build as intended.
   # ─────────────────────────────────────────────────────────
   quality:
     name: Quality (lint · typecheck · format)
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed for git-auto-commit-action to push fixes
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -32,10 +46,19 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Format check
-        run: npm run format:check
+      # ── Auto-fix: format + lint ──────────────────────────────────────
+      - name: Auto-fix formatting & lint
+        run: npm run format && npm run lint:fix
 
-      - name: Lint
+      - name: Commit auto-fixes (if any)
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'style: auto-fix formatting and lint [skip ci]'
+          commit_user_name: 'github-actions[bot]'
+          commit_user_email: 'github-actions[bot]@users.noreply.github.com'
+
+      # ── Hard gates: errors that can't be auto-fixed ──────────────────
+      - name: Lint (errors only)
         run: npm run lint:check
 
       - name: Type check
