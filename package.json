@@ -42,6 +42,7 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "benchmark": "npm run build && node benchmarks/run.mjs",
+    "size": "size-limit",
     "prepare": "husky install",
     "commit": "cz"
   },
@@ -149,6 +150,8 @@
     "semantic-release": "^25.0.3",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
+    "@size-limit/preset-small-lib": "^11.0.0",
+    "size-limit": "^11.0.0",
     "tinybench": "^6.0.0",
     "ts-jest": "^29.0.0",
     "ts-node": "^10.9.2",
@@ -187,5 +190,17 @@
     "commitizen": {
       "path": "cz-conventional-changelog"
     }
-  }
+  },
+  "size-limit": [
+    {
+      "path": "dist/index.mjs",
+      "name": "ESM (gzipped)",
+      "limit": "200 KB"
+    },
+    {
+      "path": "dist/index.js",
+      "name": "CJS (gzipped)",
+      "limit": "200 KB"
+    }
+  ]
 }
