@@ -117,7 +117,7 @@
   "bugs": {
     "url": "https://github.com/Logixia/logixia/issues"
   },
-  "homepage": "https://github.com/Logixia/logixia#readme",
+  "homepage": "https://logixia.github.io/logixia/",
   "peerDependencies": {
     "@nestjs/common": "^10.0.0",
     "express": "^5.2.1",

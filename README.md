@@ -12,6 +12,14 @@
   <a href="https://github.com/Logixia/logixia/actions/workflows/ci.yml"><img src="https://github.com/Logixia/logixia/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT"/></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.0%2B-blue" alt="TypeScript"/></a>
+  <a href="https://logixia.github.io/logixia/"><img src="https://img.shields.io/badge/website-logixia.github.io-a855f7" alt="website"/></a>
+</p>
+
+<p align="center">
+  <a href="https://logixia.github.io/logixia/"><strong>Website</strong></a> &middot;
+  <a href="https://github.com/Logixia/logixia">GitHub</a> &middot;
+  <a href="https://www.npmjs.com/package/logixia">npm</a> &middot;
+  <a href="https://github.com/Logixia/logixia/issues">Issues</a>
 </p>
 
 ---
