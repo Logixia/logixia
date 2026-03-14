@@ -1,30 +1,21 @@
 /** @format */
 
-import type {
-  CallHandler,
-  ExecutionContext,
-  NestInterceptor} from "@nestjs/common";
-import {
-  Injectable
-} from "@nestjs/common";
-import { Observable } from "rxjs";
+import type { CallHandler, ExecutionContext, NestInterceptor } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { Observable } from 'rxjs';
 
-import type { TraceIdConfig } from "../types";
-import {
-  extractTraceId,
-  getCurrentTraceId,
-  runWithTraceId,
-} from "../utils/trace.utils";
+import type { TraceIdConfig } from '../types';
+import { extractTraceId, getCurrentTraceId, runWithTraceId } from '../utils/trace.utils';
 
 @Injectable()
 export class KafkaTraceInterceptor implements NestInterceptor {
   constructor(private readonly config?: TraceIdConfig) {
     this.config = {
       enabled: true,
-      contextKey: "traceId",
+      contextKey: 'traceId',
       extractor: {
-        body: ["traceId", "trace_id", "x-trace-id"],
-        header: ["x-trace-id", "trace-id"],
+        body: ['traceId', 'trace_id', 'x-trace-id'],
+        header: ['x-trace-id', 'trace-id'],
       },
       ...config,
     };
@@ -67,7 +58,7 @@ export class KafkaTraceInterceptor implements NestInterceptor {
 
     // Set up Kafka-specific context data
     const kafkaContext = {
-      messageType: "kafka",
+      messageType: 'kafka',
       topic: rpcData?.topic,
       partition: rpcData?.partition,
       offset: rpcData?.offset,
@@ -86,7 +77,7 @@ export class KafkaTraceInterceptor implements NestInterceptor {
             complete: () => subscriber.complete(),
           });
         },
-        kafkaContext,
+        kafkaContext
       );
     });
   }

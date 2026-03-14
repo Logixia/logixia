@@ -1,31 +1,22 @@
 /** @format */
 
-import type {
-  CallHandler,
-  ExecutionContext,
-  NestInterceptor} from "@nestjs/common";
-import {
-  Injectable
-} from "@nestjs/common";
-import { Observable } from "rxjs";
+import type { CallHandler, ExecutionContext, NestInterceptor } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { Observable } from 'rxjs';
 
-import type { TraceIdConfig } from "../types";
-import {
-  extractTraceId,
-  getCurrentTraceId,
-  runWithTraceId,
-} from "../utils/trace.utils";
+import type { TraceIdConfig } from '../types';
+import { extractTraceId, getCurrentTraceId, runWithTraceId } from '../utils/trace.utils';
 
 @Injectable()
 export class WebSocketTraceInterceptor implements NestInterceptor {
   constructor(private readonly config?: TraceIdConfig) {
     this.config = {
       enabled: true,
-      contextKey: "traceId",
+      contextKey: 'traceId',
       extractor: {
-        body: ["traceId", "trace_id", "x-trace-id"],
-        header: ["x-trace-id", "trace-id"],
-        query: ["traceId", "trace_id"],
+        body: ['traceId', 'trace_id', 'x-trace-id'],
+        header: ['x-trace-id', 'trace-id'],
+        query: ['traceId', 'trace_id'],
       },
       ...config,
     };
@@ -68,7 +59,7 @@ export class WebSocketTraceInterceptor implements NestInterceptor {
 
     // Set up WebSocket-specific context data
     const wsContextData = {
-      messageType: "websocket",
+      messageType: 'websocket',
       event: data?.event,
       socketId: client?.id,
       rooms: client?.rooms ? Array.from(client.rooms) : [],
@@ -87,7 +78,7 @@ export class WebSocketTraceInterceptor implements NestInterceptor {
             complete: () => observer.complete(),
           });
         },
-        wsContextData,
+        wsContextData
       );
     });
   }

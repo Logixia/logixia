@@ -44,10 +44,10 @@ export class CorrelationEngine {
       if (otherLog === log) continue;
 
       const relationships = this.findRelationships(log, otherLog);
-      
+
       for (const relationship of relationships) {
         const score = this.calculateRelationshipScore(relationship, log, otherLog);
-        
+
         if (score > (this.options?.minSimilarityScore || 0.3)) {
           related.push({
             log: otherLog,
@@ -60,9 +60,7 @@ export class CorrelationEngine {
 
     // Deduplicate and sort by score
     const uniqueRelated = this.deduplicateRelatedLogs(related);
-    return uniqueRelated
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
+    return uniqueRelated.sort((a, b) => b.score - a.score).slice(0, limit);
   }
 
   /**
@@ -130,14 +128,14 @@ export class CorrelationEngine {
     const timeline: TimelineEvent[] = [];
 
     // Sort logs by timestamp
-    const sortedLogs = [...logs].sort((a, b) =>
-      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    const sortedLogs = [...logs].sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
 
     for (let i = 0; i < sortedLogs.length; i++) {
       const log = sortedLogs[i] as LogEntry; // noUncheckedIndexedAccess: guarded by loop condition
       const eventType = this.determineEventType(log, sortedLogs, i);
-      
+
       const event: TimelineEvent = {
         timestamp: new Date(log.timestamp),
         log,
@@ -149,9 +147,10 @@ export class CorrelationEngine {
         const endEvent = sortedLogs
           .slice(i + 1)
           .find((l) => this.determineEventType(l, sortedLogs, sortedLogs.indexOf(l)) === 'end');
-        
+
         if (endEvent) {
-          event.duration = new Date(endEvent.timestamp).getTime() - new Date(log.timestamp).getTime();
+          event.duration =
+            new Date(endEvent.timestamp).getTime() - new Date(log.timestamp).getTime();
         }
       }
 
@@ -168,7 +167,7 @@ export class CorrelationEngine {
     logs: LogEntry[]
   ): Promise<{ rootCause?: LogEntry; cascade: LogEntry[]; impactedServices: string[] }> {
     const errors = logs.filter((log) => log.level === 'error');
-    
+
     if (errors.length === 0) {
       return { cascade: [], impactedServices: [] };
     }
@@ -242,8 +241,8 @@ export class CorrelationEngine {
 
   private correlateByTemporalProximity(logs: LogEntry[]): Map<string, CorrelatedLogs> {
     const correlations = new Map<string, LogEntry[]>();
-    const sortedLogs = [...logs].sort((a, b) =>
-      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    const sortedLogs = [...logs].sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
 
     let currentGroup: LogEntry[] = [];
@@ -263,7 +262,7 @@ export class CorrelationEngine {
           const groupKey = `${groupStartTime}`;
           correlations.set(groupKey, currentGroup);
         }
-        
+
         // Start new group
         groupStartTime = logTime;
         currentGroup = [log];
@@ -284,7 +283,7 @@ export class CorrelationEngine {
 
     for (const error of errors) {
       const cascade = this.buildErrorCascade(error, logs);
-      
+
       if (cascade.length > 1) {
         const key = `${error.timestamp}_${error.message.slice(0, 20)}`;
         correlations.set(key, cascade);
@@ -316,8 +315,8 @@ export class CorrelationEngine {
       }
     }
 
-    return cascade.sort((a, b) =>
-      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    return cascade.sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
   }
 
@@ -394,7 +393,7 @@ export class CorrelationEngine {
   private haveSimilarPattern(log1: LogEntry, log2: LogEntry): boolean {
     const normalized1 = this.normalizeMessage(log1.message);
     const normalized2 = this.normalizeMessage(log2.message);
-    
+
     return normalized1 === normalized2;
   }
 
@@ -478,8 +477,8 @@ export class CorrelationEngine {
     // Calculate duration
     let duration: number | undefined;
     if (logs.length > 1) {
-      const sorted = [...logs].sort((a, b) =>
-        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      const sorted = [...logs].sort(
+        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
       );
       const start = new Date((sorted[0] as LogEntry).timestamp).getTime();
       const end = new Date((sorted[sorted.length - 1] as LogEntry).timestamp).getTime();

@@ -26,11 +26,7 @@ export interface ILogSearchEngine {
    * @param options - Search options
    * @returns Array of search results
    */
-  search(
-    query: string,
-    filters?: SearchFilters,
-    options?: SearchOptions
-  ): Promise<SearchResult[]>;
+  search(query: string, filters?: SearchFilters, options?: SearchOptions): Promise<SearchResult[]>;
 
   /**
    * Perform a natural language search

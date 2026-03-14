@@ -2,16 +2,16 @@
  * Core type definitions for Logitron Logger
  */
 
-import type { HttpRequest, HttpResponse } from "./http.types";
+import type { HttpRequest, HttpResponse } from './http.types';
 
 // Log levels const object for better flexibility
 export const LogLevel = {
-  ERROR: "error",
-  WARN: "warn",
-  INFO: "info",
-  DEBUG: "debug",
-  TRACE: "trace",
-  VERBOSE: "verbose",
+  ERROR: 'error',
+  WARN: 'warn',
+  INFO: 'info',
+  DEBUG: 'debug',
+  TRACE: 'trace',
+  VERBOSE: 'verbose',
 } as const;
 
 export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
@@ -19,42 +19,42 @@ export type LogLevelString = LogLevel | (string & {});
 
 // Predefined color types
 export type LogColor =
-  | "black"
-  | "red"
-  | "green"
-  | "yellow"
-  | "blue"
-  | "magenta"
-  | "cyan"
-  | "white"
-  | "gray"
-  | "grey"
-  | "brightRed"
-  | "brightGreen"
-  | "brightYellow"
-  | "brightBlue"
-  | "brightMagenta"
-  | "brightCyan"
-  | "brightWhite";
+  | 'black'
+  | 'red'
+  | 'green'
+  | 'yellow'
+  | 'blue'
+  | 'magenta'
+  | 'cyan'
+  | 'white'
+  | 'gray'
+  | 'grey'
+  | 'brightRed'
+  | 'brightGreen'
+  | 'brightYellow'
+  | 'brightBlue'
+  | 'brightMagenta'
+  | 'brightCyan'
+  | 'brightWhite';
 
 // Predefined field keys that can be enabled/disabled
 export type LogFieldKey =
-  | "timestamp"
-  | "level"
-  | "appName"
-  | "service"
-  | "traceId"
-  | "message"
-  | "payload"
-  | "timeTaken"
-  | "context"
-  | "requestId"
-  | "userId"
-  | "sessionId"
-  | "environment";
+  | 'timestamp'
+  | 'level'
+  | 'appName'
+  | 'service'
+  | 'traceId'
+  | 'message'
+  | 'payload'
+  | 'timeTaken'
+  | 'context'
+  | 'requestId'
+  | 'userId'
+  | 'sessionId'
+  | 'environment';
 
 // Environment types
-export type Environment = "development" | "production";
+export type Environment = 'development' | 'production';
 
 // Trace ID configuration
 export interface TraceIdExtractorConfig {
@@ -71,9 +71,7 @@ export interface TraceIdConfig {
   extractor?: TraceIdExtractorConfig;
 }
 
-export interface LoggerConfig<
-  TLevels extends Record<string, number> = Record<string, number>,
-> {
+export interface LoggerConfig<TLevels extends Record<string, number> = Record<string, number>> {
   appName?: string;
   environment?: Environment;
   traceId?: boolean | TraceIdConfig;
@@ -104,11 +102,7 @@ export interface IBaseLogger {
   debug(message: string, data?: Record<string, unknown>): Promise<void>;
   trace(message: string, data?: Record<string, unknown>): Promise<void>;
   verbose(message: string, data?: Record<string, unknown>): Promise<void>;
-  logLevel(
-    level: string,
-    message: string,
-    data?: Record<string, unknown>,
-  ): Promise<void>;
+  logLevel(level: string, message: string, data?: Record<string, unknown>): Promise<void>;
 
   time(label: string): void;
   timeEnd(label: string): Promise<number | undefined>;
@@ -140,10 +134,7 @@ export interface IBaseLogger {
 
 // Type for custom level methods based on config
 export type CustomLevelMethods<T extends Record<string, number>> = {
-  [K in keyof T]: (
-    message: string,
-    data?: Record<string, unknown>,
-  ) => Promise<void>;
+  [K in keyof T]: (message: string, data?: Record<string, unknown>) => Promise<void>;
 };
 
 // Generic logger type that combines base logger with custom level methods
@@ -157,16 +148,16 @@ export interface ILoggerDefault extends IBaseLogger {}
 
 // Helper type to create logger with specific custom levels
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic type needs any to accept all LoggerConfig shapes
-export type LoggerWithLevels<T extends LoggerConfig<any>> =
-  T["levelOptions"] extends { levels: infer L }
-    ? L extends Record<string, number>
-      ? ILogger<L>
-      : ILoggerDefault
-    : ILoggerDefault;
+export type LoggerWithLevels<T extends LoggerConfig<any>> = T['levelOptions'] extends {
+  levels: infer L;
+}
+  ? L extends Record<string, number>
+    ? ILogger<L>
+    : ILoggerDefault
+  : ILoggerDefault;
 
 // Helper type to extract levels from config for IntelliSense
-export type ExtractLevels<T> =
-  T extends LoggerConfig<infer L> ? L : Record<string, number>;
+export type ExtractLevels<T> = T extends LoggerConfig<infer L> ? L : Record<string, number>;
 
 // Log entry interface
 export interface LogEntry {
@@ -233,16 +224,16 @@ export const DEFAULT_LOG_LEVELS = {
 };
 
 export const DEFAULT_LOG_COLORS = {
-  error: "red",
-  warn: "yellow",
-  info: "green",
-  debug: "blue",
-  trace: "magenta",
-  verbose: "cyan",
+  error: 'red',
+  warn: 'yellow',
+  info: 'green',
+  debug: 'blue',
+  trace: 'magenta',
+  verbose: 'cyan',
 };
 
 // Additional exports for compatibility
 export type { LoggerConfig as LoggerConfigInterface };
 
 // Export all HTTP types
-export * from "./http.types";
+export * from './http.types';

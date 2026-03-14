@@ -2,21 +2,21 @@
  * Core Logixia Logger implementation
  */
 
-import { TransportManager } from "../transports/transport.manager";
+import { TransportManager } from '../transports/transport.manager';
 import type {
   ContextData,
   ILogger,
   ILoggerDefault,
   LogEntry,
   LoggerConfig,
-  LoggerWithLevels,  LogLevelString,
-  TimingEntry} from "../types";
-import {
-  LogLevel
-} from "../types";
-import { isError, serializeError } from "../utils/error.utils";
-import { internalError,internalLog, internalWarn } from "../utils/internal-log";
-import { generateTraceId,getCurrentTraceId } from "../utils/trace.utils";
+  LoggerWithLevels,
+  LogLevelString,
+  TimingEntry,
+} from '../types';
+import { LogLevel } from '../types';
+import { isError, serializeError } from '../utils/error.utils';
+import { internalError, internalLog, internalWarn } from '../utils/internal-log';
+import { generateTraceId, getCurrentTraceId } from '../utils/trace.utils';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic logger config allows any transport config shape
 export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
@@ -41,8 +41,8 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
 
   constructor(config: TConfig, context?: string) {
     const defaultConfig: LoggerConfig = {
-      appName: "App",
-      environment: "development",
+      appName: 'App',
+      environment: 'development',
       traceId: true,
       format: {
         timestamp: true,
@@ -61,12 +61,12 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
           [LogLevel.VERBOSE]: 5,
         },
         colors: {
-          [LogLevel.ERROR]: "red",
-          [LogLevel.WARN]: "yellow",
-          [LogLevel.INFO]: "blue",
-          [LogLevel.DEBUG]: "green",
-          [LogLevel.TRACE]: "gray",
-          [LogLevel.VERBOSE]: "cyan",
+          [LogLevel.ERROR]: 'red',
+          [LogLevel.WARN]: 'yellow',
+          [LogLevel.INFO]: 'blue',
+          [LogLevel.DEBUG]: 'green',
+          [LogLevel.TRACE]: 'gray',
+          [LogLevel.VERBOSE]: 'cyan',
         },
       },
     };
@@ -76,24 +76,24 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
     // Set default fields if not provided
     if (!this.config.fields) {
       this.config.fields = {
-        timestamp: "[yyyy-mm-dd HH:MM:ss.MS]",
-        level: "[log_level]",
-        appName: "[app_name]",
-        traceId: "[trace_id]",
-        message: "[message]",
-        payload: "[payload]",
-        timeTaken: "[time_taken_MS]",
+        timestamp: '[yyyy-mm-dd HH:MM:ss.MS]',
+        level: '[log_level]',
+        appName: '[app_name]',
+        traceId: '[trace_id]',
+        message: '[message]',
+        payload: '[payload]',
+        timeTaken: '[time_taken_MS]',
       };
     }
 
-    this.context = context ?? "";
+    this.context = context ?? '';
 
     // Initialize transport manager if transports are configured
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- transports is on extended config shapes
     if ((this.config as any).transports) {
       this.transportManager = new TransportManager(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- transports typed as any in extended config
-        (this.config as any).transports,
+        (this.config as any).transports
       );
     }
 
@@ -113,7 +113,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (this as any)[levelName.toLowerCase()] = async (
             message: string,
-            data?: Record<string, unknown>,
+            data?: Record<string, unknown>
           ) => {
             await this.logLevel(levelName.toLowerCase(), message, data);
           };
@@ -125,48 +125,41 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
   /**
    * Error logging with overloads
    */
-  async error(
-    messageOrError: string | Error,
-    data?: Record<string, unknown>,
-  ): Promise<void> {
+  async error(messageOrError: string | Error, data?: Record<string, unknown>): Promise<void> {
     if (isError(messageOrError)) {
-      await this.log("error", messageOrError.message, {
+      await this.log('error', messageOrError.message, {
         ...data,
         error: serializeError(messageOrError),
       });
     } else {
-      await this.log("error", messageOrError, data);
+      await this.log('error', messageOrError, data);
     }
   }
 
   async warn(message: string, data?: Record<string, unknown>): Promise<void> {
-    await this.log("warn", message, data);
+    await this.log('warn', message, data);
   }
 
   async info(message: string, data?: Record<string, unknown>): Promise<void> {
-    await this.log("info", message, data);
+    await this.log('info', message, data);
   }
 
   async debug(message: string, data?: Record<string, unknown>): Promise<void> {
-    await this.log("debug", message, data);
+    await this.log('debug', message, data);
   }
 
   async trace(message: string, data?: Record<string, unknown>): Promise<void> {
-    await this.log("trace", message, data);
+    await this.log('trace', message, data);
   }
 
   async verbose(message: string, data?: Record<string, unknown>): Promise<void> {
-    await this.log("verbose", message, data);
+    await this.log('verbose', message, data);
   }
 
   /**
    * Log with custom level
    */
-  async logLevel(
-    level: string,
-    message: string,
-    data?: Record<string, unknown>,
-  ): Promise<void> {
+  async logLevel(level: string, message: string, data?: Record<string, unknown>): Promise<void> {
     await this.log(level, message, data);
   }
 
@@ -255,11 +248,9 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
     // Check config.fields
     if (
       this.config.fields &&
-      this.config.fields[fieldName as keyof typeof this.config.fields] !==
-        undefined
+      this.config.fields[fieldName as keyof typeof this.config.fields] !== undefined
     ) {
-      const fieldValue =
-        this.config.fields[fieldName as keyof typeof this.config.fields];
+      const fieldValue = this.config.fields[fieldName as keyof typeof this.config.fields];
       return fieldValue !== false;
     }
 
@@ -271,19 +262,19 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
 
     // Get all possible fields from config
     const allFields = [
-      "timestamp",
-      "level",
-      "appName",
-      "service",
-      "traceId",
-      "message",
-      "payload",
-      "timeTaken",
-      "context",
-      "requestId",
-      "userId",
-      "sessionId",
-      "environment",
+      'timestamp',
+      'level',
+      'appName',
+      'service',
+      'traceId',
+      'message',
+      'payload',
+      'timeTaken',
+      'context',
+      'requestId',
+      'userId',
+      'sessionId',
+      'environment',
     ];
 
     for (const field of allFields) {
@@ -295,7 +286,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
 
   resetFieldState(): void {
     this.fieldState.clear();
-    internalLog("Field state reset to configuration defaults");
+    internalLog('Field state reset to configuration defaults');
   }
 
   // Transport Level Management Methods
@@ -303,7 +294,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
     if (this.transportManager) {
       this.transportManager.enableLevelPrompting();
     } else {
-      internalWarn("Transport manager not initialized");
+      internalWarn('Transport manager not initialized');
     }
   }
 
@@ -311,7 +302,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
     if (this.transportManager) {
       this.transportManager.disableLevelPrompting();
     } else {
-      internalWarn("Transport manager not initialized");
+      internalWarn('Transport manager not initialized');
     }
   }
 
@@ -319,7 +310,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
     if (this.transportManager) {
       this.transportManager.setTransportLevels(transportId, levels);
     } else {
-      internalWarn("Transport manager not initialized");
+      internalWarn('Transport manager not initialized');
     }
   }
 
@@ -327,7 +318,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
     if (this.transportManager) {
       return this.transportManager.getTransportLevels(transportId);
     }
-    internalWarn("Transport manager not initialized");
+    internalWarn('Transport manager not initialized');
     return undefined;
   }
 
@@ -335,7 +326,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
     if (this.transportManager) {
       this.transportManager.clearTransportLevelPreferences();
     } else {
-      internalWarn("Transport manager not initialized");
+      internalWarn('Transport manager not initialized');
     }
   }
 
@@ -376,7 +367,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
     if (!this.transportManager) {
       return {
         healthy: false,
-        details: { error: "TransportManager not initialized" },
+        details: { error: 'TransportManager not initialized' },
       };
     }
 
@@ -406,11 +397,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
   /**
    * Core logging method
    */
-  private async log(
-    level: string,
-    message: string,
-    data?: Record<string, unknown>,
-  ): Promise<void> {
+  private async log(level: string, message: string, data?: Record<string, unknown>): Promise<void> {
     // Check if logging is disabled
     if (this.config.silent) {
       return;
@@ -425,8 +412,8 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
     const entry: LogEntry = {
       timestamp: new Date().toISOString(),
       level,
-      appName: this.config.appName ?? "App",
-      environment: this.config.environment ?? "development",
+      appName: this.config.appName ?? 'App',
+      environment: this.config.environment ?? 'development',
       message,
       ...(this.context && { context: this.context }),
       payload: { ...this.contextData, ...data },
@@ -455,55 +442,48 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
     }
 
     // Build formatted string
-    let formatted = "";
+    let formatted = '';
 
     // Timestamp
-    if (
-      this.config.format?.timestamp !== false &&
-      this.isFieldEnabled("timestamp")
-    ) {
+    if (this.config.format?.timestamp !== false && this.isFieldEnabled('timestamp')) {
       const timestamp = new Date(entry.timestamp).toLocaleString();
       formatted += `[${timestamp}] `;
     }
 
     // Log level
-    if (this.isFieldEnabled("level")) {
+    if (this.isFieldEnabled('level')) {
       const levelName = entry.level;
       const coloredLevel = this.config.format?.colorize
         ? this.colorize(
             levelName.toUpperCase(),
-            this.config.levelOptions?.colors?.[levelName] || "white",
+            this.config.levelOptions?.colors?.[levelName] || 'white'
           )
         : levelName.toUpperCase();
       formatted += `[${coloredLevel}] `;
     }
 
     // App name
-    if (this.isFieldEnabled("appName")) {
+    if (this.isFieldEnabled('appName')) {
       formatted += `[${entry.appName}] `;
     }
 
     // Trace ID
-    if (entry.traceId && this.isFieldEnabled("traceId")) {
+    if (entry.traceId && this.isFieldEnabled('traceId')) {
       formatted += `[${entry.traceId}] `;
     }
 
     // Context
-    if (entry.context && this.isFieldEnabled("context")) {
+    if (entry.context && this.isFieldEnabled('context')) {
       formatted += `[${entry.context}] `;
     }
 
     // Message
-    if (this.isFieldEnabled("message")) {
+    if (this.isFieldEnabled('message')) {
       formatted += entry.message;
     }
 
     // Payload
-    if (
-      entry.payload &&
-      Object.keys(entry.payload).length > 0 &&
-      this.isFieldEnabled("payload")
-    ) {
+    if (entry.payload && Object.keys(entry.payload).length > 0 && this.isFieldEnabled('payload')) {
       formatted += ` ${JSON.stringify(entry.payload)}`;
     }
 
@@ -519,15 +499,15 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
     }
 
     const colors: Record<string, string> = {
-      red: "\x1b[31m",
-      green: "\x1b[32m",
-      yellow: "\x1b[33m",
-      blue: "\x1b[34m",
-      magenta: "\x1b[35m",
-      cyan: "\x1b[36m",
-      white: "\x1b[37m",
-      gray: "\x1b[90m",
-      reset: "\x1b[0m",
+      red: '\x1b[31m',
+      green: '\x1b[32m',
+      yellow: '\x1b[33m',
+      blue: '\x1b[34m',
+      magenta: '\x1b[35m',
+      cyan: '\x1b[36m',
+      white: '\x1b[37m',
+      gray: '\x1b[90m',
+      reset: '\x1b[0m',
     };
 
     const colorCode = colors[color.toLowerCase()] || colors.white;
@@ -561,11 +541,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
   /**
    * Output log to console or other destinations
    */
-  private async output(
-    message: string,
-    level: string,
-    entry: LogEntry,
-  ): Promise<void> {
+  private async output(message: string, level: string, entry: LogEntry): Promise<void> {
     // Use transport manager if available
     if (this.transportManager) {
       try {
@@ -573,7 +549,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
         return;
       } catch (error) {
         // Fallback to console if transport fails
-        internalError("Transport write failed", error);
+        internalError('Transport write failed', error);
       }
     }
 
@@ -601,7 +577,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic config type parameter
 export function createLogger<T extends LoggerConfig<any>>(
   config: T,
-  context?: string,
+  context?: string
 ): LoggerWithLevels<T> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cast needed for dynamic method attachment
   const logger = new LogixiaLogger<T>(config, context) as any;
@@ -610,10 +586,7 @@ export function createLogger<T extends LoggerConfig<any>>(
   if (config.levelOptions?.levels) {
     for (const levelName of Object.keys(config.levelOptions.levels)) {
       if (!logger[levelName]) {
-        logger[levelName] = async (
-          message: string,
-          data?: Record<string, unknown>,
-        ) => {
+        logger[levelName] = async (message: string, data?: Record<string, unknown>) => {
           await logger.logLevel(levelName, message, data);
         };
       }

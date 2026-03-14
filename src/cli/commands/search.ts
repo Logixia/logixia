@@ -5,7 +5,7 @@ import path from 'node:path';
 import chalk from 'chalk';
 import { Command } from 'commander';
 
-import { formatAsTable,safeParseLogs } from '../utils';
+import { formatAsTable, safeParseLogs } from '../utils';
 
 interface SearchCriteria {
   field?: string;
@@ -23,7 +23,7 @@ function parseQuery(query: string): SearchCriteria {
 export async function searchLogs(raw: string, opts: any = {}) {
   const entries = safeParseLogs(raw);
   const criteria = parseQuery(opts.query || '');
-  
+
   const results = entries.filter((entry: unknown) => {
     const row = entry as Record<string, unknown>;
     if (criteria.field) {
@@ -45,25 +45,27 @@ function formatSearchResults(results: any[], format: string, _context: number): 
   if (format === 'json') {
     return JSON.stringify(results, null, 2);
   }
-  
+
   if (format === 'table') {
     if (results.length === 0) return chalk.yellow('No results found');
-    
+
     // Determine columns from first result
     const columns = Object.keys(results[0] || {});
     const displayColumns = columns.slice(0, 4); // Show first 4 columns
-    
+
     return formatAsTable(results, displayColumns);
   }
-  
+
   // Default: line format with context
   if (results.length === 0) return chalk.yellow('No results found');
-  
-  return results.map((r, idx) => {
-    const line = JSON.stringify(r);
-    const prefix = chalk.gray(String(idx + 1) + ':');
-    return `${prefix} ${line}`;
-  }).join('\n');
+
+  return results
+    .map((r, idx) => {
+      const line = JSON.stringify(r);
+      const prefix = chalk.gray(String(idx + 1) + ':');
+      return `${prefix} ${line}`;
+    })
+    .join('\n');
 }
 
 export const searchCommand = new Command('search')
@@ -86,7 +88,7 @@ export const searchCommand = new Command('search')
 
     const raw = fs.readFileSync(full, 'utf8');
     const results = await searchLogs(raw, opts);
-    
+
     console.log(chalk.bold(`\nFound ${results.length} matches`));
     console.log(formatSearchResults(results, opts.format, Number.parseInt(opts.context || '0')));
   });

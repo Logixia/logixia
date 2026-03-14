@@ -1,6 +1,6 @@
 /**
  * Search module exports
- * 
+ *
  * Smart Log Aggregation and Intelligent Search System
  */
 

@@ -1,10 +1,7 @@
-import type {
-  DataDogTransportConfig,
-  TransportLogEntry,
-} from "../types/transport.types";
-import { internalError } from "../utils/internal-log";
-import type { AnalyticsMetric} from "./analytics.transport";
-import {AnalyticsTransport } from "./analytics.transport";
+import type { DataDogTransportConfig, TransportLogEntry } from '../types/transport.types';
+import { internalError } from '../utils/internal-log';
+import type { AnalyticsMetric } from './analytics.transport';
+import { AnalyticsTransport } from './analytics.transport';
 
 export class DataDogTransport extends AnalyticsTransport {
   private datadogConfig: DataDogTransportConfig;
@@ -13,11 +10,11 @@ export class DataDogTransport extends AnalyticsTransport {
   private metricsUrl: string;
 
   constructor(config: DataDogTransportConfig) {
-    super("datadog", config);
+    super('datadog', config);
     this.datadogConfig = config;
 
     // Set URLs based on site configuration
-    const site = config.site || "datadoghq.com";
+    const site = config.site || 'datadoghq.com';
     this.baseUrl = `https://api.${site}`;
     this.logsUrl = `https://http-intake.logs.${site}`;
     this.metricsUrl = `https://api.${site}`;
@@ -27,14 +24,14 @@ export class DataDogTransport extends AnalyticsTransport {
     try {
       // Validate required configuration
       if (!this.datadogConfig.apiKey) {
-        throw new Error("DataDog API key is required");
+        throw new Error('DataDog API key is required');
       }
 
       // Test connection
       await this.testConnection();
       this.isReady = true;
     } catch (error) {
-      internalError("DataDog transport initialization failed", error);
+      internalError('DataDog transport initialization failed', error);
       throw error;
     }
   }
@@ -99,10 +96,7 @@ export class DataDogTransport extends AnalyticsTransport {
       logs: logs,
     };
 
-    await this.makeLogsRequest(
-      "/v1/input/" + this.datadogConfig.apiKey,
-      payload,
-    );
+    await this.makeLogsRequest('/v1/input/' + this.datadogConfig.apiKey, payload);
   }
 
   private async sendMetric(entry: TransportLogEntry): Promise<void> {
@@ -110,15 +104,13 @@ export class DataDogTransport extends AnalyticsTransport {
   }
 
   private async sendMetricBatch(entries: TransportLogEntry[]): Promise<void> {
-    const metrics = entries.map((entry) =>
-      this.transformToDataDogMetric(entry),
-    );
+    const metrics = entries.map((entry) => this.transformToDataDogMetric(entry));
 
     const payload = {
       series: metrics,
     };
 
-    await this.makeMetricsRequest("/api/v1/series", payload);
+    await this.makeMetricsRequest('/api/v1/series', payload);
   }
 
   private async sendTrace(entry: TransportLogEntry): Promise<void> {
@@ -139,19 +131,19 @@ export class DataDogTransport extends AnalyticsTransport {
       timestamp: entry.timestamp.toISOString(),
       level: this.mapLogLevel(entry.level),
       message: entry.message,
-      service: this.datadogConfig.service || "logitron",
+      service: this.datadogConfig.service || 'logitron',
       version: this.datadogConfig.version,
-      env: this.datadogConfig.env || "production",
+      env: this.datadogConfig.env || 'production',
       logger: {
-        name: "logitron",
-        thread_name: "main",
+        name: 'logitron',
+        thread_name: 'main',
       },
       ...transformed,
       // Add DataDog specific fields
-      "dd.trace_id": entry.traceId,
-      "dd.span_id": this.generateSpanId(),
+      'dd.trace_id': entry.traceId,
+      'dd.span_id': this.generateSpanId(),
       host: this.getHostname(),
-      source: "nodejs",
+      source: 'nodejs',
     };
   }
 
@@ -159,12 +151,12 @@ export class DataDogTransport extends AnalyticsTransport {
     return {
       metric: `logitron.logs.${entry.level}`,
       points: [[Math.floor(entry.timestamp.getTime() / 1000), 1]],
-      type: "count",
+      type: 'count',
       host: this.getHostname(),
       tags: [
         `level:${entry.level}`,
-        `service:${this.datadogConfig.service || "logitron"}`,
-        `env:${this.datadogConfig.env || "production"}`,
+        `service:${this.datadogConfig.service || 'logitron'}`,
+        `env:${this.datadogConfig.env || 'production'}`,
         ...(entry.context ? [`context:${entry.context}`] : []),
         ...(entry.appName ? [`app:${entry.appName}`] : []),
       ],
@@ -176,23 +168,23 @@ export class DataDogTransport extends AnalyticsTransport {
       trace_id: entry.traceId,
       span_id: this.generateSpanId(),
       parent_id: null,
-      name: "log.entry",
-      service: this.datadogConfig.service || "logitron",
+      name: 'log.entry',
+      service: this.datadogConfig.service || 'logitron',
       resource: entry.message,
-      type: "log",
+      type: 'log',
       start: entry.timestamp.getTime() * 1000000, // nanoseconds
       duration: 1000000, // 1ms in nanoseconds
       meta: {
-        "log.level": entry.level,
-        "log.message": entry.message,
-        ...(entry.context && { "log.context": entry.context }),
+        'log.level': entry.level,
+        'log.message': entry.message,
+        ...(entry.context && { 'log.context': entry.context }),
         ...(entry.data &&
           Object.keys(entry.data).reduce(
             (acc, key) => {
               acc[`log.${key}`] = String(entry.data![key]);
               return acc;
             },
-            {} as Record<string, string>,
+            {} as Record<string, string>
           )),
       },
       metrics: {
@@ -203,16 +195,16 @@ export class DataDogTransport extends AnalyticsTransport {
 
   private mapLogLevel(level: string): string {
     const levelMap: Record<string, string> = {
-      error: "error",
-      warn: "warn",
-      warning: "warn",
-      info: "info",
-      debug: "debug",
-      trace: "trace",
-      verbose: "debug",
+      error: 'error',
+      warn: 'warn',
+      warning: 'warn',
+      info: 'info',
+      debug: 'debug',
+      trace: 'trace',
+      verbose: 'debug',
     };
 
-    return levelMap[level.toLowerCase()] || "info";
+    return levelMap[level.toLowerCase()] || 'info';
   }
 
   private async makeLogsRequest(endpoint: string, data: unknown): Promise<void> {
@@ -220,24 +212,21 @@ export class DataDogTransport extends AnalyticsTransport {
 
     try {
       const response = await fetch(url, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
-          "DD-API-KEY": this.datadogConfig.apiKey,
+          'Content-Type': 'application/json',
+          'DD-API-KEY': this.datadogConfig.apiKey,
         },
         body: JSON.stringify(data),
       });
 
       if (!response.ok) {
-        throw new Error(
-          `DataDog Logs API error: ${response.status} ${response.statusText}`,
-        );
+        throw new Error(`DataDog Logs API error: ${response.status} ${response.statusText}`);
       }
     } catch (error) {
-      throw new Error(
-        `Failed to send logs to DataDog: ${(error as Error).message}`,
-        { cause: error },
-      );
+      throw new Error(`Failed to send logs to DataDog: ${(error as Error).message}`, {
+        cause: error,
+      });
     }
   }
 
@@ -246,24 +235,21 @@ export class DataDogTransport extends AnalyticsTransport {
 
     try {
       const response = await fetch(url, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
-          "DD-API-KEY": this.datadogConfig.apiKey,
+          'Content-Type': 'application/json',
+          'DD-API-KEY': this.datadogConfig.apiKey,
         },
         body: JSON.stringify(data),
       });
 
       if (!response.ok) {
-        throw new Error(
-          `DataDog Metrics API error: ${response.status} ${response.statusText}`,
-        );
+        throw new Error(`DataDog Metrics API error: ${response.status} ${response.statusText}`);
       }
     } catch (error) {
-      throw new Error(
-        `Failed to send metrics to DataDog: ${(error as Error).message}`,
-        { cause: error },
-      );
+      throw new Error(`Failed to send metrics to DataDog: ${(error as Error).message}`, {
+        cause: error,
+      });
     }
   }
 
@@ -272,16 +258,16 @@ export class DataDogTransport extends AnalyticsTransport {
     const testMetric = {
       series: [
         {
-          metric: "logitron.test",
+          metric: 'logitron.test',
           points: [[Math.floor(Date.now() / 1000), 1]],
-          type: "count",
+          type: 'count',
           host: this.getHostname(),
-          tags: ["test:true"],
+          tags: ['test:true'],
         },
       ],
     };
 
-    await this.makeMetricsRequest("/api/v1/series", testMetric);
+    await this.makeMetricsRequest('/api/v1/series', testMetric);
   }
 
   private generateSpanId(): string {
@@ -292,9 +278,9 @@ export class DataDogTransport extends AnalyticsTransport {
   private getHostname(): string {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      return require("node:os").hostname() as string;
+      return require('node:os').hostname() as string;
     } catch {
-      return "unknown";
+      return 'unknown';
     }
   }
 
@@ -304,64 +290,50 @@ export class DataDogTransport extends AnalyticsTransport {
       series: [
         {
           metric: metric.name,
-          points: [
-            [
-              Math.floor((metric.timestamp || new Date()).getTime() / 1000),
-              metric.value,
-            ],
-          ],
-          type: "gauge",
+          points: [[Math.floor((metric.timestamp || new Date()).getTime() / 1000), metric.value]],
+          type: 'gauge',
           host: this.getHostname(),
-          tags: Object.entries(metric.tags || {}).map(
-            ([key, value]) => `${key}:${value}`,
-          ),
+          tags: Object.entries(metric.tags || {}).map(([key, value]) => `${key}:${value}`),
         },
       ],
     };
 
-    await this.makeMetricsRequest("/api/v1/series", payload);
+    await this.makeMetricsRequest('/api/v1/series', payload);
   }
 
-  public async sendEvent(
-    title: string,
-    text: string,
-    tags: string[] = [],
-  ): Promise<void> {
+  public async sendEvent(title: string, text: string, tags: string[] = []): Promise<void> {
     const payload = {
       title,
       text,
       date_happened: Math.floor(Date.now() / 1000),
-      priority: "normal",
+      priority: 'normal',
       tags: [
-        `service:${this.datadogConfig.service || "logitron"}`,
-        `env:${this.datadogConfig.env || "production"}`,
+        `service:${this.datadogConfig.service || 'logitron'}`,
+        `env:${this.datadogConfig.env || 'production'}`,
         ...tags,
       ],
-      source_type_name: "logitron",
+      source_type_name: 'logitron',
     };
 
     const url = `${this.baseUrl}/api/v1/events`;
 
     try {
       const response = await fetch(url, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
-          "DD-API-KEY": this.datadogConfig.apiKey,
+          'Content-Type': 'application/json',
+          'DD-API-KEY': this.datadogConfig.apiKey,
         },
         body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        throw new Error(
-          `DataDog Events API error: ${response.status} ${response.statusText}`,
-        );
+        throw new Error(`DataDog Events API error: ${response.status} ${response.statusText}`);
       }
     } catch (error) {
-      throw new Error(
-        `Failed to send event to DataDog: ${(error as Error).message}`,
-        { cause: error },
-      );
+      throw new Error(`Failed to send event to DataDog: ${(error as Error).message}`, {
+        cause: error,
+      });
     }
   }
 }

@@ -2,12 +2,8 @@
  * Request context tracking for Logitron
  */
 
-import type { HttpRequest, HttpResponse,RequestContext } from "../types";
-import {
-  generateTraceId,
-  getCurrentTraceId,
-  setTraceId,
-} from "../utils/trace.utils";
+import type { HttpRequest, HttpResponse, RequestContext } from '../types';
+import { generateTraceId, getCurrentTraceId, setTraceId } from '../utils/trace.utils';
 
 export class RequestContextManager {
   private static contexts = new Map<string, RequestContext>();
@@ -46,7 +42,7 @@ export class RequestContextManager {
   static updateContext(
     requestId: string,
     response?: HttpResponse,
-    error?: Error,
+    error?: Error
   ): RequestContext | undefined {
     const context = this.contexts.get(requestId);
     if (!context) {
@@ -152,7 +148,7 @@ export function createHttpRequest(
     body?: unknown;
     ip?: string;
     userAgent?: string;
-  } = {},
+  } = {}
 ): HttpRequest {
   return {
     method: method.toUpperCase(),
@@ -174,7 +170,7 @@ export function createHttpResponse(
   statusCode: number,
   headers: Record<string, string | string[]> = {},
   body?: unknown,
-  contentLength?: number,
+  contentLength?: number
 ): HttpResponse {
   return {
     statusCode,

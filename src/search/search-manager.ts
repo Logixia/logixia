@@ -56,9 +56,7 @@ export class SearchManager {
     };
 
     // Initialize components
-    this.searchEngine = this.config.enableNLP
-      ? new NLPSearchEngine()
-      : new BasicSearchEngine();
+    this.searchEngine = this.config.enableNLP ? new NLPSearchEngine() : new BasicSearchEngine();
 
     this.indexer = new BasicLogIndexer({
       maxIndexSize: this.config.maxIndexSize,
@@ -255,10 +253,7 @@ export class SearchManager {
   /**
    * Export search results
    */
-  async exportResults(
-    results: SearchResult[],
-    options: ExportOptions
-  ): Promise<string> {
+  async exportResults(results: SearchResult[], options: ExportOptions): Promise<string> {
     switch (options.format) {
       case 'json':
         return this.exportAsJSON(results, options);
@@ -302,25 +297,21 @@ export class SearchManager {
    */
   async removeOldLogs(olderThan: Date): Promise<number> {
     const removed = await this.indexer.removeOldLogs(olderThan);
-    
+
     // Also remove from search engine
     const allLogs = this.searchEngine.getLogs();
-    const filteredLogs = allLogs.filter(
-      (log) => new Date(log.timestamp) >= olderThan
-    );
-    
+    const filteredLogs = allLogs.filter((log) => new Date(log.timestamp) >= olderThan);
+
     this.searchEngine.clearLogs();
     this.searchEngine.addLogs(filteredLogs);
-    
+
     return removed;
   }
 
   // Private export methods
 
   private exportAsJSON(results: SearchResult[], options: ExportOptions): string {
-    const data = options.includeMetadata
-      ? results
-      : results.map((r) => r.log);
+    const data = options.includeMetadata ? results : results.map((r) => r.log);
 
     if (options.fields) {
       return JSON.stringify(
@@ -335,14 +326,14 @@ export class SearchManager {
 
   private exportAsCSV(results: SearchResult[], options: ExportOptions): string {
     const logs = results.map((r) => r.log);
-    
+
     if (logs.length === 0) {
       return '';
     }
 
     const fields = options.fields || ['timestamp', 'level', 'appName', 'message'];
     const headers = fields.join(',');
-    
+
     const rows = logs.map((log) => {
       return fields
         .map((field) => {
@@ -360,23 +351,22 @@ export class SearchManager {
       .map((result) => {
         const log = result.log;
         let text = `[${log.timestamp}] [${log.level.toUpperCase()}] ${log.appName}: ${log.message}`;
-        
+
         if (options.includeMetadata) {
           text += `\n  Score: ${result.score.toFixed(2)}`;
           if (result.highlights) {
             text += `\n  Matches: ${result.highlights.length}`;
           }
         }
-        
+
         return text;
       })
       .join('\n\n');
   }
 
-   
   private filterFields(obj: unknown, fields: string[]): Record<string, unknown> {
     const filtered: Record<string, unknown> = {};
-    
+
     for (const field of fields) {
       if (obj !== null && typeof obj === 'object' && field in obj) {
         filtered[field] = (obj as Record<string, unknown>)[field];
@@ -388,7 +378,7 @@ export class SearchManager {
         }
       }
     }
-    
+
     return filtered;
   }
 
@@ -408,12 +398,12 @@ export class SearchManager {
     }
 
     const str = typeof value === 'object' ? JSON.stringify(value) : String(value);
-    
+
     // Escape quotes and wrap in quotes if contains comma, newline, or quote
     if (str.includes(',') || str.includes('\n') || str.includes('"')) {
       return `"${str.replace(/"/g, '""')}"`;
     }
-    
+
     return str;
   }
 }

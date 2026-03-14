@@ -3,7 +3,7 @@
  */
 
 import type { LogEntry } from '../../types';
-import type { SearchQuery,SemanticIndex } from '../types';
+import type { SearchQuery, SemanticIndex } from '../types';
 
 /**
  * Log indexer interface

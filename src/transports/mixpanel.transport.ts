@@ -1,21 +1,14 @@
-import type {
-  MixpanelTransportConfig,
-  TransportLogEntry,
-} from "../types/transport.types";
-import { internalError } from "../utils/internal-log";
-import type {
-  AnalyticsEvent,
-  AnalyticsUser} from "./analytics.transport";
-import {
-  AnalyticsTransport
-} from "./analytics.transport";
+import type { MixpanelTransportConfig, TransportLogEntry } from '../types/transport.types';
+import { internalError } from '../utils/internal-log';
+import type { AnalyticsEvent, AnalyticsUser } from './analytics.transport';
+import { AnalyticsTransport } from './analytics.transport';
 
 export class MixpanelTransport extends AnalyticsTransport {
   private mixpanelConfig: MixpanelTransportConfig;
-  private baseUrl: string = "https://api.mixpanel.com";
+  private baseUrl: string = 'https://api.mixpanel.com';
 
   constructor(config: MixpanelTransportConfig) {
-    super("mixpanel", config);
+    super('mixpanel', config);
     this.mixpanelConfig = config;
   }
 
@@ -23,14 +16,14 @@ export class MixpanelTransport extends AnalyticsTransport {
     try {
       // Validate required configuration
       if (!this.mixpanelConfig.token) {
-        throw new Error("Mixpanel token is required");
+        throw new Error('Mixpanel token is required');
       }
 
       // Test connection with a simple request
       await this.testConnection();
       this.isReady = true;
     } catch (error) {
-      internalError("Mixpanel transport initialization failed", error);
+      internalError('Mixpanel transport initialization failed', error);
       throw error;
     }
   }
@@ -56,13 +49,11 @@ export class MixpanelTransport extends AnalyticsTransport {
       name: `log_${entry.level}`,
       properties: {
         ...transformed,
-        distinct_id: this.mixpanelConfig.distinct_id || "anonymous",
+        distinct_id: this.mixpanelConfig.distinct_id || 'anonymous',
         time: entry.timestamp.getTime(),
         $insert_id: this.generateInsertId(entry),
         // Add super properties if enabled
-        ...(this.mixpanelConfig.enableSuperProperties
-          ? this.mixpanelConfig.superProperties
-          : {}),
+        ...(this.mixpanelConfig.enableSuperProperties ? this.mixpanelConfig.superProperties : {}),
       },
       timestamp: entry.timestamp,
     };
@@ -77,7 +68,7 @@ export class MixpanelTransport extends AnalyticsTransport {
       },
     };
 
-    await this.makeRequest("/track", [payload]);
+    await this.makeRequest('/track', [payload]);
   }
 
   private async trackEvents(events: AnalyticsEvent[]): Promise<void> {
@@ -89,7 +80,7 @@ export class MixpanelTransport extends AnalyticsTransport {
       },
     }));
 
-    await this.makeRequest("/track", payload);
+    await this.makeRequest('/track', payload);
   }
 
   private async makeRequest(endpoint: string, data: unknown): Promise<void> {
@@ -97,51 +88,48 @@ export class MixpanelTransport extends AnalyticsTransport {
 
     try {
       const response = await fetch(url, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
-          Accept: "text/plain",
+          'Content-Type': 'application/json',
+          Accept: 'text/plain',
         },
         body: JSON.stringify(data),
       });
 
       if (!response.ok) {
-        throw new Error(
-          `Mixpanel API error: ${response.status} ${response.statusText}`,
-        );
+        throw new Error(`Mixpanel API error: ${response.status} ${response.statusText}`);
       }
 
       const result = await response.text();
-      if (result !== "1") {
+      if (result !== '1') {
         throw new Error(`Mixpanel API returned error: ${result}`);
       }
     } catch (error) {
-      throw new Error(
-        `Failed to send data to Mixpanel: ${(error as Error).message}`,
-        { cause: error },
-      );
+      throw new Error(`Failed to send data to Mixpanel: ${(error as Error).message}`, {
+        cause: error,
+      });
     }
   }
 
   private async testConnection(): Promise<void> {
     // Send a test event to validate the connection
     const testEvent = {
-      event: "logitron_test",
+      event: 'logitron_test',
       properties: {
         token: this.mixpanelConfig.token,
-        distinct_id: "test_user",
+        distinct_id: 'test_user',
         test: true,
         time: Date.now(),
       },
     };
 
-    await this.makeRequest("/track", [testEvent]);
+    await this.makeRequest('/track', [testEvent]);
   }
 
   private generateInsertId(entry: TransportLogEntry): string {
     // Generate a unique insert ID to prevent duplicate events
     const timestamp = entry.timestamp.getTime();
-    const hash = this.simpleHash(entry.message + (entry.traceId || ""));
+    const hash = this.simpleHash(entry.message + (entry.traceId || ''));
     return `${timestamp}_${hash}`;
   }
 
@@ -167,12 +155,12 @@ export class MixpanelTransport extends AnalyticsTransport {
       $set: user.properties || {},
     };
 
-    await this.makeRequest("/engage", [payload]);
+    await this.makeRequest('/engage', [payload]);
   }
 
   public async setUserProperties(
     userId: string,
-    properties: Record<string, unknown>,
+    properties: Record<string, unknown>
   ): Promise<void> {
     if (!this.mixpanelConfig.enableUserTracking) {
       return;
@@ -184,12 +172,12 @@ export class MixpanelTransport extends AnalyticsTransport {
       $set: properties,
     };
 
-    await this.makeRequest("/engage", [payload]);
+    await this.makeRequest('/engage', [payload]);
   }
 
   public async trackCustomEvent(
     eventName: string,
-    properties: Record<string, unknown> = {},
+    properties: Record<string, unknown> = {}
   ): Promise<void> {
     if (!this.mixpanelConfig.enableEventTracking) {
       return;
@@ -199,15 +187,13 @@ export class MixpanelTransport extends AnalyticsTransport {
       event: eventName,
       properties: {
         token: this.mixpanelConfig.token,
-        distinct_id: this.mixpanelConfig.distinct_id || "anonymous",
+        distinct_id: this.mixpanelConfig.distinct_id || 'anonymous',
         time: Date.now(),
         ...properties,
-        ...(this.mixpanelConfig.enableSuperProperties
-          ? this.mixpanelConfig.superProperties
-          : {}),
+        ...(this.mixpanelConfig.enableSuperProperties ? this.mixpanelConfig.superProperties : {}),
       },
     };
 
-    await this.makeRequest("/track", [payload]);
+    await this.makeRequest('/track', [payload]);
   }
 }

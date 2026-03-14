@@ -3,7 +3,7 @@
  */
 
 import type { LogEntry } from '../../types';
-import type { LogCluster,SearchQuery, SemanticIndex } from '../types';
+import type { LogCluster, SearchQuery, SemanticIndex } from '../types';
 import type { ILogIndexer } from './log-indexer.interface';
 
 /**
@@ -15,11 +15,13 @@ export class BasicLogIndexer implements ILogIndexer {
   private semanticIndex: SemanticIndex | undefined;
   private lastOptimized?: Date;
 
-  constructor(private options?: {
-    maxIndexSize?: number;
-    autoOptimize?: boolean;
-    optimizeThreshold?: number;
-  }) {
+  constructor(
+    private options?: {
+      maxIndexSize?: number;
+      autoOptimize?: boolean;
+      optimizeThreshold?: number;
+    }
+  ) {
     this.options = {
       maxIndexSize: 1000000,
       autoOptimize: true,
@@ -36,7 +38,7 @@ export class BasicLogIndexer implements ILogIndexer {
    */
   async indexLog(log: LogEntry): Promise<void> {
     const logId = this.generateLogId(log);
-    
+
     // Add to main index
     this.index.set(logId, log);
 
@@ -248,19 +250,17 @@ export class BasicLogIndexer implements ILogIndexer {
   private calculateIndexSize(): number {
     // Rough estimate of index size in bytes
     let size = 0;
-    
+
     for (const log of this.index.values()) {
       size += JSON.stringify(log).length;
     }
-    
+
     return size;
   }
 
   private async removeOldestLogs(count: number): Promise<void> {
     const logs = Array.from(this.index.entries())
-      .sort((a, b) => 
-        new Date(a[1].timestamp).getTime() - new Date(b[1].timestamp).getTime()
-      )
+      .sort((a, b) => new Date(a[1].timestamp).getTime() - new Date(b[1].timestamp).getTime())
       .slice(0, count);
 
     for (const [logId] of logs) {
@@ -276,7 +276,7 @@ export class BasicLogIndexer implements ILogIndexer {
     for (const log of logs) {
       // Create a pattern key based on level and service
       const patternKey = `${log.level}_${log.appName}`;
-      
+
       if (!clusters.has(patternKey)) {
         clusters.set(patternKey, []);
       }

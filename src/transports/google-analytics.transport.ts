@@ -1,18 +1,14 @@
-import type {
-  GoogleAnalyticsTransportConfig,
-  TransportLogEntry,
-} from "../types/transport.types";
-import { internalError, internalLog } from "../utils/internal-log";
-import { AnalyticsTransport } from "./analytics.transport";
+import type { GoogleAnalyticsTransportConfig, TransportLogEntry } from '../types/transport.types';
+import { internalError, internalLog } from '../utils/internal-log';
+import { AnalyticsTransport } from './analytics.transport';
 
 export class GoogleAnalyticsTransport extends AnalyticsTransport {
   private gaConfig: GoogleAnalyticsTransportConfig;
-  private baseUrl: string = "https://www.google-analytics.com/mp/collect";
-  private debugUrl: string =
-    "https://www.google-analytics.com/debug/mp/collect";
+  private baseUrl: string = 'https://www.google-analytics.com/mp/collect';
+  private debugUrl: string = 'https://www.google-analytics.com/debug/mp/collect';
 
   constructor(config: GoogleAnalyticsTransportConfig) {
-    super("google-analytics", config);
+    super('google-analytics', config);
     this.gaConfig = config;
   }
 
@@ -20,17 +16,17 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
     try {
       // Validate required configuration
       if (!this.gaConfig.measurementId) {
-        throw new Error("Google Analytics Measurement ID is required");
+        throw new Error('Google Analytics Measurement ID is required');
       }
       if (!this.gaConfig.apiSecret) {
-        throw new Error("Google Analytics API Secret is required");
+        throw new Error('Google Analytics API Secret is required');
       }
 
       // Test connection
       await this.testConnection();
       this.isReady = true;
     } catch (error) {
-      internalError("Google Analytics transport initialization failed", error);
+      internalError('Google Analytics transport initialization failed', error);
       throw error;
     }
   }
@@ -56,7 +52,7 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
     const eventCategory = this.mapLogLevelToCategory(entry.level);
 
     return {
-      name: "log_event",
+      name: 'log_event',
       params: {
         event_category: eventCategory,
         event_label: entry.message,
@@ -70,49 +66,38 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
         ...this.flattenData(transformed),
         // Add custom dimensions
         custom_dimension_1: entry.level,
-        custom_dimension_2: entry.context || "default",
-        custom_dimension_3: entry.environment || "production",
+        custom_dimension_2: entry.context || 'default',
+        custom_dimension_3: entry.environment || 'production',
       },
     };
   }
 
   private mapLogLevelToCategory(level: string): string {
     const categoryMap: Record<string, string> = {
-      error: "Error",
-      warn: "Warning",
-      warning: "Warning",
-      info: "Information",
-      debug: "Debug",
-      trace: "Trace",
-      verbose: "Verbose",
+      error: 'Error',
+      warn: 'Warning',
+      warning: 'Warning',
+      info: 'Information',
+      debug: 'Debug',
+      trace: 'Trace',
+      verbose: 'Verbose',
     };
 
-    return categoryMap[level.toLowerCase()] || "Information";
+    return categoryMap[level.toLowerCase()] || 'Information';
   }
 
-  private flattenData(
-    data: Record<string, unknown>,
-    prefix: string = "",
-  ): Record<string, unknown> {
+  private flattenData(data: Record<string, unknown>, prefix: string = ''): Record<string, unknown> {
     const flattened: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(data)) {
       const newKey = prefix ? `${prefix}_${key}` : key;
 
-      if (
-        value &&
-        typeof value === "object" &&
-        !Array.isArray(value) &&
-        !(value instanceof Date)
-      ) {
+      if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
         Object.assign(flattened, this.flattenData(value as Record<string, unknown>, newKey));
       } else {
         // GA4 has parameter value limits
         const stringValue = String(value);
-        flattened[newKey] =
-          stringValue.length > 100
-            ? stringValue.slice(0, 100)
-            : stringValue;
+        flattened[newKey] = stringValue.length > 100 ? stringValue.slice(0, 100) : stringValue;
       }
     }
 
@@ -142,10 +127,7 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
     }
   }
 
-  private async makeRequest(
-    payload: unknown,
-    debug: boolean = false,
-  ): Promise<void> {
+  private async makeRequest(payload: unknown, debug: boolean = false): Promise<void> {
     const url = debug ? this.debugUrl : this.baseUrl;
     const params = new URLSearchParams({
       measurement_id: this.gaConfig.measurementId,
@@ -154,9 +136,9 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
 
     try {
       const response = await fetch(`${url}?${params}`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
       });
@@ -164,7 +146,7 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(
-          `Google Analytics API error: ${response.status} ${response.statusText} - ${errorText}`,
+          `Google Analytics API error: ${response.status} ${response.statusText} - ${errorText}`
         );
       }
 
@@ -173,20 +155,19 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
         internalLog(`GA4 Debug Response: ${JSON.stringify(result)}`);
       }
     } catch (error) {
-      throw new Error(
-        `Failed to send data to Google Analytics: ${(error as Error).message}`,
-        { cause: error },
-      );
+      throw new Error(`Failed to send data to Google Analytics: ${(error as Error).message}`, {
+        cause: error,
+      });
     }
   }
 
   private async testConnection(): Promise<void> {
     // Send a test event to validate the connection
     const testEvent = {
-      name: "logitron_test",
+      name: 'logitron_test',
       params: {
-        event_category: "Test",
-        event_label: "Connection Test",
+        event_category: 'Test',
+        event_label: 'Connection Test',
         test: true,
         timestamp: new Date().toISOString(),
       },
@@ -203,15 +184,12 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
 
   private generateClientId(): string {
     // Generate a UUID-like client ID (non-security use)
-    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
-      /[xy]/g,
-      function (c) {
-        // eslint-disable-next-line sonarjs/pseudo-random -- non-security UUID generation
-        const r = (Math.random() * 16) | 0;
-        const v = c === "x" ? r : (r & 0x3) | 0x8;
-        return v.toString(16);
-      },
-    );
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      // eslint-disable-next-line sonarjs/pseudo-random -- non-security UUID generation
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
   }
 
   private chunkArray<T>(array: T[], size: number): T[][] {
@@ -223,12 +201,9 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
   }
 
   // Public methods for additional GA4 functionality
-  public async trackPageView(
-    pagePath: string,
-    pageTitle?: string,
-  ): Promise<void> {
+  public async trackPageView(pagePath: string, pageTitle?: string): Promise<void> {
     const event = {
-      name: "page_view",
+      name: 'page_view',
       params: {
         page_location: pagePath,
         page_title: pageTitle || pagePath,
@@ -241,12 +216,10 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
 
   public async trackCustomEvent(
     eventName: string,
-    parameters: Record<string, unknown> = {},
+    parameters: Record<string, unknown> = {}
   ): Promise<void> {
     // Ensure event name follows GA4 conventions
-    const sanitizedEventName = eventName
-      .toLowerCase()
-      .replace(/[^a-z0-9_]/g, "_");
+    const sanitizedEventName = eventName.toLowerCase().replace(/[^a-z0-9_]/g, '_');
 
     const event = {
       name: sanitizedEventName,
@@ -262,7 +235,7 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
   public async trackConversion(
     conversionName: string,
     value?: number,
-    currency?: string,
+    currency?: string
   ): Promise<void> {
     const event = {
       name: conversionName,
@@ -279,10 +252,10 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
   public async trackError(
     errorMessage: string,
     errorCode?: string,
-    fatal: boolean = false,
+    fatal: boolean = false
   ): Promise<void> {
     const event = {
-      name: "exception",
+      name: 'exception',
       params: {
         description: errorMessage,
         fatal,
@@ -294,12 +267,10 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
     await this.sendEvent(event);
   }
 
-  public async setUserProperties(
-    properties: Record<string, unknown>,
-  ): Promise<void> {
+  public async setUserProperties(properties: Record<string, unknown>): Promise<void> {
     // GA4 user properties are set with events
     const event = {
-      name: "user_properties_update",
+      name: 'user_properties_update',
       params: {
         ...this.flattenData(properties),
         timestamp: new Date().toISOString(),
@@ -310,16 +281,13 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
   }
 
   // Enhanced measurement events
-  public async trackFileDownload(
-    fileName: string,
-    fileExtension: string,
-  ): Promise<void> {
+  public async trackFileDownload(fileName: string, fileExtension: string): Promise<void> {
     if (!this.gaConfig.enableEnhancedMeasurement) {
       return;
     }
 
     const event = {
-      name: "file_download",
+      name: 'file_download',
       params: {
         file_name: fileName,
         file_extension: fileExtension,
@@ -334,14 +302,14 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
   public async trackVideoEngagement(
     videoTitle: string,
     videoUrl: string,
-    progress: number,
+    progress: number
   ): Promise<void> {
     if (!this.gaConfig.enableEnhancedMeasurement) {
       return;
     }
 
     const event = {
-      name: "video_progress",
+      name: 'video_progress',
       params: {
         video_title: videoTitle,
         video_url: videoUrl,

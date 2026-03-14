@@ -107,17 +107,21 @@ export class BasicSearchEngine implements ILogSearchEngine {
     const correlatedLogs = this.logs.filter((log) => log.traceId === traceId);
 
     // Sort by timestamp
-    correlatedLogs.sort((a, b) => 
-      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    correlatedLogs.sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
 
     // Build timeline
     const timeline: TimelineEvent[] = correlatedLogs.map((log) => {
       let eventType: TimelineEvent['eventType'] = 'info';
-      
+
       if (log.level === 'error') eventType = 'error';
       else if (log.message.toLowerCase().includes('start')) eventType = 'start';
-      else if (log.message.toLowerCase().includes('end') || log.message.toLowerCase().includes('complete')) eventType = 'end';
+      else if (
+        log.message.toLowerCase().includes('end') ||
+        log.message.toLowerCase().includes('complete')
+      )
+        eventType = 'end';
       else if (log.message.toLowerCase().includes('milestone')) eventType = 'milestone';
 
       return {
@@ -173,20 +177,15 @@ export class BasicSearchEngine implements ILogSearchEngine {
     }
 
     // Sort by similarity and return top results
-    return similarities
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, limit);
+    return similarities.sort((a, b) => b.similarity - a.similarity).slice(0, limit);
   }
 
   /**
    * Get search suggestions
    */
-  async getSuggestions(
-    partialQuery: string,
-    limit: number = 10
-  ): Promise<SearchSuggestion[]> {
+  async getSuggestions(partialQuery: string, limit: number = 10): Promise<SearchSuggestion[]> {
     const cacheKey = partialQuery.toLowerCase();
-    
+
     // Check cache
     if (this.suggestionCache.has(cacheKey)) {
       return this.suggestionCache.get(cacheKey)!.slice(0, limit);
@@ -296,7 +295,8 @@ export class BasicSearchEngine implements ILogSearchEngine {
     if (lowerQuery.includes('error')) intent = 'find_errors';
     if (lowerQuery.includes('trace') || lowerQuery.includes('request')) intent = 'trace_request';
     if (lowerQuery.includes('user')) intent = 'find_user_activity';
-    if (lowerQuery.includes('slow') || lowerQuery.includes('performance')) intent = 'performance_analysis';
+    if (lowerQuery.includes('slow') || lowerQuery.includes('performance'))
+      intent = 'performance_analysis';
 
     return {
       originalQuery: query,
@@ -315,7 +315,7 @@ export class BasicSearchEngine implements ILogSearchEngine {
   ): Promise<SearchPreset> {
     const id = this.generateId();
     const now = new Date();
-    
+
     const fullPreset: SearchPreset = {
       ...preset,
       id,
@@ -332,11 +332,11 @@ export class BasicSearchEngine implements ILogSearchEngine {
    */
   async getPresets(userId?: string): Promise<SearchPreset[]> {
     const allPresets = Array.from(this.presets.values());
-    
+
     if (userId) {
       return allPresets.filter((p) => p.userId === userId || p.shared);
     }
-    
+
     return allPresets;
   }
 
@@ -371,16 +371,18 @@ export class BasicSearchEngine implements ILogSearchEngine {
       // Time range filter
       if (filters.timeRange) {
         const logTime = new Date(log.timestamp).getTime();
-        const start = typeof filters.timeRange.start === 'number' 
-          ? filters.timeRange.start 
-          : filters.timeRange.start.getTime();
-        
+        const start =
+          typeof filters.timeRange.start === 'number'
+            ? filters.timeRange.start
+            : filters.timeRange.start.getTime();
+
         if (logTime < start) return false;
-        
+
         if (filters.timeRange.end) {
-          const end = typeof filters.timeRange.end === 'number'
-            ? filters.timeRange.end
-            : filters.timeRange.end.getTime();
+          const end =
+            typeof filters.timeRange.end === 'number'
+              ? filters.timeRange.end
+              : filters.timeRange.end.getTime();
           if (logTime > end) return false;
         }
       }
@@ -448,13 +450,7 @@ export class BasicSearchEngine implements ILogSearchEngine {
   }
 
   private getSearchableText(log: LogEntry): string {
-    return [
-      log.message,
-      log.level,
-      log.appName,
-      log.context,
-      JSON.stringify(log.payload),
-    ]
+    return [log.message, log.level, log.appName, log.context, JSON.stringify(log.payload)]
       .filter(Boolean)
       .join(' ');
   }
@@ -513,10 +509,7 @@ export class BasicSearchEngine implements ILogSearchEngine {
     return results.slice(offset, offset + limit);
   }
 
-  private async enrichWithContext(
-    results: SearchResult[],
-    contextSize: number = 5
-  ): Promise<void> {
+  private async enrichWithContext(results: SearchResult[], contextSize: number = 5): Promise<void> {
     for (const result of results) {
       const logIndex = this.logs.indexOf(result.log);
       if (logIndex !== -1) {
@@ -560,10 +553,10 @@ export class BasicSearchEngine implements ILogSearchEngine {
   private calculateTextSimilarity(text1: string, text2: string): number {
     const words1 = new Set(text1.toLowerCase().split(/\s+/));
     const words2 = new Set(text2.toLowerCase().split(/\s+/));
-    
+
     const intersection = new Set([...words1].filter((x) => words2.has(x)));
     const union = new Set([...words1, ...words2]);
-    
+
     return union.size > 0 ? intersection.size / union.size : 0;
   }
 
@@ -622,7 +615,7 @@ export class BasicSearchEngine implements ILogSearchEngine {
 
   private addToSearchHistory(query: string): void {
     this.searchHistory.push(query);
-    
+
     // Trim history if too large
     const maxSize = this.options?.maxHistorySize || 1000;
     if (this.searchHistory.length > maxSize) {

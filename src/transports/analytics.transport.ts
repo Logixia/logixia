@@ -3,12 +3,10 @@ import type {
   IBatchTransport,
   ITransport,
   TransportLogEntry,
-} from "../types/transport.types";
-import { internalError } from "../utils/internal-log";
+} from '../types/transport.types';
+import { internalError } from '../utils/internal-log';
 
-export abstract class AnalyticsTransport
-  implements ITransport, IBatchTransport
-{
+export abstract class AnalyticsTransport implements ITransport, IBatchTransport {
   public readonly name: string;
   public readonly level?: string | undefined;
   public readonly batchSize?: number;
@@ -58,7 +56,9 @@ export abstract class AnalyticsTransport
       this.flush().catch((err: unknown) => internalError(`${this.name} batch flush failed`, err));
     } else if (!this.batchTimer && this.config.flushInterval) {
       this.batchTimer = setTimeout(() => {
-        this.flush().catch((err: unknown) => internalError(`${this.name} interval flush failed`, err));
+        this.flush().catch((err: unknown) =>
+          internalError(`${this.name} interval flush failed`, err)
+        );
       }, this.config.flushInterval);
     }
   }
@@ -93,7 +93,7 @@ export abstract class AnalyticsTransport
 
   protected shouldSkipEntry(entry: TransportLogEntry): boolean {
     // Skip debug/trace logs for analytics by default
-    const skipLevels = ["debug", "trace"];
+    const skipLevels = ['debug', 'trace'];
     return skipLevels.includes(entry.level.toLowerCase());
   }
 
@@ -135,9 +135,7 @@ export abstract class AnalyticsTransport
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     if (!this.isReady) {
-      throw new Error(
-        `Analytics transport ${this.name} failed to initialize within ${timeout}ms`,
-      );
+      throw new Error(`Analytics transport ${this.name} failed to initialize within ${timeout}ms`);
     }
   }
 

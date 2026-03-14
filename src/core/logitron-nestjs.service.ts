@@ -2,14 +2,14 @@
  * NestJS Service integration for Logitron Logger
  */
 
-import type { LoggerService} from "@nestjs/common";
-import { Injectable, Scope } from "@nestjs/common";
+import type { LoggerService } from '@nestjs/common';
+import { Injectable, Scope } from '@nestjs/common';
 
-import type { LoggerConfig , LogLevelString } from "../types";
-import { LogLevel } from "../types";
-import { internalError } from "../utils/internal-log";
-import { getCurrentTraceId } from "../utils/trace.utils";
-import { LogixiaLogger } from "./logitron-logger";
+import type { LoggerConfig, LogLevelString } from '../types';
+import { LogLevel } from '../types';
+import { internalError } from '../utils/internal-log';
+import { getCurrentTraceId } from '../utils/trace.utils';
+import { LogixiaLogger } from './logitron-logger';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class LogixiaLoggerService implements LoggerService {
@@ -18,8 +18,8 @@ export class LogixiaLoggerService implements LoggerService {
 
   constructor(config?: LoggerConfig) {
     const defaultConfig: LoggerConfig = {
-      appName: "NestJS-App",
-      environment: "development",
+      appName: 'NestJS-App',
+      environment: 'development',
       traceId: true,
       format: {
         timestamp: true,
@@ -37,21 +37,21 @@ export class LogixiaLoggerService implements LoggerService {
           verbose: 4,
         },
         colors: {
-          error: "red",
-          warn: "yellow",
-          log: "green",
-          debug: "blue",
-          verbose: "cyan",
+          error: 'red',
+          warn: 'yellow',
+          log: 'green',
+          debug: 'blue',
+          verbose: 'cyan',
         },
       },
       fields: {
-        timestamp: "[yyyy-mm-dd HH:MM:ss.MS]",
-        level: "[log_level]",
-        appName: "[app_name]",
-        traceId: "[trace_id]",
-        message: "[message]",
-        payload: "[payload]",
-        timeTaken: "[time_taken_MS]",
+        timestamp: '[yyyy-mm-dd HH:MM:ss.MS]',
+        level: '[log_level]',
+        appName: '[app_name]',
+        traceId: '[trace_id]',
+        message: '[message]',
+        payload: '[payload]',
+        timeTaken: '[time_taken_MS]',
       },
     };
 
@@ -65,7 +65,7 @@ export class LogixiaLoggerService implements LoggerService {
     this.setContextIfProvided(context);
     this.logger
       .info(this.formatMessage(message))
-      .catch((err: unknown) => internalError("LogixiaLoggerService.log failed", err));
+      .catch((err: unknown) => internalError('LogixiaLoggerService.log failed', err));
   }
 
   error(message: unknown, trace?: string, context?: string): void {
@@ -77,34 +77,32 @@ export class LogixiaLoggerService implements LoggerService {
     }
 
     const logPromise =
-      typeof message === "object" && message instanceof Error
+      typeof message === 'object' && message instanceof Error
         ? this.logger.error(message, errorData)
         : this.logger.error(this.formatMessage(message), errorData);
 
-    logPromise.catch((err: unknown) =>
-      internalError("LogixiaLoggerService.error failed", err),
-    );
+    logPromise.catch((err: unknown) => internalError('LogixiaLoggerService.error failed', err));
   }
 
   warn(message: unknown, context?: string): void {
     this.setContextIfProvided(context);
     this.logger
       .warn(this.formatMessage(message))
-      .catch((err: unknown) => internalError("LogixiaLoggerService.warn failed", err));
+      .catch((err: unknown) => internalError('LogixiaLoggerService.warn failed', err));
   }
 
   debug(message: unknown, context?: string): void {
     this.setContextIfProvided(context);
     this.logger
       .debug(this.formatMessage(message))
-      .catch((err: unknown) => internalError("LogixiaLoggerService.debug failed", err));
+      .catch((err: unknown) => internalError('LogixiaLoggerService.debug failed', err));
   }
 
   verbose(message: unknown, context?: string): void {
     this.setContextIfProvided(context);
     this.logger
       .trace(this.formatMessage(message))
-      .catch((err: unknown) => internalError("LogixiaLoggerService.verbose failed", err));
+      .catch((err: unknown) => internalError('LogixiaLoggerService.verbose failed', err));
   }
 
   /**
@@ -118,11 +116,7 @@ export class LogixiaLoggerService implements LoggerService {
     return this.logger.trace(message, data);
   }
 
-  logLevel(
-    level: string,
-    message: string,
-    data?: Record<string, unknown>,
-  ): Promise<void> {
+  logLevel(level: string, message: string, data?: Record<string, unknown>): Promise<void> {
     return this.logger.logLevel(level, message, data);
   }
 
@@ -195,11 +189,11 @@ export class LogixiaLoggerService implements LoggerService {
   }
 
   private formatMessage(message: unknown): string {
-    if (typeof message === "string") {
+    if (typeof message === 'string') {
       return message;
     }
 
-    if (typeof message === "object") {
+    if (typeof message === 'object') {
       return JSON.stringify(message);
     }
 
