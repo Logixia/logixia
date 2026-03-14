@@ -3,6 +3,16 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.3.0](https://github.com/Logixia/logixia/compare/v1.2.1...v1.3.0) (2026-03-14)
+
+### ✨ Features
+
+* implement decorators, exception filters, sampling, and integrations ([46cd66e](https://github.com/Logixia/logixia/commit/46cd66eb899e049f10ee666bb406b619b1fa680d))
+
+### 📚 Documentation
+
+* mark v1.2 features as complete in roadmap ([2a6b5c0](https://github.com/Logixia/logixia/commit/2a6b5c06354f1120ad1ca1f4489bc3bed4accaf8))
+
 ## [1.2.1](https://github.com/Logixia/logixia/compare/v1.2.0...v1.2.1) (2026-03-14)
 
 ### 🐛 Bug Fixes
