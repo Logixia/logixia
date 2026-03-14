@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>logixia — TypeScript Logging, Done Right</title>
+    <meta name="description" content="logixia is a TypeScript-first logger with async multi-transport (console, file, database, analytics), NestJS module, request tracing, built-in search, and zero-dep OpenTelemetry.">
+    <meta name="keywords" content="logixia, typescript logger, winston alternative, pino alternative, nestjs logger, structured logging, multi-transport, opentelemetry logging, nodejs logger">
+    <link rel="canonical" href="https://logixia.github.io/logixia/">
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://logixia.github.io/logixia/">
+    <meta property="og:title" content="logixia — TypeScript Logging, Done Right">
+    <meta property="og:description" content="TypeScript-first logger with async multi-transport, NestJS module, request tracing, and built-in search.">
+    <meta property="og:image" content="https://logixia.github.io/logixia/og-image.png">
+
+    <!-- Twitter Card -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://logixia.github.io/logixia/">
+    <meta property="twitter:title" content="logixia — TypeScript Logging, Done Right">
+    <meta property="twitter:description" content="TypeScript-first logger with async multi-transport, NestJS module, request tracing, and built-in search.">
+    <meta property="twitter:image" content="https://logixia.github.io/logixia/og-image.png">
+
+    <!-- JSON-LD SoftwareApplication Schema -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org/",
+        "@type": "SoftwareApplication",
+        "name": "logixia",
+        "description": "TypeScript-first logger with async multi-transport (console, file, database, analytics), NestJS module, request tracing, built-in search, and zero-dep OpenTelemetry.",
+        "url": "https://github.com/Logixia/logixia",
+        "applicationCategory": "DeveloperApplication",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        },
+        "author": {
+            "@type": "Organization",
+            "name": "Logixia"
+        },
+        "version": "1.1.2",
+        "license": "MIT"
+    }
+    </script>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #080810;
+            color: #e5e7eb;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            overflow-x: hidden;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0f0f17;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #10b981;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #14b8a6;
+        }
+
+        /* Animated mesh gradient hero background */
+        @keyframes gradientShift {
+            0%, 100% {
+                background-position: 0% 50%;
+            }
+            50% {
+                background-position: 100% 50%;
+            }
+        }
+
+        @keyframes blob1 {
+            0%, 100% {
+                transform: translate(0px, 0px) scale(1);
+            }
+            25% {
+                transform: translate(20px, -30px) scale(1.1);
+            }
+            50% {
+                transform: translate(-20px, 20px) scale(0.9);
+            }
+            75% {
+                transform: translate(30px, 10px) scale(1.05);
+            }
+        }
+
+        @keyframes blob2 {
+            0%, 100% {
+                transform: translate(0px, 0px) scale(1);
+            }
+            25% {
+                transform: translate(-30px, 20px) scale(0.95);
+            }
+            50% {
+                transform: translate(20px, -20px) scale(1.1);
+            }
+            75% {
+                transform: translate(-20px, -30px) scale(0.9);
+            }
+        }
+
+        @keyframes blob3 {
+            0%, 100% {
+                transform: translate(0px, 0px) scale(1);
+            }
+            25% {
+                transform: translate(20px, 20px) scale(1.05);
+            }
+            50% {
+                transform: translate(-30px, -20px) scale(0.95);
+            }
+            75% {
+                transform: translate(10px, 30px) scale(1.1);
+            }
+        }
+
+        .hero-gradient {
+            position: relative;
+            background: linear-gradient(135deg, #080810 0%, #0f1117 100%);
+            overflow: hidden;
+        }
+
+        .blob {
+            position: absolute;
+            border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+            filter: blur(40px);
+            opacity: 0.15;
+        }
+
+        .blob1 {
+            width: 400px;
+            height: 400px;
+            background: linear-gradient(135deg, #10b981 0%, #14b8a6 100%);
+            top: -100px;
+            left: 10%;
+            animation: blob1 7s infinite;
+        }
+
+        .blob2 {
+            width: 350px;
+            height: 350px;
+            background: linear-gradient(135deg, #14b8a6 0%, #0891b2 100%);
+            top: 200px;
+            right: 5%;
+            animation: blob2 8s infinite;
+        }
+
+        .blob3 {
+            width: 380px;
+            height: 380px;
+            background: linear-gradient(135deg, #10b981 0%, #0891b2 100%);
+            bottom: -150px;
+            left: 40%;
+            animation: blob3 9s infinite;
+        }
+
+        /* Fade in up animation */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fade-in-up {
+            animation: fadeInUp 0.8s ease-out forwards;
+        }
+
+        .fade-in-up.is-visible {
+            animation: fadeInUp 0.8s ease-out;
+        }
+
+        /* Counter animation */
+        @keyframes countUp {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        .counter {
+            animation: countUp 0.5s ease-out;
+        }
+
+        /* Glassmorphism cards */
+        .card-glass {
+            background: rgba(30, 30, 48, 0.4);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(16, 185, 129, 0.1);
+            border-radius: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .card-glass:hover {
+            border-color: rgba(16, 185, 129, 0.3);
+            background: rgba(30, 30, 48, 0.6);
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(16, 185, 129, 0.1);
+        }
+
+        /* Gradient text */
+        .gradient-text {
+            background: linear-gradient(135deg, #10b981 0%, #14b8a6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .gradient-text-subtle {
+            background: linear-gradient(135deg, #14b8a6 0%, #06b6d4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Tab styles */
+        .tab-button {
+            padding: 12px 24px;
+            border: none;
+            background: transparent;
+            color: #9ca3af;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .tab-button.active {
+            color: #10b981;
+            border-bottom-color: #10b981;
+        }
+
+        .tab-button:hover:not(.active) {
+            color: #d1d5db;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Code block styling */
+        .code-block {
+            background: #0f1117;
+            border: 1px solid rgba(16, 185, 129, 0.1);
+            border-radius: 12px;
+            padding: 24px;
+            overflow-x: auto;
+            font-family: 'Fira Code', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .code-block code {
+            color: #e5e7eb;
+        }
+
+        .hljs {
+            background: transparent !important;
+            color: #e5e7eb;
+        }
+
+        /* Animated bars */
+        @keyframes slideIn {
+            from {
+                width: 0;
+            }
+            to {
+                width: var(--bar-width);
+            }
+        }
+
+        .perf-bar {
+            animation: slideIn 1s ease-out forwards;
+            animation-delay: var(--delay);
+        }
+
+        /* Button styles */
+        .btn-primary {
+            background: linear-gradient(135deg, #10b981 0%, #14b8a6 100%);
+            color: #080810;
+            padding: 12px 32px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 40px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: #10b981;
+            padding: 12px 32px;
+            border: 2px solid #10b981;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(16, 185, 129, 0.1);
+            transform: translateY(-2px);
+        }
+
+        /* Sticky nav */
+        nav {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: rgba(8, 8, 16, 0.8);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(16, 185, 129, 0.1);
+        }
+
+        /* SVG icon styling */
+        .icon {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+        }
+
+        .icon-check {
+            color: #10b981;
+        }
+
+        .icon-x {
+            color: #ef4444;
+        }
+
+        /* Comparison table */
+        .compare-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .compare-table th,
+        .compare-table td {
+            padding: 16px;
+            text-align: left;
+            border-bottom: 1px solid rgba(16, 185, 129, 0.1);
+        }
+
+        .compare-table th {
+            background: rgba(16, 185, 129, 0.05);
+            color: #10b981;
+            font-weight: 600;
+        }
+
+        .compare-table tr:hover {
+            background: rgba(16, 185, 129, 0.05);
+        }
+
+        /* Scrollspy active state */
+        .nav-link.active {
+            color: #10b981;
+        }
+
+        /* Stat numbers */
+        .stat-number {
+            font-size: 32px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #10b981 0%, #14b8a6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Feature icons background */
+        .icon-bg {
+            width: 48px;
+            height: 48px;
+            background: rgba(16, 185, 129, 0.1);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+
+        .icon-bg svg {
+            color: #10b981;
+        }
+
+        /* Copy button */
+        .copy-btn {
+            background: none;
+            border: none;
+            color: #10b981;
+            cursor: pointer;
+            padding: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .copy-btn:hover {
+            color: #14b8a6;
+            transform: scale(1.1);
+        }
+
+        .copy-btn.copied {
+            color: #06b6d4;
+        }
+
+        /* Before/after comparison */
+        .before-after {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 32px;
+            margin: 40px 0;
+        }
+
+        @media (max-width: 768px) {
+            .before-after {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .before-box, .after-box {
+            background: rgba(30, 30, 48, 0.4);
+            border: 1px solid rgba(16, 185, 129, 0.1);
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        .before-box {
+            border-color: rgba(239, 68, 68, 0.2);
+        }
+
+        .after-box {
+            border-color: rgba(16, 185, 129, 0.2);
+        }
+
+        .before-label, .after-label {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+
+        .before-label {
+            color: #ef4444;
+        }
+
+        .after-label {
+            color: #10b981;
+        }
+
+        .before-code, .after-code {
+            font-family: 'Fira Code', monospace;
+            font-size: 14px;
+            line-height: 1.8;
+        }
+
+        .before-code {
+            color: #9ca3af;
+        }
+
+        .after-code {
+            color: #d1d5db;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="border-b border-gray-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- Logo -->
+                <div class="flex items-center gap-2">
+                    <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2">
+                        <path d="M12 2v20M7 7h10M7 17h10M2 12h20"></path>
+                    </svg>
+                    <span class="text-xl font-bold gradient-text">logixia</span>
+                </div>
+
+                <!-- Links -->
+                <div class="flex items-center gap-6">
+                    <div class="flex items-center gap-2 px-3 py-1 bg-gray-900 rounded-full text-sm">
+                        <span class="text-gray-400">v</span>
+                        <span class="text-gray-300 font-semibold">1.1.2</span>
+                    </div>
+
+                    <a href="https://www.npmjs.com/package/logixia" target="_blank" rel="noopener noreferrer" class="text-gray-400 hover:text-gray-200 transition">
+                        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M11.6915026,0.00674995651 C5.50636508,0.00674995651 0.606989175,4.8863036 0.606989175,11.08 C0.606989175,17.2727705 5.50636508,22.1534241 11.6915026,22.1534241 C17.8769621,22.1534241 22.7720164,17.2727705 22.7720164,11.08 C22.7720164,4.8863036 17.8769621,0.00674995651 11.6915026,0.00674995651 Z M6.50636508,16.6595745 L6.50636508,5.57075471 L9.13498737,5.57075471 L9.13498737,16.6595745 L6.50636508,16.6595745 Z M18.5582822,16.6595745 L15.9292208,16.6595745 L15.9292208,11.2421225 C15.9292208,9.70304501 15.5157895,8.49028274 14.0833987,8.49028274 C12.769462,8.49028274 12.0651515,9.35261044 11.8056016,10.1760146 C11.7136534,10.4252111 11.6915026,10.7627387 11.6915026,11.0997283 L11.6915026,16.6595745 L9.06288031,16.6595745 L9.06288031,5.57075471 L11.6915026,5.57075471 L11.6915026,7.25475192 C12.1593834,6.41337394 13.3483013,5.12149534 15.6885246,5.12149534 C18.5034706,5.12149534 20.8760397,6.80550255 20.8760397,10.8521433 L20.8760397,16.6595745 Z"></path>
+                        </svg>
+                    </a>
+
+                    <a href="https://github.com/Logixia/logixia" target="_blank" rel="noopener noreferrer" class="text-gray-400 hover:text-gray-200 transition">
+                        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v 3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"></path>
+                        </svg>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero-gradient relative min-h-screen flex items-center justify-center py-20">
+        <div class="blob blob1"></div>
+        <div class="blob blob2"></div>
+        <div class="blob blob3"></div>
+
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
+            <h1 class="text-5xl sm:text-6xl lg:text-7xl font-bold mb-6 gradient-text fade-in-up" style="animation-delay: 0.1s;">
+                The logging setup you copy-paste into every new project
+            </h1>
+
+            <p class="text-lg sm:text-xl text-gray-400 mb-8 max-w-3xl mx-auto fade-in-up" style="animation-delay: 0.2s;">
+                TypeScript-first. Async multi-transport. NestJS module. Request tracing. Built-in search. All batteries included.
+            </p>
+
+            <div class="mb-12 fade-in-up" style="animation-delay: 0.3s;">
+                <div class="code-block inline-block">
+                    <div class="flex items-center justify-between gap-4">
+                        <code class="text-emerald-400">npm install logixia</code>
+                        <button class="copy-btn" onclick="copyToClipboard('npm install logixia')">
+                            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-4 justify-center mb-12 fade-in-up" style="animation-delay: 0.4s;">
+                <button class="btn-primary" onclick="document.getElementById('quick-start').scrollIntoView({ behavior: 'smooth' })">
+                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="5 12 3 12 12 3 21 12 19 12"></polyline>
+                        <polyline points="12 17 12 9"></polyline>
+                    </svg>
+                    Get Started
+                </button>
+                <a href="https://github.com/Logixia/logixia" target="_blank" rel="noopener noreferrer" class="btn-secondary">
+                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v 3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"></path>
+                    </svg>
+                    View on GitHub
+                </a>
+            </div>
+
+            <p class="text-sm text-gray-500 fade-in-up" style="animation-delay: 0.5s;">
+                Drop-in replacement for winston and pino · MIT License · 100% TypeScript
+            </p>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="bg-gray-900 border-t border-gray-800 py-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+                <div class="text-center fade-in-up" style="animation-delay: 0.1s;">
+                    <div class="stat-number counter">840K+</div>
+                    <p class="text-gray-400 mt-2">logs/sec throughput</p>
+                </div>
+                <div class="text-center fade-in-up" style="animation-delay: 0.2s;">
+                    <div class="stat-number counter">6</div>
+                    <p class="text-gray-400 mt-2">transport types</p>
+                </div>
+                <div class="text-center fade-in-up" style="animation-delay: 0.3s;">
+                    <div class="stat-number counter">100%</div>
+                    <p class="text-gray-400 mt-2">TypeScript native</p>
+                </div>
+                <div class="text-center fade-in-up" style="animation-delay: 0.4s;">
+                    <div class="stat-number counter">MIT</div>
+                    <p class="text-gray-400 mt-2">License (Free)</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- One Package Section -->
+    <section class="py-20 border-t border-gray-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 class="text-4xl font-bold text-center mb-16 fade-in-up">
+                One package, <span class="gradient-text">every transport</span>
+            </h2>
+
+            <div class="before-after">
+                <div class="before-box fade-in-up" style="animation-delay: 0.2s;">
+                    <div class="before-label">Before (11 packages)</div>
+                    <div class="before-code">
+npm install winston<br>
+npm install winston-daily-rotate-file<br>
+npm install @sentry/node<br>
+npm install datadog-api-client<br>
+npm install segment<br>
+npm install pg<br>
+npm install mysql2<br>
+npm install mongodb<br>
+npm install better-sqlite3<br>
+npm install winston-transport<br>
+npm install pino-elasticsearch
+                    </div>
+                </div>
+
+                <div class="after-box fade-in-up" style="animation-delay: 0.3s;">
+                    <div class="after-label">After (1 package)</div>
+                    <div class="after-code">
+npm install logixia
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="py-20 border-t border-gray-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 class="text-4xl font-bold text-center mb-16 fade-in-up">
+                Built-in features for <span class="gradient-text">production</span>
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- Multi-Transport -->
+                <div class="card-glass p-8 fade-in-up" style="animation-delay: 0.1s;">
+                    <div class="icon-bg">
+                        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="1"></circle>
+                            <path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 0l4.24-4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08 0l4.24 4.24"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-white">Multi-Transport</h3>
+                    <p class="text-gray-400">Console, file rotation, PostgreSQL, MySQL, MongoDB, SQLite, Datadog, Segment, Mixpanel in one config.</p>
+                </div>
+
+                <!-- NestJS Module -->
+                <div class="card-glass p-8 fade-in-up" style="animation-delay: 0.2s;">
+                    <div class="icon-bg">
+                        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="7" height="7"></rect>
+                            <rect x="14" y="3" width="7" height="7"></rect>
+                            <rect x="14" y="14" width="7" height="7"></rect>
+                            <rect x="3" y="14" width="7" height="7"></rect>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-white">NestJS Module</h3>
+                    <p class="text-gray-400">Drop-in LogixiaModule.forRoot(), works with DI, request context interceptors, and provider injection.</p>
+                </div>
+
+                <!-- Request Tracing -->
+                <div class="card-glass p-8 fade-in-up" style="animation-delay: 0.3s;">
+                    <div class="icon-bg">
+                        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-white">Request Tracing</h3>
+                    <p class="text-gray-400">AsyncLocalStorage trace IDs flow automatically across async boundaries. No manual propagation needed.</p>
+                </div>
+
+                <!-- Built-in Search -->
+                <div class="card-glass p-8 fade-in-up" style="animation-delay: 0.4s;">
+                    <div class="icon-bg">
+                        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="m21 21-4.35-4.35"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-white">Built-in Log Search</h3>
+                    <p class="text-gray-400">NLP-powered pattern recognition, fuzzy search, and full-text indexing across all transports.</p>
+                </div>
+
+                <!-- Log Redaction -->
+                <div class="card-glass p-8 fade-in-up" style="animation-delay: 0.5s;">
+                    <div class="icon-bg">
+                        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-white">Log Redaction</h3>
+                    <p class="text-gray-400">Automatically scrub passwords, tokens, API keys, and PII before writing to any transport.</p>
+                </div>
+
+                <!-- OpenTelemetry -->
+                <div class="card-glass p-8 fade-in-up" style="animation-delay: 0.6s;">
+                    <div class="icon-bg">
+                        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"></path>
+                            <path d="M12 6v6l5 2.88"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-white">OpenTelemetry</h3>
+                    <p class="text-gray-400">Zero-dep W3C trace context support. Ships spans to any OTLP collector out-of-box.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Code Showcase Section -->
+    <section class="py-20 border-t border-gray-800">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 class="text-4xl font-bold mb-12 text-center fade-in-up">
+                Built for <span class="gradient-text">every use case</span>
+            </h2>
+
+            <div class="card-glass p-8 fade-in-up" style="animation-delay: 0.2s;">
+                <!-- Tabs -->
+                <div class="flex gap-4 border-b border-gray-700 mb-8 overflow-x-auto">
+                    <button class="tab-button active" onclick="switchTab('quick-setup')">Quick Setup</button>
+                    <button class="tab-button" onclick="switchTab('nestjs')">NestJS</button>
+                    <button class="tab-button" onclick="switchTab('multi-transport')">Multi-Transport</button>
+                    <button class="tab-button" onclick="switchTab('request-tracing')">Request Tracing</button>
+                </div>
+
+                <!-- Quick Setup Tab -->
+                <div id="quick-setup" class="tab-content active">
+                    <pre><code class="language-typescript">import { LogixiaLogger } from 'logixia';
+
+const logger = new LogixiaLogger({
+  level: 'debug',
+  transports: ['console', 'file'],
+});
+
+logger.info('Server started', { port: 3000 });
+logger.error('DB connection failed', { host: 'localhost' });</code></pre>
+                </div>
+
+                <!-- NestJS Tab -->
+                <div id="nestjs" class="tab-content">
+                    <pre><code class="language-typescript">// app.module.ts
+import { LogixiaModule } from 'logixia';
+
+@Module({
+  imports: [
+    LogixiaModule.forRoot({
+      level: 'info',
+      transports: ['console', 'file', 'postgresql'],
+    }),
+  ],
+})
+export class AppModule {}
+
+// my.service.ts
+constructor(private readonly logger: LogixiaLogger) {}
+
+this.logger.info('User created', { userId });</code></pre>
+                </div>
+
+                <!-- Multi-Transport Tab -->
+                <div id="multi-transport" class="tab-content">
+                    <pre><code class="language-typescript">const logger = new LogixiaLogger({
+  transports: [
+    { type: 'console', colorize: true },
+    { type: 'file', filename: 'app.log', rotate: '1d' },
+    {
+      type: 'postgresql',
+      connectionString: process.env.DATABASE_URL
+    },
+    {
+      type: 'datadog',
+      apiKey: process.env.DD_API_KEY
+    },
+    {
+      type: 'segment',
+      writeKey: process.env.SEGMENT_KEY
+    },
+  ],
+});</code></pre>
+                </div>
+
+                <!-- Request Tracing Tab -->
+                <div id="request-tracing" class="tab-content">
+                    <pre><code class="language-typescript">// Trace IDs flow automatically
+// No manual passing needed
+app.use(logixia.tracingMiddleware());
+
+// Anywhere in your async call chain:
+logger.info('Processing order', { orderId: '123' });
+
+// Output includes trace context automatically:
+// {
+//   "level": "info",
+//   "message": "Processing order",
+//   "traceId": "abc-123",
+//   "spanId": "xyz-456",
+//   "orderId": "123",
+//   "timestamp": "2024-03-14T10:30:00Z"
+// }</code></pre>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Performance Section -->
+    <section class="py-20 border-t border-gray-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 class="text-4xl font-bold mb-8 text-center fade-in-up">
+                <span class="gradient-text">Performance</span> you can trust
+            </h2>
+            <p class="text-center text-gray-400 mb-12 fade-in-up">Faster than winston. Competitive with pino.</p>
+
+            <div class="space-y-6 max-w-2xl mx-auto fade-in-up" style="animation-delay: 0.2s;">
+                <!-- logixia simple -->
+                <div class="perf-item fade-in-up" style="animation-delay: 0.3s;">
+                    <div class="flex justify-between mb-2">
+                        <span class="text-white font-semibold">logixia (simple)</span>
+                        <span class="text-emerald-400">840K logs/sec</span>
+                    </div>
+                    <div class="h-2 bg-gray-900 rounded-full overflow-hidden">
+                        <div class="perf-bar h-full bg-gradient-to-r from-emerald-500 to-teal-500" style="--bar-width: 100%; --delay: 0.3s;"></div>
+                    </div>
+                </div>
+
+                <!-- pino -->
+                <div class="perf-item fade-in-up" style="animation-delay: 0.4s;">
+                    <div class="flex justify-between mb-2">
+                        <span class="text-white font-semibold">pino (basic, no transports)</span>
+                        <span class="text-blue-400">1.26M logs/sec</span>
+                    </div>
+                    <div class="h-2 bg-gray-900 rounded-full overflow-hidden">
+                        <div class="perf-bar h-full bg-gradient-to-r from-blue-500 to-cyan-500" style="--bar-width: 150%; --delay: 0.4s;"></div>
+                    </div>
+                </div>
+
+                <!-- logixia structured -->
+                <div class="perf-item fade-in-up" style="animation-delay: 0.5s;">
+                    <div class="flex justify-between mb-2">
+                        <span class="text-white font-semibold">logixia (structured)</span>
+                        <span class="text-emerald-400">696K logs/sec</span>
+                    </div>
+                    <div class="h-2 bg-gray-900 rounded-full overflow-hidden">
+                        <div class="perf-bar h-full bg-gradient-to-r from-emerald-500 to-teal-500" style="--bar-width: 82.8%; --delay: 0.5s;"></div>
+                    </div>
+                </div>
+
+                <!-- winston -->
+                <div class="perf-item fade-in-up" style="animation-delay: 0.6s;">
+                    <div class="flex justify-between mb-2">
+                        <span class="text-white font-semibold">winston</span>
+                        <span class="text-purple-400">738K logs/sec</span>
+                    </div>
+                    <div class="h-2 bg-gray-900 rounded-full overflow-hidden">
+                        <div class="perf-bar h-full bg-gradient-to-r from-purple-500 to-pink-500" style="--bar-width: 87.8%; --delay: 0.6s;"></div>
+                    </div>
+                </div>
+
+                <!-- bunyan -->
+                <div class="perf-item fade-in-up" style="animation-delay: 0.7s;">
+                    <div class="flex justify-between mb-2">
+                        <span class="text-white font-semibold">bunyan</span>
+                        <span class="text-orange-400">450K logs/sec</span>
+                    </div>
+                    <div class="h-2 bg-gray-900 rounded-full overflow-hidden">
+                        <div class="perf-bar h-full bg-gradient-to-r from-orange-500 to-red-500" style="--bar-width: 53.5%; --delay: 0.7s;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <p class="text-center text-sm text-gray-500 mt-12 fade-in-up" style="animation-delay: 0.8s;">
+                Benchmark: 1M log writes, Node.js 22. Pino measured without file transport.
+            </p>
+        </div>
+    </section>
+
+    <!-- Comparison Table Section -->
+    <section class="py-20 border-t border-gray-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 class="text-4xl font-bold mb-12 text-center fade-in-up">
+                Feature <span class="gradient-text">comparison</span>
+            </h2>
+
+            <div class="overflow-x-auto fade-in-up" style="animation-delay: 0.2s;">
+                <table class="compare-table">
+                    <thead>
+                        <tr>
+                            <th>Feature</th>
+                            <th>logixia</th>
+                            <th>pino</th>
+                            <th>winston</th>
+                            <th>bunyan</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="font-semibold">TypeScript native</td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                        </tr>
+                        <tr>
+                            <td class="font-semibold">Async writes</td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                        </tr>
+                        <tr>
+                            <td class="font-semibold">File rotation</td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                        </tr>
+                        <tr>
+                            <td class="font-semibold">Database transport</td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                        </tr>
+                        <tr>
+                            <td class="font-semibold">Analytics transport</td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                        </tr>
+                        <tr>
+                            <td class="font-semibold">NestJS module</td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                        </tr>
+                        <tr>
+                            <td class="font-semibold">Request tracing</td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                        </tr>
+                        <tr>
+                            <td class="font-semibold">Log search</td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                        </tr>
+                        <tr>
+                            <td class="font-semibold">Log redaction</td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                        </tr>
+                        <tr>
+                            <td class="font-semibold">OpenTelemetry</td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                        </tr>
+                        <tr>
+                            <td class="font-semibold">Graceful shutdown</td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                        </tr>
+                        <tr>
+                            <td class="font-semibold">Actively maintained</td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
+                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Quick Start Section -->
+    <section id="quick-start" class="py-20 border-t border-gray-800">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 class="text-4xl font-bold mb-12 text-center fade-in-up">
+                Get started in <span class="gradient-text">2 steps</span>
+            </h2>
+
+            <div class="space-y-8">
+                <!-- Step 1 -->
+                <div class="flex gap-6 fade-in-up" style="animation-delay: 0.1s;">
+                    <div class="flex-shrink-0">
+                        <div class="flex items-center justify-center h-12 w-12 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500">
+                            <span class="text-white font-bold">1</span>
+                        </div>
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="text-xl font-bold text-white mb-2">Install the package</h3>
+                        <div class="code-block">
+                            <code class="text-emerald-400">npm install logixia</code>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2 -->
+                <div class="flex gap-6 fade-in-up" style="animation-delay: 0.2s;">
+                    <div class="flex-shrink-0">
+                        <div class="flex items-center justify-center h-12 w-12 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500">
+                            <span class="text-white font-bold">2</span>
+                        </div>
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="text-xl font-bold text-white mb-2">Initialize and use</h3>
+                        <pre><code class="language-typescript">import { LogixiaLogger } from 'logixia';
+
+const logger = new LogixiaLogger({
+  level: 'info',
+  transports: ['console', 'file'],
+});
+
+logger.info('Hello, logixia!', { version: '1.1.2' });</code></pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-12 text-center fade-in-up" style="animation-delay: 0.3s;">
+                <p class="text-gray-400 mb-6">Ready to dive in?</p>
+                <a href="https://github.com/Logixia/logixia" target="_blank" rel="noopener noreferrer" class="btn-primary">
+                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v 3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"></path>
+                    </svg>
+                    View Documentation on GitHub
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-gray-800 bg-gray-900 py-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row items-center justify-between">
+                <div class="flex items-center gap-2 mb-6 md:mb-0">
+                    <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2">
+                        <path d="M12 2v20M7 7h10M7 17h10M2 12h20"></path>
+                    </svg>
+                    <span class="text-white font-semibold">logixia</span>
+                    <span class="text-gray-600">·</span>
+                    <span class="text-gray-400">MIT License</span>
+                </div>
+
+                <div class="flex items-center gap-6">
+                    <a href="https://github.com/Logixia/logixia" target="_blank" rel="noopener noreferrer" class="text-gray-400 hover:text-gray-200 transition">
+                        GitHub
+                    </a>
+                    <a href="https://www.npmjs.com/package/logixia" target="_blank" rel="noopener noreferrer" class="text-gray-400 hover:text-gray-200 transition">
+                        npm
+                    </a>
+                    <span class="text-gray-600">·</span>
+                    <span class="text-gray-500 text-sm">Made with care</span>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Tailwind config
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        accent: '#10b981',
+                        'accent-light': '#14b8a6',
+                    }
+                }
+            }
+        }
+
+        // Copy to clipboard
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = event.target.closest('.copy-btn');
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        }
+
+        // Tab switching
+        function switchTab(tabId) {
+            const contents = document.querySelectorAll('.tab-content');
+            const buttons = document.querySelectorAll('.tab-button');
+
+            contents.forEach(el => el.classList.remove('active'));
+            buttons.forEach(el => el.classList.remove('active'));
+
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+
+            // Highlight code
+            document.querySelectorAll('pre code').forEach(el => {
+                hljs.highlightElement(el);
+            });
+        }
+
+        // Highlight all code blocks on load
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('pre code').forEach(el => {
+                hljs.highlightElement(el);
+            });
+        });
+
+        // Counter animation
+        function animateCounter(element) {
+            const text = element.textContent;
+            const match = text.match(/(\d+)/);
+
+            if (!match) return;
+
+            const value = parseInt(match[1]);
+            let current = 0;
+
+            const increment = Math.ceil(value / 30);
+            const interval = setInterval(() => {
+                current += increment;
+                if (current >= value) {
+                    element.textContent = text;
+                    clearInterval(interval);
+                } else {
+                    element.textContent = current + text.replace(/\d+/, '');
+                }
+            }, 20);
+        }
+
+        // Intersection Observer for fade-in and counter animations
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -100px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('is-visible');
+
+                    // Animate counters
+                    if (entry.target.classList.contains('counter')) {
+                        animateCounter(entry.target);
+                    }
+
+                    // Animate bars
+                    if (entry.target.classList.contains('perf-item')) {
+                        entry.target.querySelector('.perf-bar').style.animation = 'slideIn 1s ease-out forwards';
+                    }
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.fade-in-up, .counter, .perf-item').forEach(el => {
+            observer.observe(el);
+        });
+
+        // Smooth scroll for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                const href = this.getAttribute('href');
+                if (href === '#') return;
+                e.preventDefault();
+                const target = document.querySelector(href);
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+        });
+    </script>
+
+    <script async src="https://cdn.tailwindcss.com"></script>
+</body>
+</html>
