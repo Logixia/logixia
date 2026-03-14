@@ -23,6 +23,8 @@ export * from './core/logitron-nestjs.service';
 export * from './formatters';
 export * from './types';
 export * from './utils/error.utils';
+export { applyRedaction, redactObject } from './utils/redact.utils';
+export * from './utils/shutdown.utils';
 export * from './utils/trace.utils';
 
 // Search module exports
