@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.2.1](https://github.com/Logixia/logixia/compare/v1.2.0...v1.2.1) (2026-03-14)
+
+### 🐛 Bug Fixes
+
+* correct package exports for CJS/ESM interop and update CI artifact verification ([28c2a36](https://github.com/Logixia/logixia/commit/28c2a3646a89326235305dbd5922cdb179ec3dde))
+
 ## [1.2.0](https://github.com/Logixia/logixia/compare/v1.1.5...v1.2.0) (2026-03-14)
 
 ### ✨ Features
