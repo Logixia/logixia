@@ -7,24 +7,45 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "default": "./dist/index.js"
     },
     "./nest": {
-      "import": "./dist/nest.mjs",
-      "require": "./dist/nest.js",
-      "types": "./dist/nest.d.ts"
+      "import": {
+        "types": "./dist/nest.d.mts",
+        "default": "./dist/nest.mjs"
+      },
+      "require": {
+        "types": "./dist/nest.d.ts",
+        "default": "./dist/nest.js"
+      }
     },
     "./transports": {
-      "import": "./dist/transports.mjs",
-      "require": "./dist/transports.js",
-      "types": "./dist/transports.d.ts"
+      "import": {
+        "types": "./dist/transports.d.mts",
+        "default": "./dist/transports.mjs"
+      },
+      "require": {
+        "types": "./dist/transports.d.ts",
+        "default": "./dist/transports.js"
+      }
     },
     "./search": {
-      "import": "./dist/search.mjs",
-      "require": "./dist/search.js",
-      "types": "./dist/search.d.ts"
+      "import": {
+        "types": "./dist/search.d.mts",
+        "default": "./dist/search.mjs"
+      },
+      "require": {
+        "types": "./dist/search.d.ts",
+        "default": "./dist/search.js"
+      }
     },
     "./package.json": "./package.json"
   },
