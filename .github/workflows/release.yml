@@ -1,13 +1,11 @@
-name: Release
+name: Release (manual fallback)
 
-# Triggers only after the "CI" workflow completes successfully on main.
-# This makes CI → Release sequential and eliminates the duplicate CI gate
-# that existed when both workflows triggered independently on push.
+# The primary release path is the `release` job inside ci.yml.
+# This workflow exists only as a manual escape hatch — use it when you
+# need to cut a release without pushing a new commit (e.g. after fixing
+# a broken NPM_TOKEN or recovering from a failed release mid-flight).
 on:
-  workflow_run:
-    workflows: ['CI']
-    branches: [main]
-    types: [completed]
+  workflow_dispatch:
 
 concurrency:
   group: release
@@ -15,40 +13,20 @@ concurrency:
 
 jobs:
   release:
-    name: Semantic Release
-
-    # Only proceed when CI actually passed (not cancelled / failed)
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-
+    name: Semantic Release (manual)
     runs-on: ubuntu-latest
     permissions:
-      contents: write # create tags + push release commit back to main
+      contents: write # push release tag + chore(release) commit
       issues: write # comment on released issues
       pull-requests: write # comment on released PRs
-      id-token: write # npm provenance
+      id-token: write # npm provenance attestation
 
     steps:
       - name: Checkout (full history)
         uses: actions/checkout@v4
         with:
-          # Check out the exact commit that CI ran on, not whatever
-          # happens to be at HEAD right now.
-          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
-          persist-credentials: false # semantic-release manages its own git auth
-
-      # ── KEY FIX ──────────────────────────────────────────────────────────
-      # @semantic-release/git pushes a "chore(release): x.x.x [skip ci]"
-      # commit back to origin/main at the end of every release.  If this
-      # workflow was queued (cancel-in-progress: false) and starts only AFTER
-      # that commit landed, the checked-out SHA is behind origin/main and
-      # semantic-release refuses to run.  Fast-forwarding here ensures the
-      # local branch always matches origin/main before semantic-release runs.
-      - name: Fast-forward to latest origin/main
-        run: |
-          git fetch origin
-          git checkout main
-          git reset --hard origin/main
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

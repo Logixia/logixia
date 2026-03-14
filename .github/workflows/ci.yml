@@ -6,14 +6,17 @@ on:
   pull_request:
     branches: [main, develop]
 
+# PRs: cancel the old run when you push more changes (saves CI minutes).
+# main / develop pushes: never cancel — the release job lives inside this run,
+# so cancelling it mid-flight would abort a release in progress.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # ─────────────────────────────────────────────
-  # 1. Code Quality: Format + Lint + Typecheck
-  # ─────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────
+  # 1. Quality — lint · format · typecheck
+  # ─────────────────────────────────────────────────────────
   quality:
     name: Quality (lint · typecheck · format)
     runs-on: ubuntu-latest
@@ -38,10 +41,10 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
-  # ─────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────
   # 2. Tests — Node 18 / 20 / 22 matrix
   # (logixia uses jest, so Node 18 is still supported)
-  # ─────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────
   test:
     name: Test (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
@@ -73,9 +76,9 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
-  # ─────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────
   # 3. Build — verify dist is producible
-  # ─────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -108,3 +111,62 @@ jobs:
           name: dist
           path: dist/
           retention-days: 3
+
+  # ─────────────────────────────────────────────────────────
+  # 4. Release — only on direct push to main
+  #
+  # Merging CI + Release into one workflow eliminates every source of
+  # the intermittent "release skipped / already different version" bug:
+  #
+  #   BEFORE (two workflows):
+  #     push → CI runs → CI cancels earlier run (cancel-in-progress: true)
+  #     → surviving CI finishes → workflow_run triggers Release
+  #     → Release is queued (cancel-in-progress: false)
+  #     → queued Release fast-forwards to origin/main
+  #     → origin/main is now AT the chore(release) commit from the
+  #       previous release run → semantic-release sees no new commits
+  #     → SKIP (the "already different version" message you were seeing)
+  #
+  #   AFTER (one workflow):
+  #     push → quality → test + build (parallel) → release
+  #     Each run operates on its own github.sha — no fast-forward,
+  #     no separate queue, no timing gap between CI finish and release.
+  #     If two pushes land in quick succession the second run simply
+  #     waits (concurrency queue) and then checks whether there are new
+  #     commits since the last tag — if not, it skips correctly.
+  # ─────────────────────────────────────────────────────────
+  release:
+    name: Semantic Release
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write # push release tag + chore(release) commit
+      issues: write # comment on released issues
+      pull-requests: write # comment on released PRs
+      id-token: write # npm provenance attestation
+
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
+        run: npx semantic-release
