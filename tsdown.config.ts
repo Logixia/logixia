@@ -16,6 +16,6 @@ export default defineConfig({
     'express',
     'async_hooks',
     'crypto',
-    'util'
-  ]
+    'util',
+  ],
 });

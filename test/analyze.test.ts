@@ -12,17 +12,17 @@ describe('analyzeFileContents', () => {
       JSON.stringify({ timestamp: old, level: 'error', message: 'oldfail' }),
     ].join('\n');
 
-  const res = await analyzeFileContents(raw, { last: '24h', format: 'json' });
-  const r: any = res as any;
-  expect(r).toHaveProperty('total', 2);
-  expect(r.byLevel).toHaveProperty('INFO', 1);
-  expect(r.byLevel).toHaveProperty('ERROR', 1);
+    const res = await analyzeFileContents(raw, { last: '24h', format: 'json' });
+    const r: any = res as any;
+    expect(r).toHaveProperty('total', 2);
+    expect(r.byLevel).toHaveProperty('INFO', 1);
+    expect(r.byLevel).toHaveProperty('ERROR', 1);
   });
 
   test('empty input returns zero totals', async () => {
-  const res = await analyzeFileContents('', { format: 'json' });
-  const r2: any = res as any;
-  expect(r2).toHaveProperty('total', 0);
-  expect(r2.byLevel).toEqual({});
+    const res = await analyzeFileContents('', { format: 'json' });
+    const r2: any = res as any;
+    expect(r2).toHaveProperty('total', 0);
+    expect(r2.byLevel).toEqual({});
   });
 });

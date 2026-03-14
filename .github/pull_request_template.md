@@ -5,13 +5,17 @@
 <!-- Provide a clear and concise description of your changes -->
 
 ### What does this PR do?
+
 <!-- Briefly explain what this PR accomplishes -->
 
 ### Why is this change needed?
+
 <!-- Explain the motivation for this change -->
 
 ### Related Issues
+
 <!-- Link to related issues using "Fixes #123" or "Closes #123" -->
+
 - Fixes #
 - Related to #
 
@@ -33,12 +37,15 @@
 <!-- Describe how you tested your changes -->
 
 ### Test Coverage
+
 - [ ] I have added tests that prove my fix is effective or that my feature works
 - [ ] New and existing unit tests pass locally with my changes
 - [ ] I have tested this change manually
 
 ### Test Details
+
 <!-- Describe your testing approach -->
+
 ```
 # Commands used for testing
 npm test
@@ -47,6 +54,7 @@ npm run lint
 ```
 
 ### Manual Testing
+
 <!-- Describe any manual testing performed -->
 
 ## 📖 Documentation
@@ -119,12 +127,15 @@ npm run lint
 <!-- If applicable, add screenshots or code examples -->
 
 ### Before
+
 <!-- Show the current behavior -->
 
 ### After
+
 <!-- Show the new behavior -->
 
 ### Code Example
+
 ```typescript
 // Example of how to use the new feature
 import { Logixia } from 'logixia';
@@ -141,12 +152,15 @@ const logger = new Logixia({
 <!-- Add any other context about the PR here -->
 
 ### Deployment Notes
+
 <!-- Any special deployment considerations -->
 
 ### Rollback Plan
+
 <!-- How to rollback if issues arise -->
 
 ### Future Considerations
+
 <!-- Any follow-up work or considerations -->
 
 ## ✅ Reviewer Checklist
@@ -175,8 +189,8 @@ const logger = new Logixia({
 
 **Thank you for contributing to Logixia!** 🚀
 
-<!-- 
-Reminder: 
+<!--
+Reminder:
 - Keep PRs focused and atomic
 - Write clear commit messages
 - Be responsive to feedback

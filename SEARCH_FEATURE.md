@@ -7,6 +7,7 @@ Logixia now includes a powerful intelligent search system that makes finding, an
 ## 🌟 Key Features
 
 ### 1. **Natural Language Search**
+
 Search logs using plain English queries instead of complex filter syntax.
 
 ```typescript
@@ -17,6 +18,7 @@ const results = await searchManager.naturalLanguageSearch(
 ```
 
 **Supported Queries:**
+
 - "Show me all errors"
 - "Find logs from user 12345"
 - "What happened in the last 2 hours?"
@@ -24,7 +26,9 @@ const results = await searchManager.naturalLanguageSearch(
 - "Find logs related to payment processing"
 
 ### 2. **Intelligent Log Correlation**
+
 Automatically find related logs across multiple dimensions:
+
 - **Trace ID correlation**: Follow requests across microservices
 - **User journey tracking**: See all logs for a specific user
 - **Error cascade analysis**: Understand how errors propagate
@@ -34,8 +38,8 @@ Automatically find related logs across multiple dimensions:
 ```typescript
 // Find all logs for a trace ID
 const correlated = await searchManager.correlateByTraceId('trace-123');
-console.log(correlated.timeline);  // Chronological view
-console.log(correlated.summary);   // Statistics and insights
+console.log(correlated.timeline); // Chronological view
+console.log(correlated.summary); // Statistics and insights
 
 // Multi-criteria correlation
 const correlations = await searchManager.correlateByMultipleCriteria({
@@ -47,6 +51,7 @@ const correlations = await searchManager.correlateByMultipleCriteria({
 ```
 
 ### 3. **Pattern Recognition & Anomaly Detection**
+
 Automatically detect patterns and unusual behavior in your logs.
 
 ```typescript
@@ -60,37 +65,44 @@ const anomalies = await searchManager.detectAnomalies();
 ```
 
 **Pattern Types:**
+
 - **Message patterns**: Common log message templates
 - **Error patterns**: Recurring error types
 - **Timing patterns**: Peak activity hours
 - **Behavioral patterns**: Unusual sequences
 
 ### 4. **Smart Filtering & Grouping**
+
 Powerful filtering with intuitive syntax:
 
 ```typescript
-const results = await searchManager.search('database error', {
-  levels: ['error', 'warn'],
-  services: ['api-gateway', 'database'],
-  timeRange: {
-    start: new Date(Date.now() - 3600000), // Last hour
+const results = await searchManager.search(
+  'database error',
+  {
+    levels: ['error', 'warn'],
+    services: ['api-gateway', 'database'],
+    timeRange: {
+      start: new Date(Date.now() - 3600000), // Last hour
+    },
+    hasError: true,
   },
-  hasError: true,
-}, {
-  limit: 50,
-  sortBy: 'timestamp',
-  includeContext: true,  // Get surrounding logs
-  highlightMatches: true,
-});
+  {
+    limit: 50,
+    sortBy: 'timestamp',
+    includeContext: true, // Get surrounding logs
+    highlightMatches: true,
+  }
+);
 ```
 
 ### 5. **Contextual Enhancement**
+
 Get the full picture with contextual information:
 
 ```typescript
 const results = await searchManager.search('timeout', undefined, {
   includeContext: true,
-  contextSize: 10,  // 10 logs before and after
+  contextSize: 10, // 10 logs before and after
 });
 
 // Each result includes:
@@ -101,6 +113,7 @@ const results = await searchManager.search('timeout', undefined, {
 ```
 
 ### 6. **Search Suggestions & Autocomplete**
+
 Intelligent suggestions as you type:
 
 ```typescript
@@ -109,6 +122,7 @@ const suggestions = await searchManager.getSuggestions('err', 10);
 ```
 
 ### 7. **Search Presets**
+
 Save and reuse common searches:
 
 ```typescript
@@ -126,6 +140,7 @@ const presets = await searchManager.getPresets();
 ```
 
 ### 8. **Export Capabilities**
+
 Export results in multiple formats:
 
 ```typescript
@@ -207,14 +222,10 @@ const errors = await searchManager.search('payment failed', {
 });
 
 // Get the full context
-const correlated = await searchManager.correlateByTraceId(
-  errors[0].log.traceId
-);
+const correlated = await searchManager.correlateByTraceId(errors[0].log.traceId);
 
 // Analyze the error cascade
-const cascade = await searchManager.analyzeErrorCascade(
-  errors[0].log.traceId
-);
+const cascade = await searchManager.analyzeErrorCascade(errors[0].log.traceId);
 
 console.log('Root cause:', cascade.rootCause);
 console.log('Impacted services:', cascade.impactedServices);
@@ -230,9 +241,7 @@ const slowOps = await searchManager.naturalLanguageSearch(
 
 // Detect patterns
 const patterns = await searchManager.detectPatterns();
-const slowQueryPatterns = patterns.filter(
-  p => p.category === 'performance'
-);
+const slowQueryPatterns = patterns.filter((p) => p.category === 'performance');
 
 // Get statistics
 const stats = await searchManager.getStats();
@@ -242,13 +251,17 @@ const stats = await searchManager.getStats();
 
 ```typescript
 // Track user journey
-const userLogs = await searchManager.search('', {
-  userIds: ['user123'],
-}, {
-  sortBy: 'timestamp',
-  sortOrder: 'asc',
-  includeContext: true,
-});
+const userLogs = await searchManager.search(
+  '',
+  {
+    userIds: ['user123'],
+  },
+  {
+    sortBy: 'timestamp',
+    sortOrder: 'asc',
+    includeContext: true,
+  }
+);
 
 // Find related sessions
 const related = await searchManager.findRelatedLogs(userLogs[0].log);
@@ -265,7 +278,7 @@ const suspicious = await searchManager.naturalLanguageSearch(
 // Detect anomalies
 const anomalies = await searchManager.detectAnomalies();
 const securityAnomalies = anomalies.filter(
-  a => a.log.level === 'warn' || a.log.level === 'error'
+  (a) => a.log.level === 'warn' || a.log.level === 'error'
 );
 ```
 
@@ -281,11 +294,10 @@ const parsed = await searchManager.parseNaturalLanguageQuery(query);
 parsed.filters.services = ['critical-service-1', 'critical-service-2'];
 
 // Execute with custom options
-const results = await searchManager.search(
-  parsed.originalQuery,
-  parsed.filters,
-  { includeContext: true, correlate: true }
-);
+const results = await searchManager.search(parsed.originalQuery, parsed.filters, {
+  includeContext: true,
+  correlate: true,
+});
 ```
 
 ### Real-Time Search
@@ -324,13 +336,13 @@ await searchManager.optimizeIndex();
 ```typescript
 // Configure index size limits
 const searchManager = new SearchManager({
-  maxIndexSize: 1000000,  // Max 1M logs
+  maxIndexSize: 1000000, // Max 1M logs
   autoOptimize: true,
 });
 
 // Periodically remove old logs
 await searchManager.removeOldLogs(
-  new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)  // 7 days
+  new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // 7 days
 );
 
 // Manual optimization
@@ -341,13 +353,17 @@ await searchManager.optimizeIndex();
 
 ```typescript
 // Use specific filters
-const results = await searchManager.search('error', {
-  levels: ['error'],
-  services: ['payment'],
-  timeRange: { start: new Date(Date.now() - 3600000) },
-}, {
-  limit: 50,  // Limit results
-});
+const results = await searchManager.search(
+  'error',
+  {
+    levels: ['error'],
+    services: ['payment'],
+    timeRange: { start: new Date(Date.now() - 3600000) },
+  },
+  {
+    limit: 50, // Limit results
+  }
+);
 
 // Paginate large result sets
 const page1 = await searchManager.search('error', undefined, {
@@ -377,13 +393,13 @@ if (stats.indexSize > 100_000_000) {
 ```typescript
 const searchManager = new SearchManager({
   // Enable/disable features
-  enableNLP: true,                    // Natural language processing
-  enablePatternRecognition: true,     // Pattern detection
-  enableCorrelation: true,            // Log correlation
-  
+  enableNLP: true, // Natural language processing
+  enablePatternRecognition: true, // Pattern detection
+  enableCorrelation: true, // Log correlation
+
   // Performance tuning
-  maxIndexSize: 1000000,             // Maximum logs to index
-  autoOptimize: true,                 // Auto-optimize index
+  maxIndexSize: 1000000, // Maximum logs to index
+  autoOptimize: true, // Auto-optimize index
 });
 ```
 
@@ -391,16 +407,16 @@ const searchManager = new SearchManager({
 
 ```typescript
 const options: SearchOptions = {
-  limit: 100,                         // Max results
-  offset: 0,                          // Pagination offset
-  sortBy: 'timestamp',                // Sort field
-  sortOrder: 'desc',                  // Sort direction
-  includeContext: true,               // Include surrounding logs
-  contextSize: 5,                     // Context size
-  highlightMatches: true,             // Highlight matched terms
-  findSimilar: true,                  // Find similar logs
-  correlate: true,                    // Correlate results
-  semanticSearch: true,               // Enable semantic search
+  limit: 100, // Max results
+  offset: 0, // Pagination offset
+  sortBy: 'timestamp', // Sort field
+  sortOrder: 'desc', // Sort direction
+  includeContext: true, // Include surrounding logs
+  contextSize: 5, // Context size
+  highlightMatches: true, // Highlight matched terms
+  findSimilar: true, // Find similar logs
+  correlate: true, // Correlate results
+  semanticSearch: true, // Enable semantic search
 };
 ```
 
@@ -432,17 +448,14 @@ const app = express();
 const searchManager = new SearchManager();
 
 app.get('/api/logs/search', async (req, res) => {
-  const results = await searchManager.search(
-    req.query.query as string,
-    { levels: req.query.level ? [req.query.level as string] : undefined }
-  );
+  const results = await searchManager.search(req.query.query as string, {
+    levels: req.query.level ? [req.query.level as string] : undefined,
+  });
   res.json(results);
 });
 
 app.get('/api/logs/nl-search', async (req, res) => {
-  const results = await searchManager.naturalLanguageSearch(
-    req.query.query as string
-  );
+  const results = await searchManager.naturalLanguageSearch(req.query.query as string);
   res.json(results);
 });
 ```
@@ -479,12 +492,14 @@ The intelligent search system is designed to achieve:
 ## 🚧 Roadmap
 
 ### Phase 4: Integration & Collaboration
+
 - [ ] IDE extensions (VS Code, IntelliJ)
 - [ ] Team sharing features
 - [ ] External tool integrations (Slack, PagerDuty)
 - [ ] Advanced visualization dashboards
 
 ### Future Enhancements
+
 - [ ] Elasticsearch backend integration
 - [ ] Machine learning-based ranking
 - [ ] Real-time log streaming
@@ -504,6 +519,7 @@ The intelligent search system is designed to achieve:
 ## 🤝 Contributing
 
 We welcome contributions! Areas we'd love help with:
+
 - Advanced NLP algorithms
 - Machine learning models
 - Visualization components

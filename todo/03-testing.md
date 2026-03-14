@@ -8,11 +8,11 @@
 
 ## Current Test Inventory
 
-| File | Tests | What they cover |
-|------|-------|----------------|
-| `test/analyze.test.ts` | 2 | `analyzeFileContents()` time filter + empty input |
-| `src/cli/__tests__/analyze.test.ts` | ~3 | CLI analyze command |
-| `src/cli/__tests__/commands.test.ts` | ~3 | CLI command parsing |
+| File                                 | Tests | What they cover                                   |
+| ------------------------------------ | ----- | ------------------------------------------------- |
+| `test/analyze.test.ts`               | 2     | `analyzeFileContents()` time filter + empty input |
+| `src/cli/__tests__/analyze.test.ts`  | ~3    | CLI analyze command                               |
+| `src/cli/__tests__/commands.test.ts` | ~3    | CLI command parsing                               |
 
 **Total: ~8 tests — essentially nothing for a production logging library.**
 
@@ -21,6 +21,7 @@
 ## Test Infrastructure
 
 ### Current setup
+
 - Jest 29 + ts-jest
 - `jest.config.js` present
 
@@ -35,24 +36,24 @@ module.exports = {
   testMatch: ['**/__tests__/**/*.test.ts', '**/test/**/*.test.ts'],
   collectCoverageFrom: [
     'src/**/*.ts',
-    '!src/cli/**',          // CLI tested separately
+    '!src/cli/**', // CLI tested separately
     '!src/**/*.d.ts',
   ],
   coverageThresholds: {
     global: {
-      branches:   70,
-      functions:  80,
-      lines:      80,
+      branches: 70,
+      functions: 80,
+      lines: 80,
       statements: 80,
     },
   },
   // Mock optional peer deps
   moduleNameMapper: {
-    '^mongodb$':        '<rootDir>/test/__mocks__/mongodb.ts',
-    '^pg$':             '<rootDir>/test/__mocks__/pg.ts',
+    '^mongodb$': '<rootDir>/test/__mocks__/mongodb.ts',
+    '^pg$': '<rootDir>/test/__mocks__/pg.ts',
     '^mysql2/promise$': '<rootDir>/test/__mocks__/mysql2.ts',
-    '^sqlite3$':        '<rootDir>/test/__mocks__/sqlite3.ts',
-    '^@nestjs/(.*)$':   '<rootDir>/test/__mocks__/nestjs.ts',
+    '^sqlite3$': '<rootDir>/test/__mocks__/sqlite3.ts',
+    '^@nestjs/(.*)$': '<rootDir>/test/__mocks__/nestjs.ts',
   },
 };
 ```
@@ -60,6 +61,7 @@ module.exports = {
 ### Mock files to create
 
 **`test/__mocks__/mongodb.ts`**
+
 ```typescript
 export const MongoClient = jest.fn().mockImplementation(() => ({
   connect: jest.fn().mockResolvedValue(undefined),
@@ -423,16 +425,16 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test -- --coverage
-      - uses: codecov/codecov-action@v4   # optional but great for badges
+      - uses: codecov/codecov-action@v4 # optional but great for badges
 ```
 
 ---
 
 ## Coverage Target by Release
 
-| Release | Target | Scope |
-|---------|--------|-------|
-| v1.0.4 (now) | 10 % | Fix critical bugs only |
-| v1.1.0 | 40 % | Suites 1 + 2 + 7 |
-| v1.2.0 | 65 % | Suites 3 + 4 + 8 |
-| v1.3.0 | 80 % | Suites 5 + 6 + 9 |
+| Release      | Target | Scope                  |
+| ------------ | ------ | ---------------------- |
+| v1.0.4 (now) | 10 %   | Fix critical bugs only |
+| v1.1.0       | 40 %   | Suites 1 + 2 + 7       |
+| v1.2.0       | 65 %   | Suites 3 + 4 + 8       |
+| v1.3.0       | 80 %   | Suites 5 + 6 + 9       |

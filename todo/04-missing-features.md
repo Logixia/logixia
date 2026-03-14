@@ -9,6 +9,7 @@
 
 **File:** `src/transports/file.transport.ts`
 **Current state:**
+
 ```typescript
 private async compressFile(filePath: string): Promise<void> {
   // TODO: implement gzip compression
@@ -41,10 +42,11 @@ private async compressFile(filePath: string): Promise<void> {
 ```
 
 Update `FileTransportConfig` to add:
+
 ```typescript
 interface FileTransportConfig {
-  compress?: boolean;          // default: false
-  compressionFormat?: 'gzip';  // extensible for future brotli support
+  compress?: boolean; // default: false
+  compressionFormat?: 'gzip'; // extensible for future brotli support
 }
 ```
 
@@ -59,6 +61,7 @@ And only call `compressFile()` when `config.compress === true` after rotation.
 to "detect intent". This is not NLP — it's keyword spotting.
 
 ### Short-term fix (v1.2 — no external dependency)
+
 Build a proper **token-based query language** parser (similar to GitHub's search):
 
 ```
@@ -74,12 +77,15 @@ function parseQueryTokens(query: string): ParsedNLQuery {
   const freeText: string[] = [];
 
   for (const token of tokens) {
-    if (token.key === 'level')   filters.levels = [...(filters.levels ?? []), token.value as LogLevelString];
-    else if (token.key === 'service')  filters.service = token.value;
-    else if (token.key === 'traceId')  filters.traceId = token.value;
-    else if (token.key === 'user')     filters.userId = token.value;
-    else if (token.key === 'after')    filters.timeRange = { ...filters.timeRange, start: new Date(token.value) };
-    else if (token.key === 'before')   filters.timeRange = { ...filters.timeRange, end:   new Date(token.value) };
+    if (token.key === 'level')
+      filters.levels = [...(filters.levels ?? []), token.value as LogLevelString];
+    else if (token.key === 'service') filters.service = token.value;
+    else if (token.key === 'traceId') filters.traceId = token.value;
+    else if (token.key === 'user') filters.userId = token.value;
+    else if (token.key === 'after')
+      filters.timeRange = { ...filters.timeRange, start: new Date(token.value) };
+    else if (token.key === 'before')
+      filters.timeRange = { ...filters.timeRange, end: new Date(token.value) };
     else freeText.push(token.raw);
   }
 
@@ -88,6 +94,7 @@ function parseQueryTokens(query: string): ParsedNLQuery {
 ```
 
 ### Long-term fix (v2.0 — opt-in external dep)
+
 Add an optional `openai` or `@anthropic-ai/sdk` peer dependency for true semantic
 search via embeddings:
 
@@ -99,8 +106,8 @@ const logger = createLogger({
       provider: 'openai',
       apiKey: process.env.OPENAI_API_KEY,
       model: 'text-embedding-3-small',
-    }
-  }
+    },
+  },
 });
 ```
 
@@ -143,7 +150,7 @@ export class PrometheusExporter {
 
         `# HELP logixia_transport_write_duration_ms Average write duration`,
         `# TYPE logixia_transport_write_duration_ms gauge`,
-        `logixia_transport_write_duration_ms{transport="${transportId}"} ${m.avgDurationMs}`,
+        `logixia_transport_write_duration_ms{transport="${transportId}"} ${m.avgDurationMs}`
       );
     }
 
@@ -163,8 +170,8 @@ When logging millions of events per minute, you may want to capture only a perce
 ```typescript
 interface LoggerConfig<TLevels> {
   sampling?: {
-    rate: number;                       // 0.0 – 1.0 (1.0 = keep all)
-    levels?: Partial<Record<LogLevelString, number>>;  // per-level override
+    rate: number; // 0.0 – 1.0 (1.0 = keep all)
+    levels?: Partial<Record<LogLevelString, number>>; // per-level override
   };
 }
 
@@ -175,12 +182,13 @@ createLogger({
     levels: {
       debug: 0.1,
       trace: 0.01,
-    }
-  }
+    },
+  },
 });
 ```
 
 Implementation in `LogixiaLogger.log()`:
+
 ```typescript
 private shouldSample(level: string): boolean {
   const rate = this.config.sampling?.levels?.[level]
@@ -214,18 +222,14 @@ This is especially useful for the CLI tool:
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-const CONFIG_FILES = [
-  'logixia.config.json',
-  '.logixiarc',
-  '.logixiarc.json',
-];
+const CONFIG_FILES = ['logixia.config.json', '.logixiarc', '.logixiarc.json'];
 
 export function loadConfigFile(cwd = process.cwd()): Partial<LoggerConfig> | null {
   for (const name of CONFIG_FILES) {
     const path = join(cwd, name);
     if (existsSync(path)) {
       const raw = JSON.parse(readFileSync(path, 'utf-8'));
-      return validateConfig(raw);  // uses zod schema — see 07-dx-and-api.md
+      return validateConfig(raw); // uses zod schema — see 07-dx-and-api.md
     }
   }
   return null;
@@ -245,11 +249,12 @@ LOGIXIA_DEBUG=1               # enable internal debug output
 ```
 
 Implementation — merge env vars on top of config at construction time:
+
 ```typescript
 function applyEnvOverrides(config: LoggerConfig): LoggerConfig {
   return {
     ...config,
-    level:   (process.env.LOGIXIA_LEVEL ?? config.level) as LogLevelString,
+    level: (process.env.LOGIXIA_LEVEL ?? config.level) as LogLevelString,
     appName: process.env.LOGIXIA_APP_NAME ?? config.appName,
   };
 }
@@ -269,7 +274,7 @@ import type { Application } from 'express';
 export function setupExpressLogger(app: Application, config?: LoggerConfig): LogixiaLogger {
   const logger = createLogger(config);
   app.use(createTraceMiddleware(config?.traceId));
-  app.use(createRequestLogger(logger));  // new: log every req/res
+  app.use(createRequestLogger(logger)); // new: log every req/res
   return logger;
 }
 ```
@@ -287,8 +292,8 @@ a flush before process exit drops logs.
 // Add to IAsyncTransport
 interface IAsyncTransport {
   write(entry: LogEntry): Promise<void>;
-  flush(): Promise<void>;   // REQUIRED, not optional
-  close(): Promise<void>;   // REQUIRED, not optional
+  flush(): Promise<void>; // REQUIRED, not optional
+  close(): Promise<void>; // REQUIRED, not optional
   healthCheck(): Promise<{ healthy: boolean; details?: string }>;
 }
 ```
@@ -305,8 +310,8 @@ Like reixo, logixia should natively support W3C `traceparent` headers:
 // Auto-read traceparent from incoming HTTP request
 // Auto-include traceId/spanId in every log entry when inside a traced request
 interface TraceIdConfig {
-  format?: 'uuid' | 'w3c-traceparent';  // new option
-  injectW3CHeaders?: boolean;            // inject traceparent on outgoing requests
+  format?: 'uuid' | 'w3c-traceparent'; // new option
+  injectW3CHeaders?: boolean; // inject traceparent on outgoing requests
 }
 ```
 

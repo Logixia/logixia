@@ -1,7 +1,7 @@
 name: ✨ Feature Request
 description: Suggest a new feature or enhancement for Logixia
-title: "[Feature]: "
-labels: ["enhancement", "needs-discussion"]
+title: '[Feature]: '
+labels: ['enhancement', 'needs-discussion']
 assignees: []
 
 body:
@@ -9,7 +9,7 @@ body:
     attributes:
       value: |
         Thanks for suggesting a new feature! ✨
-        
+
         Before submitting, please:
         - Search existing issues to avoid duplicates
         - Consider if this fits with Logixia's goals
@@ -81,7 +81,7 @@ body:
         const logger = new Logixia({
           // new feature configuration
         });
-        
+
         logger.newFeature({
           // usage example
         });

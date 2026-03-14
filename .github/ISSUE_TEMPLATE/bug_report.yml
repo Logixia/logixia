@@ -1,7 +1,7 @@
 name: 🐛 Bug Report
 description: Report a bug to help us improve Logixia
-title: "[Bug]: "
-labels: ["bug", "needs-triage"]
+title: '[Bug]: '
+labels: ['bug', 'needs-triage']
 assignees: []
 
 body:
@@ -9,7 +9,7 @@ body:
     attributes:
       value: |
         Thanks for taking the time to fill out this bug report! 🐛
-        
+
         Before submitting, please:
         - Search existing issues to avoid duplicates
         - Use the latest version of Logixia
@@ -68,7 +68,7 @@ body:
         appName: 'MyApplication',
         environment: 'development'
         });
-        
+
         // code that causes the bug
     validations:
       required: false

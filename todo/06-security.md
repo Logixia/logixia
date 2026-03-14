@@ -10,13 +10,16 @@
 **Affected file:** `src/transports/database.transport.ts`
 
 ### The problem
+
 ```typescript
 createLogger({
-  transports: [{
-    type: 'database',
-    url: 'mongodb://admin:s3cr3tp@ssword@db.internal:27017/logs',
-    // ↑ Password visible in source, process memory, and stack traces
-  }]
+  transports: [
+    {
+      type: 'database',
+      url: 'mongodb://admin:s3cr3tp@ssword@db.internal:27017/logs',
+      // ↑ Password visible in source, process memory, and stack traces
+    },
+  ],
 });
 ```
 
@@ -27,10 +30,11 @@ you're writing to.
 ### Fix
 
 **Step 1 — Support environment variable references in config**
+
 ```typescript
 interface DatabaseTransportConfig {
   url?: string;
-  urlEnvVar?: string;   // NEW — e.g. 'LOGIXIA_DB_URL'
+  urlEnvVar?: string; // NEW — e.g. 'LOGIXIA_DB_URL'
 }
 
 // Resolved at connection time, not stored on the object
@@ -46,22 +50,26 @@ function resolveUrl(config: DatabaseTransportConfig): string {
 ```
 
 **Step 2 — Never include `url` in serialised error messages**
+
 ```typescript
 // When logging a connection error, redact the URL
 internalError(
   `Database transport connection failed (URL redacted)`,
-  new Error(err.message),  // do NOT include the original err which may have URL in stack
+  new Error(err.message) // do NOT include the original err which may have URL in stack
 );
 ```
 
 **Step 3 — Recommend `.env` in the README example**
+
 ```typescript
 // Recommended pattern
 createLogger({
-  transports: [{
-    type: 'database',
-    urlEnvVar: 'LOGIXIA_DB_URL',  // ← env var, not inline string
-  }]
+  transports: [
+    {
+      type: 'database',
+      urlEnvVar: 'LOGIXIA_DB_URL', // ← env var, not inline string
+    },
+  ],
 });
 ```
 
@@ -72,13 +80,16 @@ createLogger({
 **File:** `src/transports/file.transport.ts`
 
 ### The problem
+
 ```typescript
 // Config accepts any path
 createLogger({
-  transports: [{
-    type: 'file',
-    filename: '../../../../etc/cron.d/evil',  // path traversal
-  }]
+  transports: [
+    {
+      type: 'file',
+      filename: '../../../../etc/cron.d/evil', // path traversal
+    },
+  ],
 });
 ```
 
@@ -98,7 +109,7 @@ function validateFilePath(input: string, allowedBasePath?: string): string {
     const base = resolve(allowedBasePath);
     if (!normalised.startsWith(base + '/') && normalised !== base) {
       throw new Error(
-        `File transport path "${input}" is outside allowed directory "${allowedBasePath}"`,
+        `File transport path "${input}" is outside allowed directory "${allowedBasePath}"`
       );
     }
   }
@@ -113,10 +124,11 @@ function validateFilePath(input: string, allowedBasePath?: string): string {
 ```
 
 Add `allowedBasePath` to `FileTransportConfig`:
+
 ```typescript
 interface FileTransportConfig {
   filename: string;
-  allowedBasePath?: string;  // e.g. '/var/log/myapp'
+  allowedBasePath?: string; // e.g. '/var/log/myapp'
 }
 ```
 
@@ -137,6 +149,7 @@ logixia search --level 'UNION SELECT 1;' # log injection (if writing to DB)
 ### Fix
 
 **Validate level against the known enum:**
+
 ```typescript
 const VALID_LEVELS = ['error', 'warn', 'info', 'debug', 'trace', 'verbose'] as const;
 
@@ -149,6 +162,7 @@ function validateLevel(value: string): LogLevelString {
 ```
 
 **Validate output path:**
+
 ```typescript
 function validateOutputPath(value: string): string {
   // Disallow absolute system paths
@@ -163,10 +177,14 @@ function validateOutputPath(value: string): string {
 ```
 
 **Sanitise query string before passing to search engine:**
+
 ```typescript
 function sanitizeQuery(q: string): string {
   // Remove null bytes and control characters
-  return q.replace(/[\x00-\x1F\x7F]/g, '').trim().slice(0, 1000);
+  return q
+    .replace(/[\x00-\x1F\x7F]/g, '')
+    .trim()
+    .slice(0, 1000);
 }
 ```
 
@@ -183,10 +201,12 @@ Same issue as SEC-01 but for analytics keys:
 ```typescript
 // Current — key visible in source and stack traces
 createLogger({
-  transports: [{
-    type: 'mixpanel',
-    token: 'abc123secret',
-  }]
+  transports: [
+    {
+      type: 'mixpanel',
+      token: 'abc123secret',
+    },
+  ],
 });
 ```
 
@@ -195,12 +215,12 @@ createLogger({
 ```typescript
 interface MixpanelTransportConfig {
   token?: string;
-  tokenEnvVar?: string;  // 'MIXPANEL_TOKEN'
+  tokenEnvVar?: string; // 'MIXPANEL_TOKEN'
 }
 
 interface DatadogTransportConfig {
   apiKey?: string;
-  apiKeyEnvVar?: string;  // 'DD_API_KEY'
+  apiKeyEnvVar?: string; // 'DD_API_KEY'
 }
 ```
 
@@ -219,7 +239,7 @@ The current implementation has a `maxDepth` limit but no explicit cycle detectio
 function serializeError(
   error: unknown,
   options: SerializeOptions = {},
-  visited = new WeakSet(),
+  visited = new WeakSet()
 ): SerializedError {
   if (error instanceof Error) {
     if (visited.has(error)) {
@@ -227,12 +247,10 @@ function serializeError(
     }
     visited.add(error);
     return {
-      name:    error.name,
+      name: error.name,
       message: error.message,
-      stack:   options.includeStack !== false ? error.stack : undefined,
-      cause:   error.cause
-                 ? serializeError(error.cause, options, visited)
-                 : undefined,
+      stack: options.includeStack !== false ? error.stack : undefined,
+      cause: error.cause ? serializeError(error.cause, options, visited) : undefined,
     };
   }
   // ...
@@ -275,6 +293,7 @@ npm audit
 ```
 
 Key concerns:
+
 - `chalk ^5.x` — check for prototype pollution (none known, but good habit)
 - `commander ^11.x` — argument injection edge cases
 - `inquirer ^9.x` — any known input handling issues
@@ -282,6 +301,7 @@ Key concerns:
 Set up automated dependency updates:
 
 **`.github/dependabot.yml`**
+
 ```yaml
 version: 2
 updates:

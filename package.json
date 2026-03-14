@@ -29,7 +29,7 @@
     "test:coverage": "jest --coverage",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/ --fix",
-    "format": "prettier --write src/",
+    "format": "prettier --write .",
     "dev:basic-usage": "ts-node examples/basic-usage.ts",
     "dev:express": "ts-node examples/express-example.ts",
     "dev:nestjs": "ts-node examples/nestjs-example.ts",
@@ -39,7 +39,7 @@
     "dev:search": "ts-node examples/search-quickstart.ts",
     "dev:intelligent-search": "ts-node examples/intelligent-search.ts",
     "lint:check": "eslint src/",
-    "format:check": "prettier --check src/",
+    "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "benchmark": "npm run build && node benchmarks/run.mjs",
     "prepare": "husky install",
@@ -145,7 +145,7 @@
     "mysql2": "^3.14.5",
     "pg": "^8.16.3",
     "pino": "^10.3.1",
-    "prettier": "^3.0.0",
+    "prettier": "^3.8.1",
     "semantic-release": "^24.0.0",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
@@ -187,12 +187,5 @@
     "commitizen": {
       "path": "cz-conventional-changelog"
     }
-  },
-  "prettier": {
-    "semi": true,
-    "trailingComma": "es5",
-    "singleQuote": true,
-    "printWidth": 100,
-    "tabWidth": 2
   }
 }

@@ -92,10 +92,9 @@ function resolveInitialLevel(config: LoggerConfig): LogLevelString {
 
 // ── Logger class ─────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic logger config allows any transport config shape
-export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
-  implements ILoggerDefault
-{
+export class LogixiaLogger<
+  TConfig extends LoggerConfig<Record<string, number>> = LoggerConfig,
+> implements ILoggerDefault {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- index signature for dynamic custom level methods
   [K: string]: any;
 
@@ -674,23 +673,22 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
 
 // ── Factory ───────────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic config type parameter
-export function createLogger<T extends LoggerConfig<any>>(
+export function createLogger<T extends LoggerConfig<Record<string, number>>>(
   config: T,
   context?: string
 ): LoggerWithLevels<T> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cast needed for dynamic method attachment
-  const logger = new LogixiaLogger<T>(config, context) as any;
+  const logger = new LogixiaLogger<T>(config, context);
+  const mutableLogger = logger as unknown as Record<string, unknown>;
 
   if (config.levelOptions?.levels) {
     for (const levelName of Object.keys(config.levelOptions.levels)) {
-      if (!logger[levelName]) {
-        logger[levelName] = async (message: string, data?: Record<string, unknown>) => {
+      if (!mutableLogger[levelName]) {
+        mutableLogger[levelName] = async (message: string, data?: Record<string, unknown>) => {
           await logger.logLevel(levelName, message, data);
         };
       }
     }
   }
 
-  return logger as LoggerWithLevels<T>;
+  return logger as unknown as LoggerWithLevels<T>;
 }

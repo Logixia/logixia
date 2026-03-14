@@ -1,7 +1,7 @@
 name: 📚 Documentation Improvement
 description: Suggest improvements to documentation, examples, or guides
-title: "[Docs]: "
-labels: ["documentation", "good first issue", "hacktoberfest"]
+title: '[Docs]: '
+labels: ['documentation', 'good first issue', 'hacktoberfest']
 assignees: []
 
 body:
@@ -9,7 +9,7 @@ body:
     attributes:
       value: |
         Thanks for helping improve our documentation! 📚
-        
+
         Great documentation makes Logixia more accessible to everyone.
         This is often a perfect first contribution!
 
@@ -92,7 +92,7 @@ body:
         ```typescript
         // Example code that should be documented
         ```
-        
+
         Or write example documentation text here...
     validations:
       required: false

@@ -11,6 +11,7 @@
 **Severity:** P0 — Breaks `npm install` for any downstream consumer
 
 ### What's wrong
+
 ```json
 "dependencies": {
   "chalk": "^5.3.0",
@@ -20,11 +21,13 @@
   "logixia": "^1.0.3"   // ← THE LIBRARY DEPENDS ON ITSELF
 }
 ```
+
 When someone runs `npm install logixia`, npm tries to resolve `logixia@^1.0.3` as a dependency
 of `logixia`, creating a circular resolution loop. In npm v7+ this typically results in an
 `ERESOLVE` error or installs a second, identical copy of the package into itself.
 
 ### Fix
+
 Remove the `"logixia"` entry from `dependencies` entirely.
 
 ```json
@@ -47,6 +50,7 @@ Remove the `"logixia"` entry from `dependencies` entirely.
 ```
 
 ### Verification
+
 ```bash
 npm pack --dry-run   # should show no circular dependency warning
 npm install          # should succeed in a clean node_modules
@@ -62,10 +66,11 @@ npm install          # should succeed in a clean node_modules
 and a compile error under `--strict`.
 
 ### What's wrong
+
 ```typescript
 // Inside createLogger() factory function
 logger[levelName] = async (message: string, data?: unknown) => {
-  await logger.log(levelName, message, data);   // ← log() is private!
+  await logger.log(levelName, message, data); // ← log() is private!
 };
 ```
 
@@ -78,7 +83,7 @@ signature) but the intent is broken — and in strict environments or with
 
 ```typescript
 logger[levelName] = async (message: string, data?: unknown) => {
-  await logger.logLevel(levelName, message, data);   // ← public API
+  await logger.logLevel(levelName, message, data); // ← public API
 };
 ```
 
@@ -101,16 +106,18 @@ breaks any "silence all output" testing approach.
 
 ### Affected locations
 
-| File | Line(s) | Call |
-|------|---------|------|
-| `src/core/logitron-logger.ts` | 227, 232 | `console.error(...)` in flush |
-| `src/core/logitron-logger.ts` | 284, 292, 300 | `console.warn(...)` transport fallback |
-| `src/core/logitron-logger.ts` | 316, 325 | `console.error(...)` healthCheck |
-| `src/utils/error.utils.ts` | 248 | `console.error(...)` in serializeError |
-| `src/transports/transport.manager.ts` | 556–559 | `console.error(...)` fallback |
+| File                                  | Line(s)       | Call                                   |
+| ------------------------------------- | ------------- | -------------------------------------- |
+| `src/core/logitron-logger.ts`         | 227, 232      | `console.error(...)` in flush          |
+| `src/core/logitron-logger.ts`         | 284, 292, 300 | `console.warn(...)` transport fallback |
+| `src/core/logitron-logger.ts`         | 316, 325      | `console.error(...)` healthCheck       |
+| `src/utils/error.utils.ts`            | 248           | `console.error(...)` in serializeError |
+| `src/transports/transport.manager.ts` | 556–559       | `console.error(...)` fallback          |
 
 ### Fix
+
 Create an internal `internalLog(level, message)` helper that:
+
 1. Checks whether a `debug` or `verbose` level is enabled on the current logger instance
 2. Falls back to `process.stderr.write` only if no transport is available yet
 3. Is never sent to any user-configured transport
@@ -145,6 +152,7 @@ Replace every `console.error(...)` / `console.warn(...)` in source with the appr
 NestJS apps will have invisible logging failures in production.
 
 ### What's wrong
+
 ```typescript
 async info(message: string, data?: unknown): Promise<void> {
   this.logger.info(message, data).catch(console.error);  // ← silent swallow
@@ -152,6 +160,7 @@ async info(message: string, data?: unknown): Promise<void> {
 ```
 
 ### Fix
+
 Use a structured error that is emitted on the logger's event bus so consumers can
 subscribe and handle it:
 
@@ -184,13 +193,15 @@ so the error is written to stderr and not silently discarded.
 produces duplicate trace IDs because it only has millisecond resolution.
 
 ### What's wrong
+
 ```typescript
 generateTraceId: () =>
-  Date.now().toString(36) +           // ms-resolution = duplicates under load
-  Math.random().toString(36).slice(2) // short — only ~11 chars of entropy
+  Date.now().toString(36) + // ms-resolution = duplicates under load
+  Math.random().toString(36).slice(2); // short — only ~11 chars of entropy
 ```
 
 ### Fix
+
 Use the same `generateTraceId()` from `src/utils/trace.utils.ts` which correctly
 generates a UUID v4:
 
@@ -212,6 +223,7 @@ This is a one-line change and the utility already exists.
 the write stream, causing the process to hang on `process.exit()`.
 
 ### Fix
+
 ```typescript
 async close(): Promise<void> {
   // Flush pending batch first
@@ -245,6 +257,7 @@ multiple `Test.createTestingModule()` calls. The second module receives the firs
 module's config.
 
 ### Fix
+
 Replace the static property with a NestJS `InjectionToken`:
 
 ```typescript

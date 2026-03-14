@@ -15,6 +15,7 @@ We love your input! We want to make contributing to Logixia as easy and transpar
 We're participating in **Hacktoberfest 2025**! This is a great opportunity for new contributors to get involved.
 
 ### For Hacktoberfest Contributors:
+
 - Look for issues labeled with `hacktoberfest` and `good first issue`
 - Read this entire contributing guide before starting
 - Join our community discussions for help and guidance
@@ -22,6 +23,7 @@ We're participating in **Hacktoberfest 2025**! This is a great opportunity for n
 - All skill levels welcome - from documentation to complex features
 
 ### Hacktoberfest Guidelines:
+
 - **No spam PRs** - Low-quality PRs will be marked as `spam` or `invalid`
 - **Follow our standards** - Ensure your code meets our quality requirements
 - **Test your changes** - All PRs must include appropriate tests
@@ -51,7 +53,9 @@ In short, when you submit code changes, your submissions are understood to be un
 We use GitHub issues to track public bugs. Report a bug by [opening a new issue](https://github.com/Logixia/logixia/issues/new); it's that easy!
 
 ### 🐛 Bug Report Template
+
 When reporting bugs, please include:
+
 - **Environment**: Node.js version, OS, package version
 - **Steps to reproduce**: Clear, numbered steps
 - **Expected behavior**: What should happen
@@ -71,7 +75,7 @@ When reporting bugs, please include:
 - What actually happens
 - Notes (possibly including why you think this might be happening, or stuff you tried that didn't work)
 
-People *love* thorough bug reports. I'm not even kidding.
+People _love_ thorough bug reports. I'm not even kidding.
 
 ## Development Setup
 
@@ -83,12 +87,14 @@ People *love* thorough bug reports. I'm not even kidding.
 ### Setup
 
 1. Fork and clone the repository:
+
    ```bash
    git clone https://github.com/Logixia/logixia.git
    cd logixia
    ```
 
 2. Install dependencies:
+
    ```bash
    npm install
    # or
@@ -96,6 +102,7 @@ People *love* thorough bug reports. I'm not even kidding.
    ```
 
 3. Build the project:
+
    ```bash
    npm run build
    ```
@@ -132,25 +139,27 @@ Run example scripts to test your changes:
 This repository now includes a basic `logixia` CLI implemented in TypeScript under `src/cli`.
 
 - Run the CLI in development mode (uses ts-node):
-****
-   ```bash
-   npm run cli:dev
-   # or
-   npx ts-node src/cli/index.ts --help
-   ```
+
+---
+
+```bash
+npm run cli:dev
+# or
+npx ts-node src/cli/index.ts --help
+```
 
 - Build the CLI (compiles to `dist/cli`):
 
-   ```bash
-   npm run cli:build
-   npx tsc -p tsconfig.json --outDir dist --rootDir src
-   ```
+  ```bash
+  npm run cli:build
+  npx tsc -p tsconfig.json --outDir dist --rootDir src
+  ```
 
 - After building, run the compiled CLI (help):
 
-   ```bash
-   node dist/cli/index.js --help
-   ```
+  ```bash
+  node dist/cli/index.js --help
+  ```
 
 If you'd like to add new commands, create files under `src/cli/commands/` and export a Commander `Command` instance, then add it to `src/cli/index.ts`.
 
@@ -242,6 +251,7 @@ New to open source? No problem! Here's how to get started:
 5. **Test locally**: Always test your changes before submitting
 
 ### Good First Issues Include:
+
 - Documentation improvements
 - Adding examples
 - Fixing typos
@@ -253,6 +263,7 @@ New to open source? No problem! Here's how to get started:
 We especially welcome contributions in:
 
 ### 🔧 Code Contributions
+
 - **New Transport Integrations**: Add support for more logging services (Elasticsearch, Splunk, etc.)
 - **Performance Improvements**: Optimize logging performance and memory usage
 - **TypeScript Types**: Improve type definitions and type safety
@@ -260,12 +271,14 @@ We especially welcome contributions in:
 - **Security**: Improve security features and vulnerability fixes
 
 ### 📚 Documentation & Examples
+
 - **Documentation**: Improve docs, API references, and guides
 - **Examples**: Create more real-world examples and use cases
 - **Tutorials**: Write step-by-step tutorials for common scenarios
 - **README improvements**: Better getting started guides
 
 ### 🧪 Testing & Quality
+
 - **Testing**: Add more comprehensive tests and edge cases
 - **Integration Tests**: Test with real-world scenarios
 - **Performance Tests**: Benchmark and performance testing

@@ -9,6 +9,7 @@
 ## DOCS-01 🟡 Audit of existing 13 example files — known type issues
 
 Run a full typecheck across examples:
+
 ```bash
 npx tsc --noEmit --strict --skipLibCheck \
   --target ES2020 --module ESNext --moduleResolution node \
@@ -32,13 +33,13 @@ compile cleanly under `--strict` with zero `any`.
 
 ### Suggested additions to the example set
 
-| File | What it should demonstrate |
-|------|---------------------------|
+| File                       | What it should demonstrate                     |
+| -------------------------- | ---------------------------------------------- |
 | `14-prometheus-metrics.ts` | `PrometheusExporter.getMetrics()` with Express |
-| `15-env-var-config.ts` | `urlEnvVar`, `apiKeyEnvVar` patterns |
-| `16-log-sampling.ts` | `sampling.rate` for high-volume scenarios |
-| `17-opentelemetry-w3c.ts` | W3C traceparent integration |
-| `18-config-file.ts` | Loading `logixia.config.json` from disk |
+| `15-env-var-config.ts`     | `urlEnvVar`, `apiKeyEnvVar` patterns           |
+| `16-log-sampling.ts`       | `sampling.rate` for high-volume scenarios      |
+| `17-opentelemetry-w3c.ts`  | W3C traceparent integration                    |
+| `18-config-file.ts`        | Loading `logixia.config.json` from disk        |
 
 ---
 
@@ -66,6 +67,7 @@ child(context: string, data?: Record<string, JsonValue>): LogixiaLogger<TLevels>
 ```
 
 Priority classes / functions to document:
+
 - `createLogger()` — explain the generic type parameter
 - All `LogixiaLogger` public methods
 - `TransportManager` public methods
@@ -79,6 +81,7 @@ Priority classes / functions to document:
 ## DOCS-03 🟡 Architecture diagram missing
 
 A diagram that shows:
+
 ```
 Application Code
       │
@@ -102,6 +105,7 @@ LogixiaLogger (core)
 ```
 
 Create this as:
+
 1. An ASCII diagram in the README (quick, no build step)
 2. A Mermaid diagram in `docs/architecture.md` (renders on GitHub)
 
@@ -121,6 +125,7 @@ lowers the barrier significantly.
 
 ### Basic logging
 ```
+
 // Winston
 const logger = winston.createLogger({ level: 'info', transports: [...] });
 logger.info('hello', { key: 'value' });
@@ -128,6 +133,7 @@ logger.info('hello', { key: 'value' });
 // Logixia
 const logger = createLogger({ level: 'info', transports: [...] });
 await logger.info('hello', { key: 'value' });
+
 ```
 
 ### Custom transports
@@ -141,12 +147,15 @@ Winston uses `logger.info('msg', { meta: 'data' })` — Logixia is identical.
 
 ### Child loggers
 ```
+
 // Pino
 const child = logger.child({ requestId: '123' });
 
 // Logixia
 const child = logger.child('RequestHandler', { requestId: '123' });
+
 ```
+
 ```
 
 ---
@@ -154,6 +163,7 @@ const child = logger.child('RequestHandler', { requestId: '123' });
 ## DOCS-05 🟡 CLI reference — add to README and expand CLI-GUIDE.md
 
 The existing `docs/CLI-GUIDE.md` is a start but missing:
+
 - Exit codes
 - Environment variable support (`LOGIXIA_LOG_FILE`, `LOGIXIA_CONFIG`)
 - Error messages and troubleshooting
@@ -161,7 +171,7 @@ The existing `docs/CLI-GUIDE.md` is a start but missing:
 
 Add a "CLI Quick Reference" card to the README:
 
-```markdown
+````markdown
 ## CLI Quick Reference
 
 ```bash
@@ -180,7 +190,9 @@ logixia export --format csv --output ./report.csv --last 24h
 # Analyze
 logixia analyze --file ./logs/app.log --last 7d
 ```
-```
+````
+
+````
 
 ---
 
@@ -197,7 +209,7 @@ logixia analyze --file ./logs/app.log --last 7d
 
 **Frameworks:** Express 4.x, NestJS 10.x+
 **Databases:** MongoDB 6+, PostgreSQL 14+, MySQL 8+, SQLite 3+
-```
+````
 
 ---
 
@@ -207,6 +219,7 @@ Start with `v1.0.0` and keep it updated per release.
 Use the **Keep a Changelog** format: https://keepachangelog.com
 
 Tools:
+
 - `standard-version` is already in devDependencies — run `npm run release`
 - Or use `changesets` for monorepo-friendly changelog management
 
@@ -216,7 +229,9 @@ Tools:
 ## [Unreleased]
 
 ## [1.0.4] - 2026-03-14
+
 ### Fixed
+
 - Removed self-referential `logixia` entry from `dependencies`
 - Fixed `createLogger` factory calling private `log()` method
 - Replaced all `console.*` leaks in library source with internal logger
@@ -234,24 +249,24 @@ Most common issues developers hit:
 
 **Q: My logs aren't showing up in the file**
 A: Make sure the directory exists. Logixia creates the file but not parent directories.
-   Add `fs.mkdirSync('./logs', { recursive: true })` before creating the logger.
+Add `fs.mkdirSync('./logs', { recursive: true })` before creating the logger.
 
 **Q: NestJS bootstrap logs (before `LogixiaLoggerModule.forRoot()`) are missing**
 A: Use `app.useLogger()` after `NestFactory.create()`:
-   `const app = await NestFactory.create(AppModule, { logger: false });`
-   `app.useLogger(app.get(LogixiaLoggerService));`
+`const app = await NestFactory.create(AppModule, { logger: false });`
+`app.useLogger(app.get(LogixiaLoggerService));`
 
 **Q: Trace ID is always undefined**
 A: The trace middleware must be registered before your route handlers.
-   With `LogixiaLoggerModule.forRoot()` this is automatic. For Express,
-   call `app.use(createTraceMiddleware())` before `app.use(router)`.
+With `LogixiaLoggerModule.forRoot()` this is automatic. For Express,
+call `app.use(createTraceMiddleware())` before `app.use(router)`.
 
 **Q: Custom log levels are missing TypeScript IntelliSense**
 A: Use the generic: `createLogger<'payment' | 'order'>({ customLevels: { ... } })`
-   without the generic, TypeScript cannot infer the extra methods.
+without the generic, TypeScript cannot infer the extra methods.
 
 **Q: Database transport not writing logs**
 A: Check the connection URL and ensure the optional dependency is installed:
-   `npm install mongodb` (or `pg`, `mysql2`, `sqlite3`).
-   Run `await logger.healthCheck()` to see which transports are unhealthy.
+`npm install mongodb` (or `pg`, `mysql2`, `sqlite3`).
+Run `await logger.healthCheck()` to see which transports are unhealthy.
 ```

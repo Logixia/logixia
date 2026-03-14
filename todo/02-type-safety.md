@@ -13,11 +13,12 @@
 (`logger.payment()`, `logger.order()`, etc.) without a TypeScript error.
 
 **Why it's bad:**
+
 ```typescript
 // With [K: string]: any, ALL of these are valid — no protection at all:
-logger.anythingAtAll()        // no error
-logger.undefinedMethod(99)    // no error
-logger['__proto__'] = {}      // no error
+logger.anythingAtAll(); // no error
+logger.undefinedMethod(99); // no error
+logger['__proto__'] = {}; // no error
 ```
 
 ### Fix — use a generic type parameter instead
@@ -55,11 +56,13 @@ logger.anythingElse('oops');   // ✗ — compile error
 ```
 
 The `ILogger<TLevels>` type in `src/types/index.ts` already has the right mapped type:
+
 ```typescript
 type CustomLevelMethods<TLevels extends string> = {
   [K in TLevels]: (message: string, data?: unknown) => Promise<void>;
 };
 ```
+
 `LogixiaLogger` just needs to extend `CustomLevelMethods<TLevels>` and drop the escape hatch.
 
 ---
@@ -70,6 +73,7 @@ type CustomLevelMethods<TLevels extends string> = {
 **Line:** ~15
 
 ### What's wrong
+
 ```typescript
 class DatabaseTransport implements IAsyncTransport {
   private connection: any;  // ← could be MongoClient, pg.Pool, mysql.Connection, sqlite.Database
@@ -94,12 +98,15 @@ class DatabaseTransport implements IAsyncTransport {
 ```
 
 Because the drivers are **optional peer dependencies**, use conditional imports:
+
 ```typescript
 // Only import type — never import the value when it may not be installed
 let mongoClientClass: typeof import('mongodb').MongoClient | undefined;
 try {
   mongoClientClass = (await import('mongodb')).MongoClient;
-} catch { /* optional peer dep */ }
+} catch {
+  /* optional peer dep */
+}
 ```
 
 ---
@@ -109,28 +116,31 @@ try {
 **File:** `src/core/logitron-logger.ts` (`createLogger` function)
 
 ### What's wrong
+
 ```typescript
 for (const levelName of Object.keys(config.customLevels ?? {})) {
   (logger as Record<string, unknown>)[levelName] = async (...) => { ... };
 }
 ```
+
 This uses a runtime cast to `Record<string, unknown>` — same problem as `any`.
 
 ### Fix — follow the `ILogger<TLevels>` contract
 
 After implementing TS-01, the factory becomes:
+
 ```typescript
 export function createLogger<TLevels extends string = never>(
-  config: LoggerConfig<TLevels>,
+  config: LoggerConfig<TLevels>
 ): LogixiaLogger<TLevels> {
   const logger = new LogixiaLogger<TLevels>(config);
 
   // Attach custom levels — still runtime but now the RETURN TYPE is correct
-  for (const levelName of (Object.keys(config.customLevels ?? {})) as TLevels[]) {
+  for (const levelName of Object.keys(config.customLevels ?? {}) as TLevels[]) {
     // Safe because we know levelName ∈ TLevels
     (logger as ILogger<TLevels>)[levelName] = async (
       message: string,
-      data?: unknown,
+      data?: unknown
     ): Promise<void> => {
       await logger.logLevel(levelName, message, data);
     };
@@ -139,6 +149,7 @@ export function createLogger<TLevels extends string = never>(
   return logger;
 }
 ```
+
 The caller's type `logger.payment` is still inferred from `TLevels` — the cast only
 happens once, internally, not at every call site.
 
@@ -149,12 +160,15 @@ happens once, internally, not at every call site.
 **File:** `src/core/logitron-nestjs.service.ts`
 
 ### What's wrong
+
 ```typescript
 async info(message: string, data?: unknown): Promise<void>
 ```
+
 `data?: unknown` forces consumers to cast when they pass structured objects.
 
 ### Fix — use the same `LogMeta` / `ContextData` union already in types
+
 ```typescript
 // In src/types/index.ts (already exists or add it)
 export type LogPayload = Record<string, JsonValue | Error | undefined> | JsonValue | undefined;
@@ -162,6 +176,7 @@ export type LogPayload = Record<string, JsonValue | Error | undefined> | JsonVal
 // In service
 async info(message: string, data?: LogPayload): Promise<void>
 ```
+
 This mirrors what reixo does with `LogMeta` and gives consumers IntelliSense on the data shape.
 
 ---
@@ -171,18 +186,21 @@ This mirrors what reixo does with `LogMeta` and gives consumers IntelliSense on 
 **File:** `src/search/types/search.types.ts`
 
 ### What's wrong
+
 ```typescript
 interface SearchFilters {
-  customFields?: Record<string, unknown>;   // ← any value accepted
+  customFields?: Record<string, unknown>; // ← any value accepted
 }
 ```
 
 ### Fix
+
 ```typescript
 interface SearchFilters {
   customFields?: Record<string, string | number | boolean | null>;
 }
 ```
+
 Custom fields in logs are primitives. Allowing arbitrary objects opens the door to
 unexpected serialization bugs and makes IntelliSense useless.
 
@@ -197,13 +215,14 @@ interface LogEntry {
   payload?: unknown;
 }
 ```
+
 Every consumer has to cast before reading. Define a `LogPayload` union and use it:
 
 ```typescript
 export type JsonPrimitive = string | number | boolean | null;
-export type JsonObject    = { [K in string]?: JsonValue };
-export type JsonArray     = JsonValue[];
-export type JsonValue     = JsonPrimitive | JsonObject | JsonArray;
+export type JsonObject = { [K in string]?: JsonValue };
+export type JsonArray = JsonValue[];
+export type JsonValue = JsonPrimitive | JsonObject | JsonArray;
 
 export type LogPayload = JsonValue | Error | undefined;
 
@@ -223,6 +242,7 @@ npx tsc --noEmit --strict 2>&1 | grep "implicit return"
 ```
 
 Files most likely to have this issue:
+
 - `src/search/core/basic-search-engine.ts` (long class, mixed return types)
 - `src/transports/transport.manager.ts` (metrics methods)
 - `src/cli/commands/*.ts` (all Commander action handlers)
@@ -240,6 +260,7 @@ function serializeError(error: unknown, options?: SerializeOptions): any {  // �
 ```
 
 Fix:
+
 ```typescript
 export type SerializedError = {
   name: string;
@@ -249,7 +270,7 @@ export type SerializedError = {
   [key: string]: JsonValue | SerializedError | undefined;
 };
 
-export function serializeError(error: unknown, options?: SerializeOptions): SerializedError
+export function serializeError(error: unknown, options?: SerializeOptions): SerializedError;
 ```
 
 ---
@@ -265,13 +286,20 @@ transport factory. Add:
 // In transport.manager.ts — createTransport switch
 function createTransport(config: TransportConfig): ITransport {
   switch (config.type) {
-    case 'console':  return new ConsoleTransport(config);
-    case 'file':     return new FileTransport(config);
-    case 'database': return new DatabaseTransport(config);
-    case 'mixpanel': return new MixpanelTransport(config);
-    case 'datadog':  return new DatadogTransport(config);
-    case 'segment':  return new SegmentTransport(config);
-    case 'google-analytics': return new GoogleAnalyticsTransport(config);
+    case 'console':
+      return new ConsoleTransport(config);
+    case 'file':
+      return new FileTransport(config);
+    case 'database':
+      return new DatabaseTransport(config);
+    case 'mixpanel':
+      return new MixpanelTransport(config);
+    case 'datadog':
+      return new DatadogTransport(config);
+    case 'segment':
+      return new SegmentTransport(config);
+    case 'google-analytics':
+      return new GoogleAnalyticsTransport(config);
     default: {
       // Exhaustiveness check — TypeScript errors if a new type is added without a case
       const _exhaustive: never = config;

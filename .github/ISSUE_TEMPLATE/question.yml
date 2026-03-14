@@ -1,7 +1,7 @@
 name: ❓ Question / Help
 description: Ask a question or get help using Logixia
-title: "[Question]: "
-labels: ["question", "help wanted"]
+title: '[Question]: '
+labels: ['question', 'help wanted']
 assignees: []
 
 body:
@@ -9,7 +9,7 @@ body:
     attributes:
       value: |
         Need help with Logixia? We're here to help! ❓
-        
+
         Before asking, please:
         - Check the documentation and examples
         - Search existing issues and discussions
@@ -49,7 +49,7 @@ body:
       render: typescript
       placeholder: |
         import { Logixia } from 'logixia';
-        
+
         // Your current code here
         const logger = new Logixia({
           // your configuration

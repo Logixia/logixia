@@ -1,0 +1,18 @@
+# Build outputs
+dist/
+release/
+coverage/
+
+# Dependencies
+node_modules/
+
+# Dev / demo / perf — not library code
+examples/
+benchmarks/
+
+# Docs
+docs/
+
+# Generated files
+**/*.d.ts
+CHANGELOG.md

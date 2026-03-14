@@ -9,6 +9,7 @@
 ## DX-01 🟡 Config duplication — DEFAULT_CONFIG defined in three places
 
 **Files:**
+
 - `src/core/logitron-logger.ts` — inline defaults
 - `src/core/logitron-nestjs.service.ts` — duplicated inline defaults
 - `src/core/logitron-logger.module.ts` — partial defaults again
@@ -22,11 +23,11 @@ import type { LoggerConfig } from '../types';
 export const DEFAULT_LOGGER_CONFIG: Required<
   Pick<LoggerConfig, 'level' | 'appName' | 'format' | 'showTimestamp' | 'showAppName'>
 > = {
-  level:         'info',
-  appName:       'App',
-  format:        'text',
+  level: 'info',
+  appName: 'App',
+  format: 'text',
   showTimestamp: true,
-  showAppName:   true,
+  showAppName: true,
 };
 ```
 
@@ -89,7 +90,7 @@ lifecycle hook to close/flush it when the module is torn down.
 export class FeatureLoggerService implements OnModuleDestroy {
   constructor(
     @Inject(LOGIXIA_LOGGER_CONFIG) private config: LoggerConfig,
-    @Inject(FEATURE_CONTEXT) private context: string,
+    @Inject(FEATURE_CONTEXT) private context: string
   ) {
     this.logger = createLogger({ ...config, defaultContext: context });
   }
@@ -181,6 +182,7 @@ child(context: string, data?: unknown): LogixiaLogger
 ```
 
 ### Fix
+
 ```typescript
 child<TExtra extends Record<string, JsonValue> = Record<never, never>>(
   context: string,
@@ -198,6 +200,7 @@ If two transports share the same `id`, `setTransportLevels('console', ...)` beco
 ambiguous.
 
 ### Fix
+
 ```typescript
 constructor(transports: TransportConfig[]) {
   const ids = transports.map(t => t.id ?? t.type);
@@ -238,32 +241,36 @@ import { defineConfig } from 'logixia';
 
 export default defineConfig({
   appName: 'payments-service',
-  level:   'info',
+  level: 'info',
   transports: [
     { type: 'console', format: 'json' },
-    { type: 'file',    filename: './logs/app.log', rotate: '1d' },
+    { type: 'file', filename: './logs/app.log', rotate: '1d' },
   ],
 });
 ```
 
 Implementation:
+
 ```typescript
 // src/config/define-config.ts
 export function defineConfig<TLevels extends string = never>(
-  config: LoggerConfig<TLevels>,
+  config: LoggerConfig<TLevels>
 ): LoggerConfig<TLevels> {
-  return config;  // identity function — value is just for IntelliSense
+  return config; // identity function — value is just for IntelliSense
 }
 ```
 
 The CLI can then load `logixia.config.ts` via `tsx` or `jiti`:
+
 ```typescript
 // src/cli/utils.ts
 async function loadConfig(): Promise<LoggerConfig | null> {
   try {
     const mod = await import(join(process.cwd(), 'logixia.config'));
     return mod.default ?? mod;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 ```
 
@@ -275,8 +282,8 @@ async function loadConfig(): Promise<LoggerConfig | null> {
 // In LogixiaLogger — extends EventEmitter
 class LogixiaLogger<TLevels extends string = never>
   extends EventEmitter
-  implements ILogger<TLevels> {
-
+  implements ILogger<TLevels>
+{
   // Emit structured event instead of silent console.error
   private handleTransportError(transportId: string, error: unknown): void {
     this.emit('transport:error', { transportId, error, timestamp: new Date().toISOString() });

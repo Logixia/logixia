@@ -21,7 +21,9 @@ const engine = new BasicSearchEngine({ maxIndexSize: 500_000 });
 
 // Seed 100k entries
 for (let i = 0; i < 100_000; i++) {
-  engine.indexLog({ /* ... */ });
+  engine.indexLog({
+    /* ... */
+  });
 }
 
 console.time('search-100k');
@@ -38,7 +40,7 @@ class BasicSearchEngine {
   private logs: LogEntry[] = [];
 
   // ADD: inverted index
-  private wordIndex = new Map<string, Set<number>>();  // word → array positions
+  private wordIndex = new Map<string, Set<number>>(); // word → array positions
 
   indexLog(entry: LogEntry): void {
     const position = this.logs.length;
@@ -61,14 +63,11 @@ class BasicSearchEngine {
     let candidates: Set<number> | null = null;
     for (const word of words) {
       const set = this.wordIndex.get(word) ?? new Set<number>();
-      candidates = candidates === null
-        ? new Set(set)
-        : new Set([...candidates].filter(i => set.has(i)));
+      candidates =
+        candidates === null ? new Set(set) : new Set([...candidates].filter((i) => set.has(i)));
     }
 
-    return [...(candidates ?? new Set())]
-      .map(i => this.logs[i])
-      .filter(Boolean) as LogEntry[];
+    return [...(candidates ?? new Set())].map((i) => this.logs[i]).filter(Boolean) as LogEntry[];
   }
 }
 ```
@@ -177,7 +176,7 @@ async write(entry: LogEntry): Promise<void> {
 ```typescript
 // Current — waits for each transport before starting the next
 for (const transport of this.transports) {
-  await transport.write(entry);   // sequential
+  await transport.write(entry); // sequential
 }
 ```
 
@@ -255,13 +254,13 @@ logging hot path.
 
 ```typescript
 class CorrelationEngine {
-  private byTraceId  = new Map<string, LogEntry[]>();
-  private byUserId   = new Map<string, LogEntry[]>();
+  private byTraceId = new Map<string, LogEntry[]>();
+  private byUserId = new Map<string, LogEntry[]>();
   private bySessionId = new Map<string, LogEntry[]>();
 
   indexLog(entry: LogEntry): void {
-    if (entry.traceId)   appendToMap(this.byTraceId,   entry.traceId,   entry);
-    if (entry.userId)    appendToMap(this.byUserId,    entry.userId,    entry);
+    if (entry.traceId) appendToMap(this.byTraceId, entry.traceId, entry);
+    if (entry.userId) appendToMap(this.byUserId, entry.userId, entry);
     if (entry.sessionId) appendToMap(this.bySessionId, entry.sessionId, entry);
   }
 
@@ -277,13 +276,13 @@ O(1) lookup instead of O(n).
 
 ## Performance Budget (target for v1.3.0)
 
-| Operation | Max acceptable latency |
-|-----------|----------------------|
-| `logger.info()` call (console transport) | < 0.5 ms |
-| `logger.info()` call (file transport, batched) | < 0.1 ms |
-| `search()` on 100 k entries, text query | < 50 ms |
-| `search()` on 100 k entries, filter-only | < 10 ms |
-| `findRelated()` by traceId | < 5 ms |
-| `logger.flush()` 1 k batched entries | < 100 ms |
+| Operation                                      | Max acceptable latency |
+| ---------------------------------------------- | ---------------------- |
+| `logger.info()` call (console transport)       | < 0.5 ms               |
+| `logger.info()` call (file transport, batched) | < 0.1 ms               |
+| `search()` on 100 k entries, text query        | < 50 ms                |
+| `search()` on 100 k entries, filter-only       | < 10 ms                |
+| `findRelated()` by traceId                     | < 5 ms                 |
+| `logger.flush()` 1 k batched entries           | < 100 ms               |
 
 Add these as Jest performance tests using `performance.now()`.

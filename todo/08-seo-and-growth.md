@@ -9,6 +9,7 @@
 ## SEO-01 🟠 `package.json` — description and keywords need a complete rewrite
 
 ### Current state
+
 ```json
 {
   "description": "Enterprise-grade TypeScript logging library with comprehensive transport system, database integration, and advanced log management capabilities",
@@ -69,6 +70,7 @@ Zero keywords means **zero npm search hits** for anything that isn't the exact p
 ```
 
 Also add or update:
+
 ```json
 {
   "homepage": "https://github.com/webcoderspeed/logixia#readme",
@@ -87,11 +89,13 @@ Also add or update:
 ## SEO-02 🟠 GitHub repository — description, topics, and website URL
 
 ### Recommended GitHub repo description (160 char max)
+
 ```
 TypeScript logger with custom levels, NestJS module, multi-transport (file/DB/analytics), built-in search, request tracing, and OpenTelemetry support.
 ```
 
 ### Recommended GitHub topics (add in Settings → About → Topics)
+
 ```
 typescript  logger  logging  nestjs  nodejs  structured-logging
 custom-log-levels  request-tracing  opentelemetry  log-rotation
@@ -100,12 +104,15 @@ log-search  multi-transport  express  observability  developer-tools
 ```
 
 ### Website URL
+
 Set to npm package page: `https://www.npmjs.com/package/logixia`
 Or your blog post / docs site if you have one.
 
 ### Social preview image
+
 Create a 1280×640 banner image for the GitHub repo (Settings → Social preview).
 Use Figma or Canva. Should show:
+
 - Library name: **logixia**
 - Tagline: "Structured logging that scales"
 - Key feature icons: custom levels, NestJS, multi-transport, search
@@ -126,6 +133,7 @@ Add to the top of `README.md`:
 ```
 
 Once you have test coverage set up (see `03-testing.md`):
+
 ```markdown
 [![Coverage](https://codecov.io/gh/webcoderspeed/logixia/branch/main/graph/badge.svg)](https://codecov.io/gh/webcoderspeed/logixia)
 ```
@@ -142,18 +150,18 @@ Add to README (after the Quick Start section):
 ```markdown
 ## Why logixia over winston/pino?
 
-| Feature | logixia | winston | pino |
-|---------|---------|---------|------|
-| TypeScript-first (generics, zero `any`) | ✅ | ⚠️ types via @types | ⚠️ partial |
-| Custom business log levels with full type safety | ✅ | ⚠️ untyped | ❌ |
-| NestJS module (forRoot / forRootAsync / forFeature) | ✅ | requires wrapper | requires wrapper |
-| Built-in request trace ID (AsyncLocalStorage) | ✅ | ❌ | via pino-http |
-| Built-in log search & analysis | ✅ | ❌ | ❌ |
-| Database transports (MongoDB, PG, MySQL, SQLite) | ✅ | via plugins | ❌ |
-| Analytics transports (Datadog, Mixpanel, Segment) | ✅ | via plugins | via plugins |
-| File rotation built-in | ✅ | via winston-daily-rotate-file | ✅ |
-| CLI tool for log search/analysis | ✅ | ❌ | ❌ |
-| Bundle size (approx) | ~45 kB | ~150 kB | ~15 kB |
+| Feature                                             | logixia | winston                       | pino             |
+| --------------------------------------------------- | ------- | ----------------------------- | ---------------- |
+| TypeScript-first (generics, zero `any`)             | ✅      | ⚠️ types via @types           | ⚠️ partial       |
+| Custom business log levels with full type safety    | ✅      | ⚠️ untyped                    | ❌               |
+| NestJS module (forRoot / forRootAsync / forFeature) | ✅      | requires wrapper              | requires wrapper |
+| Built-in request trace ID (AsyncLocalStorage)       | ✅      | ❌                            | via pino-http    |
+| Built-in log search & analysis                      | ✅      | ❌                            | ❌               |
+| Database transports (MongoDB, PG, MySQL, SQLite)    | ✅      | via plugins                   | ❌               |
+| Analytics transports (Datadog, Mixpanel, Segment)   | ✅      | via plugins                   | via plugins      |
+| File rotation built-in                              | ✅      | via winston-daily-rotate-file | ✅               |
+| CLI tool for log search/analysis                    | ✅      | ❌                            | ❌               |
+| Bundle size (approx)                                | ~45 kB  | ~150 kB                       | ~15 kB           |
 ```
 
 ---
@@ -163,22 +171,26 @@ Add to README (after the Quick Start section):
 Use the same playbook as reixo. The hook angle for logixia:
 
 **Option A — "Custom log levels" angle:**
+
 > "I needed a log level called `payment`. Not `info`. Not `error`. `payment`.
 > So I could search production logs by business domain, not severity.
 > Here's why I built my own TypeScript logger."
 
 **Option B — "NestJS missing feature" angle:**
+
 > "NestJS's built-in logger gives you: info, warn, error, debug, verbose.
 > That's it. No trace IDs. No file output. No database persistence.
 > I spent 3 projects wiring up winston from scratch before building this."
 
 **Option C — "Everything in one" angle:**
+
 > "I counted 6 npm packages for a single logging setup:
 > winston + winston-transport-mongodb + winston-daily-rotate-file +
 > @nestjs/winston + pino-http + elastic-apm-node
 > I built logixia so it's 1 package instead."
 
 LinkedIn post rules (same as reixo):
+
 - Blog link goes in **first comment** (not post body — 60% reach penalty)
 - End with an open question
 - 3-5 hashtags: `#TypeScript #NestJS #NodeJS #OpenSource #DeveloperExperience`
@@ -191,6 +203,7 @@ Write a 1 500-word article titled:
 **"Building a production NestJS logger with custom business log levels, trace IDs, and DB persistence"**
 
 Outline:
+
 1. The problem: NestJS logger is a toy
 2. Winston works but needs 4 packages
 3. Introducing logixia — show the 30-second setup
@@ -206,16 +219,19 @@ Articles on Dev.to with NestJS in the title get 2 000–20 000 views organically
 ## GROWTH-03 🟡 Reddit posts
 
 **r/typescript** — "I built a TypeScript logger with generics-based custom log levels"
+
 - Lead with the type safety angle
 - Show the `createLogger<'payment' | 'order'>()` syntax
 - Ask: "What's your current logging setup?"
 
 **r/node** — "Open-sourced a Node.js logger with built-in log search, CLI, and DB transports"
+
 - Lead with the breadth angle
 - Show the CLI demo
 - Ask: "Do you use a custom transport for your logs?"
 
 **r/nestjs** — "NestJS logging module with forRoot/forRootAsync, trace IDs, and multi-transport"
+
 - Lead with the NestJS pain point
 - Show `LogixiaLoggerModule.forRoot()` one-liner
 - Ask: "How are you handling trace IDs in NestJS?"
@@ -227,6 +243,7 @@ Articles on Dev.to with NestJS in the title get 2 000–20 000 views organically
 **Title:** "Logixia – TypeScript logger with custom business log levels, NestJS module, and built-in search"
 
 **Body:**
+
 ```
 Hey HN,
 
@@ -257,6 +274,7 @@ Would love feedback on the API design — especially the custom levels approach.
 ## GROWTH-05 🟢 Add `logixia` as an alternative on competing packages' GitHub
 
 Many comparison lists and alternative registries exist:
+
 - **awesome-nodejs** — open a PR to add logixia under "Logging"
 - **openbase.com** — submit logixia
 - **npmcompare.com** — it auto-indexes, just ensure keywords are right
