@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.1.3](https://github.com/Logixia/logixia/compare/v1.1.2...v1.1.3) (2026-03-14)
+
+### 📚 Documentation
+
+* add github pages deployment workflow and docs entry point ([f3639a2](https://github.com/Logixia/logixia/commit/f3639a28137469c576832bec43160fe99e023726))
+
 ## [1.1.2](https://github.com/Logixia/logixia/compare/v1.1.1...v1.1.2) (2026-03-14)
 
 ### 📚 Documentation
