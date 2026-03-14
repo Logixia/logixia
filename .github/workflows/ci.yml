@@ -19,10 +19,15 @@ jobs:
   #
   # Strategy:
   #   a) Auto-fix  — run format + lint:fix so trivial style drift never
-  #                  blocks a PR.  Any changes are committed back to the
-  #                  branch (same-repo PRs + direct pushes only; fork PRs
-  #                  gracefully skip the commit step).
-  #   b) Hard gate — lint:check catches errors that can't be auto-fixed
+  #                  blocks a PR.
+  #   b) Commit-back — ONLY on pull_request events (not on push to main).
+  #                  Committing back on a direct push to main would advance
+  #                  origin/main PAST github.sha, causing the release job's
+  #                  checkout to be stale → semantic-release "local branch
+  #                  is behind remote" → skipped release.
+  #                  On fork PRs the commit step gracefully no-ops anyway
+  #                  (no write access to forks).
+  #   c) Hard gate — lint:check catches errors that can't be auto-fixed
   #                  (real code issues), typecheck catches type errors.
   #                  These still fail the build as intended.
   # ─────────────────────────────────────────────────────────
@@ -30,7 +35,7 @@ jobs:
     name: Quality (lint · typecheck · format)
     runs-on: ubuntu-latest
     permissions:
-      contents: write # needed for git-auto-commit-action to push fixes
+      contents: write # needed for git-auto-commit-action on PRs
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,7 +55,10 @@ jobs:
       - name: Auto-fix formatting & lint
         run: npm run format && npm run lint:fix
 
-      - name: Commit auto-fixes (if any)
+      # Only commit fixes back on PRs — pushing to main here would make
+      # origin/main advance past github.sha and break the release job.
+      - name: Commit auto-fixes (PRs only)
+        if: github.event_name == 'pull_request'
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: 'style: auto-fix formatting and lint [skip ci]'
@@ -141,25 +149,18 @@ jobs:
   # ─────────────────────────────────────────────────────────
   # 4. Release — only on direct push to main
   #
-  # Merging CI + Release into one workflow eliminates every source of
-  # the intermittent "release skipped / already different version" bug:
+  # Why "local branch is behind remote" used to happen so often:
   #
-  #   BEFORE (two workflows):
-  #     push → CI runs → CI cancels earlier run (cancel-in-progress: true)
-  #     → surviving CI finishes → workflow_run triggers Release
-  #     → Release is queued (cancel-in-progress: false)
-  #     → queued Release fast-forwards to origin/main
-  #     → origin/main is now AT the chore(release) commit from the
-  #       previous release run → semantic-release sees no new commits
-  #     → SKIP (the "already different version" message you were seeing)
-  #
-  #   AFTER (one workflow):
-  #     push → quality → test + build (parallel) → release
-  #     Each run operates on its own github.sha — no fast-forward,
-  #     no separate queue, no timing gap between CI finish and release.
-  #     If two pushes land in quick succession the second run simply
-  #     waits (concurrency queue) and then checks whether there are new
-  #     commits since the last tag — if not, it skips correctly.
+  #   semantic-release checks that local HEAD == origin HEAD before it
+  #   will publish.  Any commit pushed to main AFTER github.sha (the SHA
+  #   this run was triggered by) but BEFORE the release step executes
+  #   causes the check to fail.  Sources include:
+  #     • bot/dependabot commits
+  #     • concurrent CI runs from quick successive pushes
+  #   The "Sync with remote" step below eliminates all of these by
+  #   fast-forwarding local to the current tip of origin/main right
+  #   before semantic-release runs.  semantic-release then sees
+  #   local == remote and proceeds normally.
   # ─────────────────────────────────────────────────────────
   release:
     name: Semantic Release
@@ -183,6 +184,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+
+      # Fast-forward local main to the current tip of origin/main.
+      # Eliminates "local branch is behind the remote" skips caused by
+      # any commit pushed to main after github.sha was captured.
+      - name: Sync with remote
+        run: git fetch origin && git reset --hard origin/main
 
       - name: Install dependencies
         run: npm install
