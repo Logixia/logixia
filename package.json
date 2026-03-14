@@ -10,7 +10,23 @@
       "import": "./dist/index.mjs",
       "require": "./dist/index.js",
       "types": "./dist/index.d.ts"
-    }
+    },
+    "./nest": {
+      "import": "./dist/nest.mjs",
+      "require": "./dist/nest.js",
+      "types": "./dist/nest.d.ts"
+    },
+    "./transports": {
+      "import": "./dist/transports.mjs",
+      "require": "./dist/transports.js",
+      "types": "./dist/transports.d.ts"
+    },
+    "./search": {
+      "import": "./dist/search.mjs",
+      "require": "./dist/search.js",
+      "types": "./dist/search.d.ts"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
