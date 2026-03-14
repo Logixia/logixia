@@ -1,4 +1,5 @@
 import { EventEmitter } from "events";
+import { internalLog, internalWarn } from "../utils/internal-log";
 import {
   ITransport,
   IAsyncTransport,
@@ -410,12 +411,12 @@ export class TransportManager extends EventEmitter {
   // Transport Level Configuration Methods
   enableLevelPrompting(): void {
     this.promptForLevels = true;
-    console.log("🔧 Transport level prompting enabled");
+    internalLog("Transport level prompting enabled");
   }
 
   disableLevelPrompting(): void {
     this.promptForLevels = false;
-    console.log("🔧 Transport level prompting disabled");
+    internalLog("Transport level prompting disabled");
   }
 
   async promptUserForTransportLevels(transportId: string): Promise<string[]> {
@@ -434,10 +435,10 @@ export class TransportManager extends EventEmitter {
         output: process.stdout,
       });
 
-      console.log(`\n📝 Configure log levels for transport '${transportId}'`);
-      console.log("Available levels:", availableLevels.join(", "));
-      console.log(
-        'Enter levels separated by commas (e.g., error,warn,info) or "all" for all levels:',
+      process.stdout.write(`\nConfigure log levels for transport '${transportId}'\n`);
+      process.stdout.write(`Available levels: ${availableLevels.join(", ")}\n`);
+      process.stdout.write(
+        'Enter levels separated by commas (e.g., error,warn,info) or "all" for all levels:\n',
       );
 
       rl.question("> ", (answer) => {
@@ -452,13 +453,10 @@ export class TransportManager extends EventEmitter {
             .filter((level) => availableLevels.includes(level));
 
           if (selectedLevels.length === 0) {
-            console.log("⚠️  No valid levels selected, using all levels");
+            internalWarn("No valid levels selected, using all levels");
             resolve(availableLevels);
           } else {
-            console.log(
-              `✅ Selected levels for ${transportId}:`,
-              selectedLevels.join(", "),
-            );
+            internalLog(`Selected levels for ${transportId}: ${selectedLevels.join(", ")}`);
             resolve(selectedLevels);
           }
         }
@@ -479,10 +477,7 @@ export class TransportManager extends EventEmitter {
 
   setTransportLevels(transportId: string, levels: string[]): void {
     this.transportLevelPreferences.set(transportId, levels);
-    console.log(
-      `🎯 Transport '${transportId}' configured for levels:`,
-      levels.join(", "),
-    );
+    internalLog(`Transport '${transportId}' configured for levels: ${levels.join(", ")}`);
   }
 
   getTransportLevels(transportId: string): string[] | undefined {
@@ -491,6 +486,6 @@ export class TransportManager extends EventEmitter {
 
   clearTransportLevelPreferences(): void {
     this.transportLevelPreferences.clear();
-    console.log("🧹 Transport level preferences cleared");
+    internalLog("Transport level preferences cleared");
   }
 }

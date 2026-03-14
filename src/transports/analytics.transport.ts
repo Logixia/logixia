@@ -4,6 +4,7 @@ import {
   TransportLogEntry,
   AnalyticsTransportConfig,
 } from "../types/transport.types";
+import { internalError } from "../utils/internal-log";
 
 export abstract class AnalyticsTransport
   implements ITransport, IBatchTransport
@@ -54,10 +55,10 @@ export abstract class AnalyticsTransport
     this.batch.push(entry);
 
     if (this.batch.length >= (this.config.batchSize || 50)) {
-      this.flush().catch(console.error);
+      this.flush().catch((err: unknown) => internalError(`${this.name} batch flush failed`, err));
     } else if (!this.batchTimer && this.config.flushInterval) {
       this.batchTimer = setTimeout(() => {
-        this.flush().catch(console.error);
+        this.flush().catch((err: unknown) => internalError(`${this.name} interval flush failed`, err));
       }, this.config.flushInterval);
     }
   }
@@ -76,7 +77,7 @@ export abstract class AnalyticsTransport
     try {
       await this.sendBatch(entriesToSend);
     } catch (error) {
-      console.error(`Analytics transport ${this.name} flush failed:`, error);
+      internalError(`Analytics transport ${this.name} flush failed`, error);
       // Re-add failed entries to batch for retry
       this.batch.unshift(...entriesToSend);
     }

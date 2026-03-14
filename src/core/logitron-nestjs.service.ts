@@ -7,6 +7,7 @@ import { LogixiaLogger } from "./logitron-logger";
 import type { LoggerConfig } from "../types";
 import { LogLevel, LogLevelString } from "../types";
 import { getCurrentTraceId } from "../utils/trace.utils";
+import { internalError } from "../utils/internal-log";
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class LogixiaLoggerService implements LoggerService {
@@ -60,39 +61,48 @@ export class LogixiaLoggerService implements LoggerService {
    */
   log(message: any, context?: string): void {
     this.setContextIfProvided(context);
-    this.logger.info(this.formatMessage(message)).catch(console.error);
+    this.logger
+      .info(this.formatMessage(message))
+      .catch((err: unknown) => internalError("LogixiaLoggerService.log failed", err));
   }
 
   error(message: any, trace?: string, context?: string): void {
     this.setContextIfProvided(context);
-    const errorData: any = {};
+    const errorData: Record<string, string> = {};
 
     if (trace) {
       errorData.stack = trace;
     }
 
-    if (typeof message === "object" && message instanceof Error) {
-      this.logger.error(message, errorData).catch(console.error);
-    } else {
-      this.logger
-        .error(this.formatMessage(message), errorData)
-        .catch(console.error);
-    }
+    const logPromise =
+      typeof message === "object" && message instanceof Error
+        ? this.logger.error(message, errorData)
+        : this.logger.error(this.formatMessage(message), errorData);
+
+    logPromise.catch((err: unknown) =>
+      internalError("LogixiaLoggerService.error failed", err),
+    );
   }
 
   warn(message: any, context?: string): void {
     this.setContextIfProvided(context);
-    this.logger.warn(this.formatMessage(message)).catch(console.error);
+    this.logger
+      .warn(this.formatMessage(message))
+      .catch((err: unknown) => internalError("LogixiaLoggerService.warn failed", err));
   }
 
   debug(message: any, context?: string): void {
     this.setContextIfProvided(context);
-    this.logger.debug(this.formatMessage(message)).catch(console.error);
+    this.logger
+      .debug(this.formatMessage(message))
+      .catch((err: unknown) => internalError("LogixiaLoggerService.debug failed", err));
   }
 
   verbose(message: any, context?: string): void {
     this.setContextIfProvided(context);
-    this.logger.trace(this.formatMessage(message)).catch(console.error);
+    this.logger
+      .trace(this.formatMessage(message))
+      .catch((err: unknown) => internalError("LogixiaLoggerService.verbose failed", err));
   }
 
   /**

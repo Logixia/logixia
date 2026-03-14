@@ -11,6 +11,7 @@ import {
 import { RouteInfo } from "@nestjs/common/interfaces/middleware/middleware-configuration.interface";
 import { LoggerConfig, TraceIdConfig } from "../types";
 import { LogixiaLoggerService } from "./logitron-nestjs.service";
+import { generateTraceId } from "../utils/trace.utils";
 import { TraceMiddleware, traceMiddleware } from "./trace.middleware";
 import { KafkaTraceInterceptor } from "./kafka-trace.interceptor";
 import { WebSocketTraceInterceptor } from "./websocket-trace.interceptor";
@@ -76,11 +77,7 @@ export class LogixiaLoggerModule implements NestModule {
         traceConfig = {
           enabled: true,
           contextKey: "traceId",
-          generator: () => {
-            const timestamp = Date.now().toString(36);
-            const random = Math.random().toString(36).substring(2, 8);
-            return `${timestamp}-${random}`;
-          },
+          generator: () => generateTraceId(),
         };
       } else {
         traceConfig = undefined;

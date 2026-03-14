@@ -7,6 +7,7 @@ import {
   AnalyticsEvent,
   AnalyticsUser,
 } from "./analytics.transport";
+import { internalError } from "../utils/internal-log";
 
 export class SegmentTransport extends AnalyticsTransport {
   private segmentConfig: SegmentTransportConfig;
@@ -36,7 +37,7 @@ export class SegmentTransport extends AnalyticsTransport {
       await this.testConnection();
       this.isReady = true;
     } catch (error) {
-      console.error("Segment transport initialization failed:", error);
+      internalError("Segment transport initialization failed", error);
       throw error;
     }
   }

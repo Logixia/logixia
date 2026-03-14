@@ -1,7 +1,7 @@
 {
   "name": "logixia",
   "version": "1.0.3",
-  "description": "Logixia - A next-generation logging library with advanced features, custom levels, and TypeScript IntelliSense support",
+  "description": "TypeScript logger with custom log levels, multi-transport (console, file, DB, analytics), NestJS module, built-in search, request tracing, and zero-dep OpenTelemetry support",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -40,62 +40,61 @@
     "dev:intelligent-search": "ts-node examples/intelligent-search.ts"
   },
   "keywords": [
-    "logging",
     "logger",
+    "logging",
     "typescript",
+    "typescript-logger",
     "nestjs",
-    "express",
+    "nestjs-logger",
+    "nestjs-logging",
+    "nestjs-module",
+    "winston-alternative",
+    "pino-alternative",
     "structured-logging",
+    "json-logging",
+    "custom-log-levels",
+    "log-levels",
+    "request-tracing",
     "trace-id",
-    "performance",
-    "middleware",
-    "transport",
-    "database-logging",
-    "file-logging",
-    "console-logging",
-    "analytics",
-    "monitoring",
-    "enterprise",
-    "production-ready",
-    "open-source",
-    "mit-license",
-    "async-logging",
-    "batch-processing",
+    "opentelemetry",
+    "w3c-trace-context",
+    "multi-transport",
+    "console-transport",
+    "file-transport",
     "log-rotation",
-    "custom-levels",
-    "child-logger",
-    "error-tracking",
+    "database-logging",
+    "mongodb-logger",
+    "postgresql-logger",
+    "analytics-logging",
+    "datadog",
+    "mixpanel",
+    "segment",
     "log-search",
-    "intelligent-search",
-    "nlp",
-    "natural-language",
+    "log-analysis",
     "log-aggregation",
-    "pattern-recognition",
-    "anomaly-detection",
-    "log-correlation",
-    "ai-powered",
-    "search-engine"
+    "nodejs",
+    "bun",
+    "express",
+    "microservices",
+    "distributed-tracing",
+    "observability",
+    "developer-tools",
+    "enterprise-logging"
   ],
   "author": {
-    "name": "Logixia Contributors",
-    "email": "logixia@example.com",
-    "url": "https://github.com/Logixia/logixia"
+    "name": "Sanjeev Sharma",
+    "email": "webcoderspeed@gmail.com",
+    "url": "https://github.com/webcoderspeed"
   },
-  "contributors": [
-    {
-      "name": "Community Contributors",
-      "url": "https://github.com/Logixia/logixia/graphs/contributors"
-    }
-  ],
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Logixia/logixia.git"
+    "url": "git+https://github.com/webcoderspeed/logixia.git"
   },
   "bugs": {
-    "url": "https://github.com/Logixia/logixia/issues"
+    "url": "https://github.com/webcoderspeed/logixia/issues"
   },
-  "homepage": "https://github.com/Logixia/logixia#readme",
+  "homepage": "https://github.com/webcoderspeed/logixia#readme",
   "peerDependencies": {
     "@nestjs/common": "^10.0.0",
     "express": "^4.18.0",
@@ -146,7 +145,6 @@
     "chalk": "^5.6.2",
     "commander": "^11.1.0",
     "inquirer": "^9.3.8",
-    "logixia": "^1.0.3",
     "ora": "^6.3.1"
   }
 }

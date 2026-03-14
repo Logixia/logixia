@@ -3,6 +3,7 @@ import {
   DataDogTransportConfig,
 } from "../types/transport.types";
 import { AnalyticsTransport, AnalyticsMetric } from "./analytics.transport";
+import { internalError } from "../utils/internal-log";
 
 export class DataDogTransport extends AnalyticsTransport {
   private datadogConfig: DataDogTransportConfig;
@@ -32,7 +33,7 @@ export class DataDogTransport extends AnalyticsTransport {
       await this.testConnection();
       this.isReady = true;
     } catch (error) {
-      console.error("DataDog transport initialization failed:", error);
+      internalError("DataDog transport initialization failed", error);
       throw error;
     }
   }

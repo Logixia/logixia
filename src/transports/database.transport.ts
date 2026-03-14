@@ -4,6 +4,7 @@ import {
   TransportLogEntry,
   DatabaseTransportConfig,
 } from "../types/transport.types";
+import { internalError } from "../utils/internal-log";
 
 export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
   public readonly name = "database";
@@ -62,7 +63,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
           throw new Error(`Unsupported database type: ${this.config.type}`);
       }
     } catch (error) {
-      console.error("Database flush error:", error);
+      internalError("Database flush error", error);
       // Re-add failed entries to batch for retry
       this.batch.unshift(...entriesToFlush);
       throw error;
@@ -399,8 +400,8 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
 
   private setupFlushTimer(): void {
     this.flushTimer = setInterval(() => {
-      this.flush().catch((error) => {
-        console.error("Scheduled flush error:", error);
+      this.flush().catch((error: unknown) => {
+        internalError("Scheduled database flush error", error);
       });
     }, this.flushInterval);
   }

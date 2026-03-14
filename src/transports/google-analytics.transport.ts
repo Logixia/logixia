@@ -3,6 +3,7 @@ import {
   GoogleAnalyticsTransportConfig,
 } from "../types/transport.types";
 import { AnalyticsTransport, AnalyticsEvent } from "./analytics.transport";
+import { internalError, internalLog } from "../utils/internal-log";
 
 export class GoogleAnalyticsTransport extends AnalyticsTransport {
   private gaConfig: GoogleAnalyticsTransportConfig;
@@ -29,7 +30,7 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
       await this.testConnection();
       this.isReady = true;
     } catch (error) {
-      console.error("Google Analytics transport initialization failed:", error);
+      internalError("Google Analytics transport initialization failed", error);
       throw error;
     }
   }
@@ -169,7 +170,7 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
 
       if (debug) {
         const result = await response.json();
-        console.log("GA4 Debug Response:", result);
+        internalLog(`GA4 Debug Response: ${JSON.stringify(result)}`);
       }
     } catch (error) {
       throw new Error(

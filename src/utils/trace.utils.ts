@@ -28,10 +28,16 @@ export function getCurrentTraceId(): string | undefined {
 }
 
 /**
- * Set trace ID in async context
+ * Set trace ID in the CURRENT async context without starting a new one.
+ *
+ * ⚠️  Uses `enterWith()` which mutates the context for the current async
+ * execution and ALL futures spawned from it. Prefer `runWithTraceId()` when
+ * you can wrap the operation in a callback, as it creates a properly-scoped
+ * child context. Use `setTraceId()` only when you cannot use `runWithTraceId()`
+ * (e.g., inside a class constructor or a non-callback async entry point).
  */
 export function setTraceId(traceId: string, data?: Record<string, any>): void {
-  const currentStore = traceStorage.getStore() || {};
+  const currentStore = traceStorage.getStore() ?? {};
   traceStorage.enterWith({ ...currentStore, traceId, ...data });
 }
 
@@ -105,35 +111,58 @@ export function extractTraceId(
 }
 
 /**
+ * Default headers checked for incoming trace ID propagation, in priority order:
+ *   traceparent (W3C/OTel) → x-trace-id → x-request-id → x-correlation-id → trace-id
+ */
+export const DEFAULT_TRACE_HEADERS = [
+  "traceparent",
+  "x-trace-id",
+  "x-request-id",
+  "x-correlation-id",
+  "trace-id",
+];
+
+/**
  * Create trace ID middleware for Express/NestJS
  */
 export function createTraceMiddleware(config: TraceIdConfig) {
+  const resolvedConfig: TraceIdConfig = {
+    extractor: {
+      header: DEFAULT_TRACE_HEADERS,
+      query: ["traceId", "trace_id"],
+    },
+    ...config,
+  };
+
   return (req: any, res: any, next: any) => {
     let traceId: string | undefined;
 
-    // Try to extract existing trace ID
-    if (config.extractor) {
-      traceId = extractTraceId(req, config.extractor);
+    // Try to extract existing trace ID from incoming request
+    if (resolvedConfig.extractor) {
+      traceId = extractTraceId(req, resolvedConfig.extractor);
     }
 
-    // Generate new trace ID if not found
+    // Generate new trace ID if none was provided by the caller
     if (!traceId) {
-      traceId = config.generator ? config.generator() : generateTraceId();
+      traceId = resolvedConfig.generator
+        ? resolvedConfig.generator()
+        : generateTraceId();
     }
 
-    // Set trace ID in request
+    // Set trace ID on the request object and propagate back in response header
     req.traceId = traceId;
-
-    // Set response header
     res.setHeader("X-Trace-Id", traceId);
 
-    // Run with trace context
+    // Run the rest of the middleware/handler chain inside the trace context.
+    // AsyncLocalStorage.run() propagates the context through all awaited async
+    // operations spawned within the callback, so every logger.log() call
+    // will find the same traceId via getCurrentTraceId().
     runWithTraceId(
       traceId,
       () => {
         next();
       },
-      { requestId: req.id || generateTraceId() },
+      { requestId: req.id || req.requestId || generateTraceId() },
     );
   };
 }

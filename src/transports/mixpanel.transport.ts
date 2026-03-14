@@ -7,6 +7,7 @@ import {
   AnalyticsEvent,
   AnalyticsUser,
 } from "./analytics.transport";
+import { internalError } from "../utils/internal-log";
 
 export class MixpanelTransport extends AnalyticsTransport {
   private mixpanelConfig: MixpanelTransportConfig;
@@ -28,7 +29,7 @@ export class MixpanelTransport extends AnalyticsTransport {
       await this.testConnection();
       this.isReady = true;
     } catch (error) {
-      console.error("Mixpanel transport initialization failed:", error);
+      internalError("Mixpanel transport initialization failed", error);
       throw error;
     }
   }

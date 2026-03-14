@@ -9,6 +9,7 @@ import {
   FileTransportConfig,
   RotationConfig,
 } from "../types/transport.types";
+import { internalError } from "../utils/internal-log";
 
 const writeFile = promisify(fs.writeFile);
 const mkdir = promisify(fs.mkdir);
@@ -23,7 +24,7 @@ export class FileTransport implements ITransport, IBatchTransport {
   public readonly flushInterval?: number;
 
   private config: FileTransportConfig;
-  private writeStream?: WriteStream;
+  private writeStream: WriteStream | undefined;
   private batch: TransportLogEntry[] = [];
   private batchTimer?: NodeJS.Timeout | undefined;
   private lastRotation: Date = new Date();
@@ -104,10 +105,10 @@ export class FileTransport implements ITransport, IBatchTransport {
     this.batch.push(entry);
 
     if (this.batch.length >= (this.config.batchSize || 100)) {
-      this.flush().catch(console.error);
+      this.flush().catch((err: unknown) => internalError("FileTransport batch flush failed", err));
     } else if (!this.batchTimer && this.config.flushInterval) {
       this.batchTimer = setTimeout(() => {
-        this.flush().catch(console.error);
+        this.flush().catch((err: unknown) => internalError("FileTransport interval flush failed", err));
       }, this.config.flushInterval);
     }
   }
@@ -167,8 +168,10 @@ export class FileTransport implements ITransport, IBatchTransport {
     await this.flush();
 
     if (this.writeStream) {
-      this.writeStream.end();
-      this.writeStream = undefined as any;
+      await new Promise<void>((resolve) => {
+        this.writeStream!.end(() => resolve());
+      });
+      this.writeStream = undefined;
     }
 
     const oldPath = this.currentFilePath;
@@ -245,7 +248,7 @@ export class FileTransport implements ITransport, IBatchTransport {
         await unlink(file.path);
       }
     } catch (error) {
-      console.error("Failed to cleanup old log files:", error);
+      internalError("Failed to cleanup old log files", error);
     }
   }
 

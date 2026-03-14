@@ -17,6 +17,7 @@ import { getCurrentTraceId, generateTraceId } from "../utils/trace.utils";
 import { serializeError, isError, normalizeError } from "../utils/error.utils";
 import { TransportManager } from "../transports/transport.manager";
 import { TransportConfig } from "../types/transport.types";
+import { internalLog, internalWarn, internalError } from "../utils/internal-log";
 
 export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
   implements ILoggerDefault
@@ -28,6 +29,14 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
   private contextData: ContextData = {};
   private transportManager?: TransportManager;
   private fieldState: Map<string, boolean> = new Map(); // Track field enable/disable state
+  /**
+   * Stable fallback trace ID generated ONCE per logger instance.
+   * Used when no request-scoped trace ID is available in AsyncLocalStorage
+   * (e.g. background jobs, CLI scripts, tests). This ensures all log lines
+   * from a single logger instance share the same ID instead of generating a
+   * fresh UUID on every log() call.
+   */
+  private readonly fallbackTraceId: string = generateTraceId();
 
   constructor(config: TConfig, context?: string) {
     const defaultConfig: LoggerConfig = {
@@ -101,7 +110,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
             message: string,
             data?: Record<string, any>,
           ) => {
-            await this.log(levelName.toLowerCase(), message, data);
+            await this.logLevel(levelName.toLowerCase(), message, data);
           };
         }
       });
@@ -224,12 +233,12 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
   // Field Management Methods
   enableField(fieldName: string): void {
     this.fieldState.set(fieldName, true);
-    console.log(`✅ Field '${fieldName}' enabled`);
+    internalLog(`Field '${fieldName}' enabled`);
   }
 
   disableField(fieldName: string): void {
     this.fieldState.set(fieldName, false);
-    console.log(`❌ Field '${fieldName}' disabled`);
+    internalLog(`Field '${fieldName}' disabled`);
   }
 
   isFieldEnabled(fieldName: string): boolean {
@@ -281,7 +290,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
 
   resetFieldState(): void {
     this.fieldState.clear();
-    console.log("🔄 Field state reset to configuration defaults");
+    internalLog("Field state reset to configuration defaults");
   }
 
   // Transport Level Management Methods
@@ -289,7 +298,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
     if (this.transportManager) {
       this.transportManager.enableLevelPrompting();
     } else {
-      console.warn("⚠️  Transport manager not initialized");
+      internalWarn("Transport manager not initialized");
     }
   }
 
@@ -297,7 +306,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
     if (this.transportManager) {
       this.transportManager.disableLevelPrompting();
     } else {
-      console.warn("⚠️  Transport manager not initialized");
+      internalWarn("Transport manager not initialized");
     }
   }
 
@@ -305,7 +314,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
     if (this.transportManager) {
       this.transportManager.setTransportLevels(transportId, levels);
     } else {
-      console.warn("⚠️  Transport manager not initialized");
+      internalWarn("Transport manager not initialized");
     }
   }
 
@@ -313,7 +322,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
     if (this.transportManager) {
       return this.transportManager.getTransportLevels(transportId);
     }
-    console.warn("⚠️  Transport manager not initialized");
+    internalWarn("Transport manager not initialized");
     return undefined;
   }
 
@@ -321,7 +330,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
     if (this.transportManager) {
       this.transportManager.clearTransportLevelPreferences();
     } else {
-      console.warn("⚠️  Transport manager not initialized");
+      internalWarn("Transport manager not initialized");
     }
   }
 
@@ -418,9 +427,13 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
       payload: { ...this.contextData, ...data },
     };
 
-    // Add trace ID if enabled
+    // Add trace ID if enabled.
+    // Priority: 1) request-scoped ID from AsyncLocalStorage (set by TraceMiddleware)
+    //           2) stable fallback ID generated once per logger instance
+    // Never call generateTraceId() per-log-call — that creates a different UUID for
+    // every log line, making distributed tracing useless.
     if (this.config.traceId) {
-      entry.traceId = getCurrentTraceId() || generateTraceId();
+      entry.traceId = getCurrentTraceId() ?? this.fallbackTraceId;
     }
 
     // Format and output log
@@ -555,7 +568,7 @@ export class LogixiaLogger<TConfig extends LoggerConfig<any> = LoggerConfig>
         return;
       } catch (error) {
         // Fallback to console if transport fails
-        console.error("Transport write failed:", error);
+        internalError("Transport write failed", error);
       }
     }
 
@@ -594,7 +607,7 @@ export function createLogger<T extends LoggerConfig<any>>(
           message: string,
           data?: Record<string, any>,
         ) => {
-          await logger.log(levelName, message, data);
+          await logger.logLevel(levelName, message, data);
         };
       }
     });
