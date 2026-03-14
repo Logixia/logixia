@@ -145,17 +145,18 @@ export class TransportManager extends EventEmitter {
   }
 
   async write(entry: LogEntry): Promise<void> {
-    // Convert LogEntry to TransportLogEntry
+    // Build the transport entry — exactOptionalPropertyTypes requires we only set
+    // optional properties when they have a real value (not undefined).
     const transportEntry: TransportLogEntry = {
       timestamp: new Date(entry.timestamp),
       level: entry.level,
       message: entry.message,
-      ...(entry.payload && { data: entry.payload }),
-      ...(entry.context && { context: entry.context }),
-      ...(entry.traceId && { traceId: entry.traceId }),
-      ...(entry.appName && { appName: entry.appName }),
-      ...(entry.environment && { environment: entry.environment }),
+      appName: entry.appName,
     };
+    if (entry.payload !== undefined) transportEntry.data = entry.payload;
+    if (entry.context !== undefined) transportEntry.context = entry.context;
+    if (entry.traceId !== undefined) transportEntry.traceId = entry.traceId;
+    if (entry.environment !== undefined) transportEntry.environment = entry.environment;
     if (this.isShuttingDown) {
       throw new Error('TransportManager is shutting down');
     }
@@ -201,10 +202,10 @@ export class TransportManager extends EventEmitter {
     try {
       await transport.write(entry);
 
-      // Update metrics
+      // Update metrics (reuse startTime, avoid new Date() allocation)
       const writeTime = Date.now() - startTime;
       metrics.logsWritten++;
-      metrics.lastWrite = new Date();
+      metrics.lastWrite = new Date(startTime);
       metrics.averageWriteTime = (metrics.averageWriteTime + writeTime) / 2;
 
       this.emit('log', entry);

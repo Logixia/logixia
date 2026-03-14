@@ -31,6 +31,19 @@ function spyConsole() {
   const captured: string[] = [];
   const push = (m: unknown) => captured.push(String(m ?? ''));
 
+  // Intercept process.stdout/stderr writes (used by the optimised output path)
+  const realStdoutWrite = process.stdout.write.bind(process.stdout);
+  const realStderrWrite = process.stderr.write.bind(process.stderr);
+  (process.stdout as NodeJS.WriteStream).write = (chunk: unknown) => {
+    captured.push(String(chunk ?? ''));
+    return true;
+  };
+  (process.stderr as NodeJS.WriteStream).write = (chunk: unknown) => {
+    captured.push(String(chunk ?? ''));
+    return true;
+  };
+
+  // Also intercept console.* as a fallback (some paths may still use console)
   const spies = {
     log: jest.spyOn(console, 'log').mockImplementation(push),
     error: jest.spyOn(console, 'error').mockImplementation(push),
@@ -39,11 +52,13 @@ function spyConsole() {
   };
 
   return {
-    /** All messages logged across log/error/warn/debug, in order */
+    /** All messages logged across all output channels, in order */
     get messages() {
       return captured;
     },
     restore() {
+      (process.stdout as NodeJS.WriteStream).write = realStdoutWrite as typeof process.stdout.write;
+      (process.stderr as NodeJS.WriteStream).write = realStderrWrite as typeof process.stderr.write;
       spies.log.mockRestore();
       spies.error.mockRestore();
       spies.warn.mockRestore();

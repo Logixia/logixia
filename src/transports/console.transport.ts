@@ -7,28 +7,28 @@ import type {
 export class ConsoleTransport implements ITransport {
   public readonly name = 'console';
 
+  // Pre-built ANSI color map — avoids object recreation inside formatEntry()
+  private static readonly COLORS: ReadonlyMap<string, string> = new Map([
+    ['red', '\x1b[31m'],
+    ['green', '\x1b[32m'],
+    ['yellow', '\x1b[33m'],
+    ['blue', '\x1b[34m'],
+    ['magenta', '\x1b[35m'],
+    ['cyan', '\x1b[36m'],
+    ['white', '\x1b[37m'],
+    ['gray', '\x1b[90m'],
+    ['reset', '\x1b[0m'],
+  ]);
+
   constructor(private config: ConsoleTransportConfig = {}) {}
 
-  async write(entry: TransportLogEntry): Promise<void> {
-    const formattedEntry = this.formatEntry(entry);
-
-    // Use appropriate console method based on log level
-    switch (entry.level.toLowerCase()) {
-      case 'error':
-        console.error(formattedEntry);
-        break;
-      case 'warn':
-      case 'warning':
-        console.warn(formattedEntry);
-        break;
-      case 'debug':
-        console.debug(formattedEntry);
-        break;
-      case 'info':
-      default:
-        console.log(formattedEntry);
-        break;
-    }
+  write(entry: TransportLogEntry): Promise<void> {
+    const formatted = this.formatEntry(entry) + '\n';
+    // Use process.stderr for errors, stdout for everything else —
+    // avoids the extra indirection that console.log/error add.
+    const out = entry.level.toLowerCase() === 'error' ? process.stderr : process.stdout;
+    out.write(formatted);
+    return Promise.resolve();
   }
 
   private formatEntry(entry: TransportLogEntry): string {
@@ -102,27 +102,14 @@ export class ConsoleTransport implements ITransport {
   }
 
   private colorize(text: string, color: string): string {
-    if (this.config.colorize === false) {
-      return text;
-    }
-
-    const colors: Record<string, string> = {
-      red: '\x1b[31m',
-      green: '\x1b[32m',
-      yellow: '\x1b[33m',
-      blue: '\x1b[34m',
-      magenta: '\x1b[35m',
-      cyan: '\x1b[36m',
-      white: '\x1b[37m',
-      gray: '\x1b[90m',
-      reset: '\x1b[0m',
-    };
-
-    const colorCode = colors[color] || colors.white;
-    return `${colorCode}${text}${colors.reset}`;
+    if (this.config.colorize === false) return text;
+    // Use the static pre-built map — no per-call object allocation
+    const reset = ConsoleTransport.COLORS.get('reset')!;
+    const code = ConsoleTransport.COLORS.get(color) ?? ConsoleTransport.COLORS.get('white')!;
+    return `${code}${text}${reset}`;
   }
 
-  async close(): Promise<void> {
-    // Console transport doesn't need cleanup
+  close(): Promise<void> {
+    return Promise.resolve();
   }
 }

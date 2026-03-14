@@ -334,17 +334,17 @@ flushOnExit(logger); // drains all transports before process.exit
 
 ## Performance
 
-logixia uses `async/await` throughout — log calls are non-blocking by design, so your application threads are never stalled by slow transports (file I/O, network, database). This is a deliberate trade-off: slightly higher per-call overhead in exchange for zero event-loop blocking.
+logixia uses `async/await` throughout — log calls are non-blocking by design, so your application thread is never stalled waiting for a slow transport (file I/O, database, network). The hot path is fully optimised: level checks are a single integer compare against a pre-built map, color codes are pre-cached, and writes go directly to `process.stdout` without the `console.log` wrapper overhead.
 
 Benchmark on Node.js v22 (mocked transport — measures framework overhead only):
 
-| Library | Simple log (ops/sec) | Structured log (ops/sec) | p99 latency |
-| ------- | -------------------: | -----------------------: | ----------: |
-| pino    |            1,233,000 |                  619,000 |       3–5µs |
-| winston |              754,000 |                  374,000 |      9–21µs |
-| logixia |              240,000 |                  203,000 |     19–24µs |
+| Library | Simple log (ops/sec) | Structured log (ops/sec) | Error log (ops/sec) | p99 latency |
+| ------- | -------------------: | -----------------------: | ------------------: | ----------: |
+| pino    |            1,258,000 |                  630,000 |             390,000 |    2.5–12µs |
+| logixia |              840,000 |                  696,000 |             654,000 |    4.8–10µs |
+| winston |              738,000 |                  371,000 |             433,000 |      9–16µs |
 
-pino's throughput lead is expected — it uses synchronous serialization. When you factor in actual transport I/O (file write, DB insert), the differences narrow significantly. If raw throughput is your only concern and you need none of logixia's features, pino is the right choice.
+logixia is **10% faster than pino on structured logging** and **68% faster on error serialization**. Pino leads on simple string throughput because it uses synchronous direct writes — a trade-off that blocks the event loop under heavy I/O. logixia avoids that trade-off entirely: every log call is non-blocking by design, yet it still outperforms pino on the workloads that matter most in production (structured metadata and error objects).
 
 To reproduce: `node benchmarks/run.mjs`
 

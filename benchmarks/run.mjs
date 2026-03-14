@@ -58,18 +58,36 @@ const ERR = new Error('Connection timeout');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function formatResults(bench) {
-  return bench.tasks
+  const tasks = bench.tasks
     .filter((t) => t.result?.state === 'completed')
     .map((t) => ({
-      Library: t.name,
-      'ops/sec': Math.round(t.result.throughput.mean).toLocaleString(),
-      'p99 (µs)': (t.result.latency.p99 * 1000).toFixed(1),
+      name: t.name,
+      opsPerSec: Math.round(t.result.throughput.mean),
+      p99: (t.result.latency.p99 * 1000).toFixed(1),
     }))
-    .sort(
-      (a, b) =>
-        Number.parseInt(b['ops/sec'].replace(/,/g, ''), 10) -
-        Number.parseInt(a['ops/sec'].replace(/,/g, ''), 10)
-    );
+    .sort((a, b) => b.opsPerSec - a.opsPerSec);
+
+  // Use pino as baseline for % comparisons (it's the reference point in the ecosystem)
+  const baseline = tasks.find((t) => t.name === 'pino') ?? tasks[0];
+
+  return tasks.map((t) => {
+    const ratio = t.opsPerSec / baseline.opsPerSec;
+    const diffPct = Math.round((ratio - 1) * 100);
+    let vsPino;
+    if (t.name === baseline.name) {
+      vsPino = '(baseline)';
+    } else if (diffPct >= 0) {
+      vsPino = `+${diffPct}% vs pino`;
+    } else {
+      vsPino = `${diffPct}% vs pino`;
+    }
+    return {
+      Library: t.name,
+      'ops/sec': t.opsPerSec.toLocaleString(),
+      'p99 (µs)': t.p99,
+      'vs pino': vsPino,
+    };
+  });
 }
 
 // ── Suites ───────────────────────────────────────────────────────────────────
@@ -130,7 +148,7 @@ async function run() {
     restore();
   }
 
-  console.log('='.repeat(60));
+  console.log('='.repeat(70));
   console.log('Results — higher ops/sec is better\n');
   for (const [name, rows] of Object.entries(allResults)) {
     console.log(name + ':');
@@ -140,12 +158,32 @@ async function run() {
           row.Library.padEnd(10) +
           row['ops/sec'].padStart(14) +
           ' ops/sec   p99: ' +
-          row['p99 (µs)'] +
-          'µs'
+          row['p99 (µs)'].padStart(6) +
+          'µs   ' +
+          row['vs pino']
       );
     }
     console.log('');
   }
+
+  // ── Summary: logixia vs pino head-to-head ──────────────────────────────────
+  console.log('='.repeat(70));
+  console.log('logixia vs pino — head-to-head summary:\n');
+  for (const [suiteName, rows] of Object.entries(allResults)) {
+    const logixia = rows.find((r) => r.Library === 'logixia');
+    const pino = rows.find((r) => r.Library === 'pino');
+    if (!logixia || !pino) continue;
+    const logixiaOps = Number.parseInt(logixia['ops/sec'].replace(/,/g, ''), 10);
+    const pinoOps = Number.parseInt(pino['ops/sec'].replace(/,/g, ''), 10);
+    const ratio = logixiaOps / pinoOps;
+    const pct = Math.round((ratio - 1) * 100);
+    const verdict =
+      ratio >= 1
+        ? `logixia is ${pct}% faster than pino`
+        : `logixia is ${Math.abs(pct)}% slower than pino`;
+    console.log(`  ${suiteName}: ${verdict}`);
+  }
+  console.log('');
 }
 
 run().catch((e) => {
