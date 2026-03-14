@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.1.4](https://github.com/Logixia/logixia/compare/v1.1.3...v1.1.4) (2026-03-14)
+
+### 📚 Documentation
+
+* add Timer API, CLI tool, and detailed configuration reference ([b7a1fc8](https://github.com/Logixia/logixia/commit/b7a1fc84108b01fe146e93291ba19d9408233306))
+
 ## [1.1.3](https://github.com/Logixia/logixia/compare/v1.1.2...v1.1.3) (2026-03-14)
 
 ### 📚 Documentation
