@@ -3,6 +3,16 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.2.0](https://github.com/Logixia/logixia/compare/v1.1.5...v1.2.0) (2026-03-14)
+
+### ✨ Features
+
+* expose sub-path exports for nest, transports, and search modules ([43e0f48](https://github.com/Logixia/logixia/commit/43e0f487f101943c0072eb3480efc0ce4c76231d))
+
+### 📚 Documentation
+
+* update URLs and branding references across README and docs ([d44561e](https://github.com/Logixia/logixia/commit/d44561e78d61968039881ef4a34ce281c71dd1e7))
+
 ## [1.1.5](https://github.com/Logixia/logixia/compare/v1.1.4...v1.1.5) (2026-03-14)
 
 ### 📚 Documentation
