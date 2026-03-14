@@ -1,9 +1,10 @@
-import {
+import type {
+  DatabaseTransportConfig,
   IAsyncTransport,
   IBatchTransport,
   TransportLogEntry,
-  DatabaseTransportConfig,
 } from "../types/transport.types";
+import { internalError } from "../utils/internal-log";
 
 export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
   public readonly name = "database";
@@ -12,6 +13,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
 
   private batch: TransportLogEntry[] = [];
   private flushTimer?: NodeJS.Timeout;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic database driver connection object
   private connection: any;
   private isConnected = false;
   private connectionPromise?: Promise<void>;
@@ -62,7 +64,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
           throw new Error(`Unsupported database type: ${this.config.type}`);
       }
     } catch (error) {
-      console.error("Database flush error:", error);
+      internalError("Database flush error", error);
       // Re-add failed entries to batch for retry
       this.batch.unshift(...entriesToFlush);
       throw error;
@@ -108,7 +110,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       this.isConnected = true;
     } catch (error) {
       this.isConnected = false;
-      throw new Error(`Database connection failed: ${error}`);
+      throw new Error(`Database connection failed: ${error}`, { cause: error });
     }
   }
 
@@ -129,7 +131,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       // Test connection
       await this.connection.db(this.config.database).admin().ping();
     } catch (error) {
-      throw new Error(`MongoDB connection failed: ${error}`);
+      throw new Error(`MongoDB connection failed: ${error}`, { cause: error });
     }
   }
 
@@ -141,6 +143,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
         );
       });
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pg.Client accepts any config shape
       const config: any = {
         connectionString: this.config.connectionString,
         host: this.config.host,
@@ -159,7 +162,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       await this.connection.connect();
       await this.createPostgreSQLTable();
     } catch (error) {
-      throw new Error(`PostgreSQL connection failed: ${error}`);
+      throw new Error(`PostgreSQL connection failed: ${error}`, { cause: error });
     }
   }
 
@@ -169,6 +172,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
         throw new Error("MySQL driver not installed. Run: npm install mysql2");
       });
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mysql2 accepts any config shape
       const config: any = {
         host: this.config.host,
         port: this.config.port,
@@ -185,7 +189,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
 
       await this.createMySQLTable();
     } catch (error) {
-      throw new Error(`MySQL connection failed: ${error}`);
+      throw new Error(`MySQL connection failed: ${error}`, { cause: error });
     }
   }
 
@@ -209,7 +213,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
 
       await this.createSQLiteTable();
     } catch (error) {
-      throw new Error(`SQLite connection failed: ${error}`);
+      throw new Error(`SQLite connection failed: ${error}`, { cause: error });
     }
   }
 
@@ -399,8 +403,8 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
 
   private setupFlushTimer(): void {
     this.flushTimer = setInterval(() => {
-      this.flush().catch((error) => {
-        console.error("Scheduled flush error:", error);
+      this.flush().catch((error: unknown) => {
+        internalError("Scheduled database flush error", error);
       });
     }, this.flushInterval);
   }
@@ -449,20 +453,22 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
 
     try {
       switch (this.config.type) {
-        case "mongodb":
+        case "mongodb": {
           const collection = this.connection
             .db(this.config.database)
             .collection(this.config.collection || "logs");
           return await collection.countDocuments();
+        }
 
         case "postgresql":
         case "mysql":
-        case "sqlite":
+        case "sqlite": {
           const tableName = this.config.table || "logs";
           const result = await this.connection.query(
             `SELECT COUNT(*) as count FROM ${tableName}`,
           );
           return result.rows?.[0]?.count || result[0]?.count || 0;
+        }
 
         default:
           return 0;

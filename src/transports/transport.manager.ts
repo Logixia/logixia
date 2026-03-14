@@ -1,22 +1,23 @@
-import { EventEmitter } from "events";
-import {
-  ITransport,
+import { EventEmitter } from "node:events";
+import * as readline from "node:readline";
+
+import type { LogEntry } from "../types";
+import type {
   IAsyncTransport,
-  TransportLogEntry,
+  IBatchTransport,
+  ITransport,
   TransportConfig,
-  TransportEvents,
+  TransportLogEntry,
   TransportMetrics,
-  TransportType,
-} from "../types/transport.types";
-import { LogEntry } from "../types";
+  TransportType} from "../types/transport.types";
+import { internalLog, internalWarn } from "../utils/internal-log";
 import { ConsoleTransport } from "./console.transport";
-import { FileTransport } from "./file.transport";
 import { DatabaseTransport } from "./database.transport";
-import { MixpanelTransport } from "./mixpanel.transport";
 import { DataDogTransport } from "./datadog.transport";
+import { FileTransport } from "./file.transport";
 import { GoogleAnalyticsTransport } from "./google-analytics.transport";
+import { MixpanelTransport } from "./mixpanel.transport";
 import { SegmentTransport } from "./segment.transport";
-import * as readline from "readline";
 
 export class TransportManager extends EventEmitter {
   private transports: Map<string, ITransport> = new Map();
@@ -43,10 +44,10 @@ export class TransportManager extends EventEmitter {
       const fileConfigs = Array.isArray(config.file)
         ? config.file
         : [config.file];
-      fileConfigs.forEach((fileConfig, index) => {
+      for (const [index, fileConfig] of fileConfigs.entries()) {
         const fileTransport = new FileTransport(fileConfig);
         this.addTransport(fileTransport, `file-${index}`);
-      });
+      }
     }
 
     // Setup database transports
@@ -54,10 +55,10 @@ export class TransportManager extends EventEmitter {
       const dbConfigs = Array.isArray(config.database)
         ? config.database
         : [config.database];
-      dbConfigs.forEach((dbConfig, index) => {
+      for (const [index, dbConfig] of dbConfigs.entries()) {
         const dbTransport = new DatabaseTransport(dbConfig);
         this.addTransport(dbTransport, `database-${index}`);
-      });
+      }
     }
 
     // Setup analytics transports
@@ -66,48 +67,48 @@ export class TransportManager extends EventEmitter {
         const mixpanelConfigs = Array.isArray(config.analytics.mixpanel)
           ? config.analytics.mixpanel
           : [config.analytics.mixpanel];
-        mixpanelConfigs.forEach((mixpanelConfig, index) => {
+        for (const [index, mixpanelConfig] of mixpanelConfigs.entries()) {
           const mixpanelTransport = new MixpanelTransport(mixpanelConfig);
           this.addTransport(mixpanelTransport, `mixpanel-${index}`);
-        });
+        }
       }
 
       if (config.analytics.datadog) {
         const datadogConfigs = Array.isArray(config.analytics.datadog)
           ? config.analytics.datadog
           : [config.analytics.datadog];
-        datadogConfigs.forEach((datadogConfig, index) => {
+        for (const [index, datadogConfig] of datadogConfigs.entries()) {
           const datadogTransport = new DataDogTransport(datadogConfig);
           this.addTransport(datadogTransport, `datadog-${index}`);
-        });
+        }
       }
 
       if (config.analytics.googleAnalytics) {
         const gaConfigs = Array.isArray(config.analytics.googleAnalytics)
           ? config.analytics.googleAnalytics
           : [config.analytics.googleAnalytics];
-        gaConfigs.forEach((gaConfig, index) => {
+        for (const [index, gaConfig] of gaConfigs.entries()) {
           const gaTransport = new GoogleAnalyticsTransport(gaConfig);
           this.addTransport(gaTransport, `google-analytics-${index}`);
-        });
+        }
       }
 
       if (config.analytics.segment) {
         const segmentConfigs = Array.isArray(config.analytics.segment)
           ? config.analytics.segment
           : [config.analytics.segment];
-        segmentConfigs.forEach((segmentConfig, index) => {
+        for (const [index, segmentConfig] of segmentConfigs.entries()) {
           const segmentTransport = new SegmentTransport(segmentConfig);
           this.addTransport(segmentTransport, `segment-${index}`);
-        });
+        }
       }
     }
 
     // Setup custom transports
     if (config.custom) {
-      config.custom.forEach((transport, index) => {
+      for (const [index, transport] of config.custom.entries()) {
         this.addTransport(transport, `custom-${index}`);
-      });
+      }
     }
   }
 
@@ -348,15 +349,15 @@ export class TransportManager extends EventEmitter {
     transport: ITransport,
   ): transport is IAsyncTransport {
     return (
-      "isReady" in transport && typeof (transport as any).isReady === "function"
+      "isReady" in transport && typeof (transport as Record<string, unknown>).isReady === "function"
     );
   }
 
   private isBatchTransport(
     transport: ITransport,
-  ): transport is import("../types/transport.types").IBatchTransport {
+  ): transport is IBatchTransport {
     return (
-      "flush" in transport && typeof (transport as any).flush === "function"
+      "flush" in transport && typeof (transport as Record<string, unknown>).flush === "function"
     );
   }
 
@@ -386,12 +387,12 @@ export class TransportManager extends EventEmitter {
   // Health check
   async healthCheck(): Promise<{
     healthy: boolean;
-    details: Record<string, any>;
+    details: Record<string, unknown>;
   }> {
-    const details: Record<string, any> = {};
+    const details: Record<string, unknown> = {};
     let healthy = true;
 
-    for (const [id, transport] of this.transports) {
+    for (const [id] of this.transports) {
       try {
         const isReady = await this.isTransportReady(id);
         details[id] = { ready: isReady, metrics: this.metrics.get(id) };
@@ -410,12 +411,12 @@ export class TransportManager extends EventEmitter {
   // Transport Level Configuration Methods
   enableLevelPrompting(): void {
     this.promptForLevels = true;
-    console.log("🔧 Transport level prompting enabled");
+    internalLog("Transport level prompting enabled");
   }
 
   disableLevelPrompting(): void {
     this.promptForLevels = false;
-    console.log("🔧 Transport level prompting disabled");
+    internalLog("Transport level prompting disabled");
   }
 
   async promptUserForTransportLevels(transportId: string): Promise<string[]> {
@@ -434,10 +435,10 @@ export class TransportManager extends EventEmitter {
         output: process.stdout,
       });
 
-      console.log(`\n📝 Configure log levels for transport '${transportId}'`);
-      console.log("Available levels:", availableLevels.join(", "));
-      console.log(
-        'Enter levels separated by commas (e.g., error,warn,info) or "all" for all levels:',
+      process.stdout.write(`\nConfigure log levels for transport '${transportId}'\n`);
+      process.stdout.write(`Available levels: ${availableLevels.join(", ")}\n`);
+      process.stdout.write(
+        'Enter levels separated by commas (e.g., error,warn,info) or "all" for all levels:\n',
       );
 
       rl.question("> ", (answer) => {
@@ -452,13 +453,10 @@ export class TransportManager extends EventEmitter {
             .filter((level) => availableLevels.includes(level));
 
           if (selectedLevels.length === 0) {
-            console.log("⚠️  No valid levels selected, using all levels");
+            internalWarn("No valid levels selected, using all levels");
             resolve(availableLevels);
           } else {
-            console.log(
-              `✅ Selected levels for ${transportId}:`,
-              selectedLevels.join(", "),
-            );
+            internalLog(`Selected levels for ${transportId}: ${selectedLevels.join(", ")}`);
             resolve(selectedLevels);
           }
         }
@@ -479,10 +477,7 @@ export class TransportManager extends EventEmitter {
 
   setTransportLevels(transportId: string, levels: string[]): void {
     this.transportLevelPreferences.set(transportId, levels);
-    console.log(
-      `🎯 Transport '${transportId}' configured for levels:`,
-      levels.join(", "),
-    );
+    internalLog(`Transport '${transportId}' configured for levels: ${levels.join(", ")}`);
   }
 
   getTransportLevels(transportId: string): string[] | undefined {
@@ -491,6 +486,6 @@ export class TransportManager extends EventEmitter {
 
   clearTransportLevelPreferences(): void {
     this.transportLevelPreferences.clear();
-    console.log("🧹 Transport level preferences cleared");
+    internalLog("Transport level preferences cleared");
   }
 }

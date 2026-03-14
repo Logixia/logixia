@@ -1,8 +1,11 @@
-import { Command } from 'commander';
-import fs from 'fs';
-import path from 'path';
+/* eslint-disable @typescript-eslint/no-explicit-any -- CLI tools process raw JSON log data */
+import fs from 'node:fs';
+import path from 'node:path';
+
 import chalk from 'chalk';
-import { safeParseLogs, formatAsTable } from '../utils';
+import { Command } from 'commander';
+
+import { formatAsTable,safeParseLogs } from '../utils';
 
 interface SearchCriteria {
   field?: string;
@@ -21,15 +24,16 @@ export async function searchLogs(raw: string, opts: any = {}) {
   const entries = safeParseLogs(raw);
   const criteria = parseQuery(opts.query || '');
   
-  const results = entries.filter((entry: any) => {
+  const results = entries.filter((entry: unknown) => {
+    const row = entry as Record<string, unknown>;
     if (criteria.field) {
       // Field-specific search
-      const fieldValue = entry[criteria.field];
+      const fieldValue = row[criteria.field];
       if (fieldValue === undefined) return false;
-      return fieldValue.toString().toLowerCase().includes(criteria.value.toLowerCase());
+      return String(fieldValue).toLowerCase().includes(criteria.value.toLowerCase());
     } else {
       // Search across all fields
-      const str = JSON.stringify(entry).toLowerCase();
+      const str = JSON.stringify(row).toLowerCase();
       return str.includes(criteria.value.toLowerCase());
     }
   });
@@ -37,7 +41,7 @@ export async function searchLogs(raw: string, opts: any = {}) {
   return results;
 }
 
-function formatSearchResults(results: any[], format: string, context: number): string {
+function formatSearchResults(results: any[], format: string, _context: number): string {
   if (format === 'json') {
     return JSON.stringify(results, null, 2);
   }
@@ -57,7 +61,8 @@ function formatSearchResults(results: any[], format: string, context: number): s
   
   return results.map((r, idx) => {
     const line = JSON.stringify(r);
-    return `${chalk.gray(`${idx + 1}:`)} ${line}`;
+    const prefix = chalk.gray(String(idx + 1) + ':');
+    return `${prefix} ${line}`;
   }).join('\n');
 }
 
@@ -83,5 +88,5 @@ export const searchCommand = new Command('search')
     const results = await searchLogs(raw, opts);
     
     console.log(chalk.bold(`\nFound ${results.length} matches`));
-    console.log(formatSearchResults(results, opts.format, parseInt(opts.context || '0')));
+    console.log(formatSearchResults(results, opts.format, Number.parseInt(opts.context || '0')));
   });

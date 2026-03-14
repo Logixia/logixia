@@ -1,11 +1,13 @@
-import {
-  TransportLogEntry,
+import type {
   MixpanelTransportConfig,
+  TransportLogEntry,
 } from "../types/transport.types";
-import {
-  AnalyticsTransport,
+import { internalError } from "../utils/internal-log";
+import type {
   AnalyticsEvent,
-  AnalyticsUser,
+  AnalyticsUser} from "./analytics.transport";
+import {
+  AnalyticsTransport
 } from "./analytics.transport";
 
 export class MixpanelTransport extends AnalyticsTransport {
@@ -28,7 +30,7 @@ export class MixpanelTransport extends AnalyticsTransport {
       await this.testConnection();
       this.isReady = true;
     } catch (error) {
-      console.error("Mixpanel transport initialization failed:", error);
+      internalError("Mixpanel transport initialization failed", error);
       throw error;
     }
   }
@@ -90,7 +92,7 @@ export class MixpanelTransport extends AnalyticsTransport {
     await this.makeRequest("/track", payload);
   }
 
-  private async makeRequest(endpoint: string, data: any): Promise<void> {
+  private async makeRequest(endpoint: string, data: unknown): Promise<void> {
     const url = `${this.mixpanelConfig.endpoint || this.baseUrl}${endpoint}`;
 
     try {
@@ -116,6 +118,7 @@ export class MixpanelTransport extends AnalyticsTransport {
     } catch (error) {
       throw new Error(
         `Failed to send data to Mixpanel: ${(error as Error).message}`,
+        { cause: error },
       );
     }
   }
@@ -169,7 +172,7 @@ export class MixpanelTransport extends AnalyticsTransport {
 
   public async setUserProperties(
     userId: string,
-    properties: Record<string, any>,
+    properties: Record<string, unknown>,
   ): Promise<void> {
     if (!this.mixpanelConfig.enableUserTracking) {
       return;
@@ -186,7 +189,7 @@ export class MixpanelTransport extends AnalyticsTransport {
 
   public async trackCustomEvent(
     eventName: string,
-    properties: Record<string, any> = {},
+    properties: Record<string, unknown> = {},
   ): Promise<void> {
     if (!this.mixpanelConfig.enableEventTracking) {
       return;

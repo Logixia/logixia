@@ -2,17 +2,19 @@
  * Trace ID middleware for NestJS integration
  */
 
-import { Injectable, NestMiddleware } from "@nestjs/common";
-import { Request, Response, NextFunction } from "express";
-import {
-  generateTraceId,
-  extractTraceId,
-  runWithTraceId,
-  getCurrentTraceId,
-} from "../utils/trace.utils";
-import type { TraceIdConfig } from "../types";
+import type { NestMiddleware } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
+import type { NextFunction,Request, Response } from "express";
 
-// Extend Express Request interface
+import type { TraceIdConfig } from "../types";
+import {
+  extractTraceId,
+  generateTraceId,
+  runWithTraceId,
+} from "../utils/trace.utils";
+
+// Extend Express Request interface — requires namespace to augment Express typings
+/* eslint-disable @typescript-eslint/no-namespace */
 declare global {
   namespace Express {
     interface Request {
@@ -21,6 +23,28 @@ declare global {
     }
   }
 }
+/* eslint-enable @typescript-eslint/no-namespace */
+
+/**
+ * Default headers checked when extracting an incoming trace ID, in priority order:
+ *   1. traceparent  — W3C Trace Context (OpenTelemetry standard)
+ *   2. x-trace-id   — common custom header
+ *   3. x-request-id — used by AWS ALB, NGINX, etc.
+ *   4. x-correlation-id — used by Azure / enterprise ESBs
+ *   5. trace-id     — legacy shorthand
+ *
+ * NOTE: for `traceparent` the format is `00-<traceId>-<spanId>-<flags>`.
+ * We store the full header value as-is so downstream systems can forward it
+ * unmodified. If you need only the 32-char traceId segment, configure a
+ * custom extractor via TraceIdConfig.extractor.
+ */
+const DEFAULT_TRACE_HEADERS = [
+  "traceparent",
+  "x-trace-id",
+  "x-request-id",
+  "x-correlation-id",
+  "trace-id",
+];
 
 @Injectable()
 export class TraceMiddleware implements NestMiddleware {
@@ -30,7 +54,7 @@ export class TraceMiddleware implements NestMiddleware {
       generator: generateTraceId,
       contextKey: "traceId",
       extractor: {
-        header: ["x-trace-id", "x-request-id", "trace-id"],
+        header: DEFAULT_TRACE_HEADERS,
         query: ["traceId", "trace_id"],
       },
       ...config,
@@ -97,7 +121,7 @@ export function traceMiddleware(config?: TraceIdConfig) {
     generator: generateTraceId,
     contextKey: "traceId",
     extractor: {
-      header: ["x-trace-id", "x-request-id", "trace-id"],
+      header: DEFAULT_TRACE_HEADERS,
       query: ["traceId", "trace_id"],
     },
     ...config,

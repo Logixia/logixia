@@ -2,14 +2,16 @@
  * Trace ID utilities for Logitron
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import { v4 as uuidv4 } from "uuid";
-import { AsyncLocalStorage } from "async_hooks";
-import { TraceIdConfig, TraceIdExtractorConfig } from "../types";
+
+import type { TraceIdConfig, TraceIdExtractorConfig } from "../types";
 
 // Async local storage for trace context
 export const traceStorage = new AsyncLocalStorage<{
   traceId: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }>();
 
 /**
@@ -28,10 +30,16 @@ export function getCurrentTraceId(): string | undefined {
 }
 
 /**
- * Set trace ID in async context
+ * Set trace ID in the CURRENT async context without starting a new one.
+ *
+ * ⚠️  Uses `enterWith()` which mutates the context for the current async
+ * execution and ALL futures spawned from it. Prefer `runWithTraceId()` when
+ * you can wrap the operation in a callback, as it creates a properly-scoped
+ * child context. Use `setTraceId()` only when you cannot use `runWithTraceId()`
+ * (e.g., inside a class constructor or a non-callback async entry point).
  */
-export function setTraceId(traceId: string, data?: Record<string, any>): void {
-  const currentStore = traceStorage.getStore() || {};
+export function setTraceId(traceId: string, data?: Record<string, unknown>): void {
+  const currentStore = traceStorage.getStore() ?? {};
   traceStorage.enterWith({ ...currentStore, traceId, ...data });
 }
 
@@ -41,25 +49,34 @@ export function setTraceId(traceId: string, data?: Record<string, any>): void {
 export function runWithTraceId<T>(
   traceId: string,
   fn: () => T,
-  data?: Record<string, any>,
+  data?: Record<string, unknown>,
 ): T {
   return traceStorage.run({ traceId, ...data }, fn);
+}
+
+/** Shape that extractTraceId accepts (Express-compatible) */
+interface RequestLike {
+  headers?: Record<string, string | string[] | undefined>;
+  query?: Record<string, string | string[] | undefined>;
+  body?: Record<string, string | undefined>;
+  params?: Record<string, string | undefined>;
 }
 
 /**
  * Extract trace ID from request using configuration
  */
 export function extractTraceId(
-  request: any,
+  request: unknown,
   config: TraceIdExtractorConfig,
 ): string | undefined {
+  const req = request as RequestLike;
   // Try headers first
   if (config.header) {
     const headers = Array.isArray(config.header)
       ? config.header
       : [config.header];
     for (const header of headers) {
-      const value = request.headers?.[header.toLowerCase()];
+      const value = req.headers?.[header.toLowerCase()];
       if (value) {
         return Array.isArray(value) ? value[0] : value;
       }
@@ -70,7 +87,7 @@ export function extractTraceId(
   if (config.query) {
     const queries = Array.isArray(config.query) ? config.query : [config.query];
     for (const query of queries) {
-      const value = request.query?.[query];
+      const value = req.query?.[query];
       if (value) {
         return Array.isArray(value) ? value[0] : value;
       }
@@ -81,7 +98,7 @@ export function extractTraceId(
   if (config.body) {
     const bodyFields = Array.isArray(config.body) ? config.body : [config.body];
     for (const field of bodyFields) {
-      const value = request.body?.[field];
+      const value = req.body?.[field];
       if (value) {
         return value;
       }
@@ -94,7 +111,7 @@ export function extractTraceId(
       ? config.params
       : [config.params];
     for (const param of paramFields) {
-      const value = request.params?.[param];
+      const value = req.params?.[param];
       if (value) {
         return value;
       }
@@ -105,35 +122,58 @@ export function extractTraceId(
 }
 
 /**
+ * Default headers checked for incoming trace ID propagation, in priority order:
+ *   traceparent (W3C/OTel) → x-trace-id → x-request-id → x-correlation-id → trace-id
+ */
+export const DEFAULT_TRACE_HEADERS = [
+  "traceparent",
+  "x-trace-id",
+  "x-request-id",
+  "x-correlation-id",
+  "trace-id",
+];
+
+/**
  * Create trace ID middleware for Express/NestJS
  */
 export function createTraceMiddleware(config: TraceIdConfig) {
-  return (req: any, res: any, next: any) => {
+  const resolvedConfig: TraceIdConfig = {
+    extractor: {
+      header: DEFAULT_TRACE_HEADERS,
+      query: ["traceId", "trace_id"],
+    },
+    ...config,
+  };
+
+  return (req: unknown, res: unknown, next: () => void) => {
     let traceId: string | undefined;
 
-    // Try to extract existing trace ID
-    if (config.extractor) {
-      traceId = extractTraceId(req, config.extractor);
+    // Try to extract existing trace ID from incoming request
+    if (resolvedConfig.extractor) {
+      traceId = extractTraceId(req, resolvedConfig.extractor);
     }
 
-    // Generate new trace ID if not found
+    // Generate new trace ID if none was provided by the caller
     if (!traceId) {
-      traceId = config.generator ? config.generator() : generateTraceId();
+      traceId = resolvedConfig.generator
+        ? resolvedConfig.generator()
+        : generateTraceId();
     }
 
-    // Set trace ID in request
-    req.traceId = traceId;
+    // Set trace ID on the request object and propagate back in response header
+    (req as Record<string, unknown>).traceId = traceId;
+    (res as { setHeader: (k: string, v: string) => void }).setHeader("X-Trace-Id", traceId);
 
-    // Set response header
-    res.setHeader("X-Trace-Id", traceId);
-
-    // Run with trace context
+    // Run the rest of the middleware/handler chain inside the trace context.
+    // AsyncLocalStorage.run() propagates the context through all awaited async
+    // operations spawned within the callback, so every logger.log() call
+    // will find the same traceId via getCurrentTraceId().
     runWithTraceId(
       traceId,
       () => {
         next();
       },
-      { requestId: req.id || generateTraceId() },
+      { requestId: (req as Record<string, unknown>)['id'] as string || (req as Record<string, unknown>)['requestId'] as string || generateTraceId() },
     );
   };
 }

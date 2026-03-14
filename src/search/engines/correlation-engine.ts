@@ -2,13 +2,13 @@
  * Correlation engine for finding relationships between log entries
  */
 
-import { LogEntry } from '../../types';
-import {
+import type { LogEntry } from '../../types';
+import type {
   CorrelatedLogs,
+  LogCorrelationSummary,
   RelatedLog,
   RelationshipType,
   TimelineEvent,
-  LogCorrelationSummary,
 } from '../types';
 
 /**
@@ -135,7 +135,7 @@ export class CorrelationEngine {
     );
 
     for (let i = 0; i < sortedLogs.length; i++) {
-      const log = sortedLogs[i];
+      const log = sortedLogs[i] as LogEntry; // noUncheckedIndexedAccess: guarded by loop condition
       const eventType = this.determineEventType(log, sortedLogs, i);
       
       const event: TimelineEvent = {
@@ -286,7 +286,7 @@ export class CorrelationEngine {
       const cascade = this.buildErrorCascade(error, logs);
       
       if (cascade.length > 1) {
-        const key = `${error.timestamp}_${error.message.substring(0, 20)}`;
+        const key = `${error.timestamp}_${error.message.slice(0, 20)}`;
         correlations.set(key, cascade);
       }
     }
@@ -408,8 +408,8 @@ export class CorrelationEngine {
 
   private determineEventType(
     log: LogEntry,
-    allLogs: LogEntry[],
-    index: number
+    _allLogs: LogEntry[],
+    _index: number
   ): TimelineEvent['eventType'] {
     const message = log.message.toLowerCase();
 
@@ -460,7 +460,7 @@ export class CorrelationEngine {
 
       result.set(key, {
         correlationKey: key,
-        traceId: type === 'trace' ? key : undefined,
+        ...(type === 'trace' ? { traceId: key } : {}),
         logs,
         timeline,
         summary,
@@ -481,8 +481,8 @@ export class CorrelationEngine {
       const sorted = [...logs].sort((a, b) =>
         new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
       );
-      const start = new Date(sorted[0].timestamp).getTime();
-      const end = new Date(sorted[sorted.length - 1].timestamp).getTime();
+      const start = new Date((sorted[0] as LogEntry).timestamp).getTime();
+      const end = new Date((sorted[sorted.length - 1] as LogEntry).timestamp).getTime();
       duration = end - start;
     }
 
@@ -491,7 +491,7 @@ export class CorrelationEngine {
       errorCount,
       warningCount,
       services,
-      duration,
+      ...(duration !== undefined ? { duration } : {}),
     };
   }
 }

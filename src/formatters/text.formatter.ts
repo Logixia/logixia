@@ -2,7 +2,8 @@
  * Text formatter for Logixia
  */
 
-import { ILogFormatter, LogEntry, LogLevel } from "../types";
+import type { ILogFormatter, LogEntry} from "../types";
+import { LogLevel } from "../types";
 
 export class TextFormatter implements ILogFormatter {
   private colorize: boolean;
@@ -125,7 +126,7 @@ export class TextFormatter implements ILogFormatter {
     }
   }
 
-  private formatPayload(payload: Record<string, any>): string {
+  private formatPayload(payload: Record<string, unknown>): string {
     try {
       // Handle simple objects
       if (Object.keys(payload).length === 1) {

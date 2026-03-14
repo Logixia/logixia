@@ -1,20 +1,23 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- CLI tools process raw JSON log data */
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { Command } from 'commander';
-import fs from 'fs';
-import path from 'path';
+
 import { formatAsTable, safeParseLogs } from '../utils';
 
 function parseDurationToMs(input?: string) {
-  if (!input) return undefined;
+  if (!input) return;
   const m = input.match(/^(\d+)([smhd])$/i);
-  if (!m) return undefined;
-  const n = parseInt(m[1]!, 10);
+  if (!m) return;
+  const n = Number.parseInt(m[1]!, 10);
   const unit = m[2]!.toLowerCase();
   switch (unit) {
     case 's': return n * 1000;
     case 'm': return n * 60 * 1000;
     case 'h': return n * 60 * 60 * 1000;
     case 'd': return n * 24 * 60 * 60 * 1000;
-    default: return undefined;
+    default: return;
   }
 }
 
@@ -27,15 +30,16 @@ export async function analyzeFileContents(raw: string, opts: any = {}) {
   const durMs = parseDurationToMs(opts.last);
   if (durMs) {
     const cutoff = Date.now() - durMs;
-    filtered = filtered.filter((e: any) => {
-      const ts = e.timestamp ? new Date(e.timestamp).getTime() : undefined;
+    filtered = filtered.filter((e: unknown) => {
+      const row = e as Record<string, unknown>;
+      const ts = row['timestamp'] ? new Date(row['timestamp'] as string).getTime() : undefined;
       if (!ts) return false;
       return ts >= cutoff;
     });
   }
 
   if (opts.level) {
-    filtered = filtered.filter((e: any) => (e.level || '').toLowerCase() === opts.level.toLowerCase());
+    filtered = filtered.filter((e: unknown) => (((e as Record<string, unknown>)['level'] ?? '') as string).toLowerCase() === opts.level.toLowerCase());
   }
 
   const byLevel: Record<string, number> = {};

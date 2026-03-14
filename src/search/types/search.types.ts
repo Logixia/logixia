@@ -2,7 +2,7 @@
  * Type definitions for intelligent log search system
  */
 
-import { LogEntry } from '../../types';
+import type { LogEntry } from '../../types';
 
 /**
  * Search filter options
@@ -18,7 +18,7 @@ export interface SearchFilters {
   excludePatterns?: string[];
   minSeverity?: number;
   hasError?: boolean;
-  customFields?: Record<string, any>;
+  customFields?: Record<string, unknown>;
 }
 
 /**

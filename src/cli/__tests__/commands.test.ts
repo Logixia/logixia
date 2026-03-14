@@ -1,5 +1,5 @@
 // Test the core logic without chalk/UI dependencies
-import { safeParseLogs, formatAsTable } from '../utils';
+import { formatAsTable,safeParseLogs } from '../utils';
 
 describe('CLI Utils', () => {
   const sampleLogs = `
@@ -57,7 +57,7 @@ describe('CLI Utils', () => {
   describe('log filtering', () => {
     test('filters by level', () => {
       const logs = safeParseLogs(sampleLogs);
-      const errors = logs.filter((l: any) => l.level === 'error');
+      const errors = logs.filter((l: unknown) => l.level === 'error');
       
       expect(errors).toHaveLength(1);
       expect(errors[0].message).toBe('Test 2');
@@ -65,14 +65,14 @@ describe('CLI Utils', () => {
 
     test('filters by user_id', () => {
       const logs = safeParseLogs(sampleLogs);
-      const user123Logs = logs.filter((l: any) => l.user_id === '123');
+      const user123Logs = logs.filter((l: unknown) => l.user_id === '123');
       
       expect(user123Logs).toHaveLength(2);
     });
 
     test('searches across fields', () => {
       const logs = safeParseLogs(sampleLogs);
-      const searchResults = logs.filter((l: any) => 
+      const searchResults = logs.filter((l: unknown) => 
         JSON.stringify(l).toLowerCase().includes('test')
       );
       
@@ -93,9 +93,9 @@ describe('CLI Utils', () => {
     test('extracts specific fields', () => {
       const logs = safeParseLogs(sampleLogs);
       const fields = ['level', 'message'];
-      const extracted = logs.map((log: any) => {
+      const extracted = logs.map((log: unknown) => {
         const obj: any = {};
-        fields.forEach(f => { if (log[f]) obj[f] = log[f]; });
+        for (const f of fields) { if (log[f]) obj[f] = log[f]; }
         return obj;
       });
       

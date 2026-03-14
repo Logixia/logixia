@@ -6,9 +6,9 @@ export interface HttpRequest {
   method: string;
   url: string;
   headers: Record<string, string | string[]>;
-  query?: Record<string, any>;
-  params?: Record<string, any>;
-  body?: any;
+  query?: Record<string, unknown>;
+  params?: Record<string, unknown>;
+  body?: unknown;
   ip?: string;
   userAgent?: string;
   timestamp: number;
@@ -17,7 +17,7 @@ export interface HttpRequest {
 export interface HttpResponse {
   statusCode: number;
   headers: Record<string, string | string[]>;
-  body?: any;
+  body?: unknown;
   timestamp: number;
   contentLength?: number;
 }
@@ -25,7 +25,7 @@ export interface HttpResponse {
 export interface HttpError extends Error {
   statusCode?: number;
   code?: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
 }
 
 export interface RequestTiming {
