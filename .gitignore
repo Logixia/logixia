@@ -1,5 +1,9 @@
 # Dependencies
 node_modules/
+# Lockfile — this is a library, not an app. Committing the lockfile
+# causes CI failures: generated on ARM (mac) but CI runs on linux-x64,
+# so platform-specific rolldown native bindings are missing from it.
+package-lock.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
