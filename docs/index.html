@@ -1,1224 +1,932 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>logixia — TypeScript Logging, Done Right</title>
-    <meta name="description" content="logixia is a TypeScript-first logger with async multi-transport (console, file, database, analytics), NestJS module, request tracing, built-in search, and zero-dep OpenTelemetry.">
-    <meta name="keywords" content="logixia, typescript logger, winston alternative, pino alternative, nestjs logger, structured logging, multi-transport, opentelemetry logging, nodejs logger">
-    <link rel="canonical" href="https://logixia.github.io/logixia/">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>logixia — TypeScript Logging, Done Right</title>
+  <meta name="description" content="logixia is a TypeScript-first logger with async multi-transport (console, file, database, analytics), NestJS module, request tracing, built-in search, and zero-dep OpenTelemetry.">
+  <meta name="keywords" content="logixia, typescript logger, winston alternative, pino alternative, nestjs logger, structured logging, multi-transport, opentelemetry, nodejs logger">
+  <meta name="author" content="Sanjeev Sharma">
+  <link rel="canonical" href="https://webcoderspeed.github.io/logixia/">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://webcoderspeed.github.io/logixia/">
+  <meta property="og:title" content="logixia — TypeScript Logging, Done Right">
+  <meta property="og:description" content="Async multi-transport, NestJS module, request tracing, built-in search, and zero-dep OpenTelemetry — all in one logger.">
+  <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"logixia","description":"TypeScript-first logger with async multi-transport, NestJS module, request tracing, built-in search, and zero-dep OpenTelemetry","url":"https://webcoderspeed.github.io/logixia/","downloadUrl":"https://www.npmjs.com/package/logixia","applicationCategory":"DeveloperApplication","operatingSystem":["Node.js"],"author":{"@type":"Person","name":"Sanjeev Sharma"},"license":"MIT"}</script>
 
-    <!-- Open Graph -->
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="https://logixia.github.io/logixia/">
-    <meta property="og:title" content="logixia — TypeScript Logging, Done Right">
-    <meta property="og:description" content="TypeScript-first logger with async multi-transport, NestJS module, request tracing, and built-in search.">
-    <meta property="og:image" content="https://logixia.github.io/logixia/og-image.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/typescript.min.js"></script>
 
-    <!-- Twitter Card -->
-    <meta property="twitter:card" content="summary_large_image">
-    <meta property="twitter:url" content="https://logixia.github.io/logixia/">
-    <meta property="twitter:title" content="logixia — TypeScript Logging, Done Right">
-    <meta property="twitter:description" content="TypeScript-first logger with async multi-transport, NestJS module, request tracing, and built-in search.">
-    <meta property="twitter:image" content="https://logixia.github.io/logixia/og-image.png">
+  <script>
+    tailwind.config = { darkMode: 'class' }
+  </script>
 
-    <!-- JSON-LD SoftwareApplication Schema -->
-    <script type="application/ld+json">
-    {
-        "@context": "https://schema.org/",
-        "@type": "SoftwareApplication",
-        "name": "logixia",
-        "description": "TypeScript-first logger with async multi-transport (console, file, database, analytics), NestJS module, request tracing, built-in search, and zero-dep OpenTelemetry.",
-        "url": "https://github.com/Logixia/logixia",
-        "applicationCategory": "DeveloperApplication",
-        "offers": {
-            "@type": "Offer",
-            "price": "0",
-            "priceCurrency": "USD"
-        },
-        "author": {
-            "@type": "Organization",
-            "name": "Logixia"
-        },
-        "version": "1.1.2",
-        "license": "MIT"
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: #09090b; color: #fafafa; overflow-x: hidden; }
+
+    .hero-grid {
+      background-image: linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 64px 64px;
     }
-    </script>
-
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            background-color: #080810;
-            color: #e5e7eb;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-            overflow-x: hidden;
-        }
-
-        html {
-            scroll-behavior: smooth;
-        }
-
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: #0f0f17;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: #10b981;
-            border-radius: 4px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: #14b8a6;
-        }
-
-        /* Animated mesh gradient hero background */
-        @keyframes gradientShift {
-            0%, 100% {
-                background-position: 0% 50%;
-            }
-            50% {
-                background-position: 100% 50%;
-            }
-        }
-
-        @keyframes blob1 {
-            0%, 100% {
-                transform: translate(0px, 0px) scale(1);
-            }
-            25% {
-                transform: translate(20px, -30px) scale(1.1);
-            }
-            50% {
-                transform: translate(-20px, 20px) scale(0.9);
-            }
-            75% {
-                transform: translate(30px, 10px) scale(1.05);
-            }
-        }
-
-        @keyframes blob2 {
-            0%, 100% {
-                transform: translate(0px, 0px) scale(1);
-            }
-            25% {
-                transform: translate(-30px, 20px) scale(0.95);
-            }
-            50% {
-                transform: translate(20px, -20px) scale(1.1);
-            }
-            75% {
-                transform: translate(-20px, -30px) scale(0.9);
-            }
-        }
-
-        @keyframes blob3 {
-            0%, 100% {
-                transform: translate(0px, 0px) scale(1);
-            }
-            25% {
-                transform: translate(20px, 20px) scale(1.05);
-            }
-            50% {
-                transform: translate(-30px, -20px) scale(0.95);
-            }
-            75% {
-                transform: translate(10px, 30px) scale(1.1);
-            }
-        }
-
-        .hero-gradient {
-            position: relative;
-            background: linear-gradient(135deg, #080810 0%, #0f1117 100%);
-            overflow: hidden;
-        }
-
-        .blob {
-            position: absolute;
-            border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
-            filter: blur(40px);
-            opacity: 0.15;
-        }
-
-        .blob1 {
-            width: 400px;
-            height: 400px;
-            background: linear-gradient(135deg, #10b981 0%, #14b8a6 100%);
-            top: -100px;
-            left: 10%;
-            animation: blob1 7s infinite;
-        }
-
-        .blob2 {
-            width: 350px;
-            height: 350px;
-            background: linear-gradient(135deg, #14b8a6 0%, #0891b2 100%);
-            top: 200px;
-            right: 5%;
-            animation: blob2 8s infinite;
-        }
-
-        .blob3 {
-            width: 380px;
-            height: 380px;
-            background: linear-gradient(135deg, #10b981 0%, #0891b2 100%);
-            bottom: -150px;
-            left: 40%;
-            animation: blob3 9s infinite;
-        }
-
-        /* Fade in up animation */
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .fade-in-up {
-            animation: fadeInUp 0.8s ease-out forwards;
-        }
-
-        .fade-in-up.is-visible {
-            animation: fadeInUp 0.8s ease-out;
-        }
-
-        /* Counter animation */
-        @keyframes countUp {
-            from {
-                opacity: 0;
-            }
-            to {
-                opacity: 1;
-            }
-        }
-
-        .counter {
-            animation: countUp 0.5s ease-out;
-        }
-
-        /* Glassmorphism cards */
-        .card-glass {
-            background: rgba(30, 30, 48, 0.4);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(16, 185, 129, 0.1);
-            border-radius: 16px;
-            transition: all 0.3s ease;
-        }
-
-        .card-glass:hover {
-            border-color: rgba(16, 185, 129, 0.3);
-            background: rgba(30, 30, 48, 0.6);
-            transform: translateY(-4px);
-            box-shadow: 0 20px 40px rgba(16, 185, 129, 0.1);
-        }
-
-        /* Gradient text */
-        .gradient-text {
-            background: linear-gradient(135deg, #10b981 0%, #14b8a6 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .gradient-text-subtle {
-            background: linear-gradient(135deg, #14b8a6 0%, #06b6d4 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        /* Tab styles */
-        .tab-button {
-            padding: 12px 24px;
-            border: none;
-            background: transparent;
-            color: #9ca3af;
-            cursor: pointer;
-            border-bottom: 2px solid transparent;
-            transition: all 0.3s ease;
-            font-size: 14px;
-            font-weight: 500;
-        }
-
-        .tab-button.active {
-            color: #10b981;
-            border-bottom-color: #10b981;
-        }
-
-        .tab-button:hover:not(.active) {
-            color: #d1d5db;
-        }
-
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        /* Code block styling */
-        .code-block {
-            background: #0f1117;
-            border: 1px solid rgba(16, 185, 129, 0.1);
-            border-radius: 12px;
-            padding: 24px;
-            overflow-x: auto;
-            font-family: 'Fira Code', 'Courier New', monospace;
-            font-size: 14px;
-            line-height: 1.6;
-        }
-
-        .code-block code {
-            color: #e5e7eb;
-        }
-
-        .hljs {
-            background: transparent !important;
-            color: #e5e7eb;
-        }
-
-        /* Animated bars */
-        @keyframes slideIn {
-            from {
-                width: 0;
-            }
-            to {
-                width: var(--bar-width);
-            }
-        }
-
-        .perf-bar {
-            animation: slideIn 1s ease-out forwards;
-            animation-delay: var(--delay);
-        }
-
-        /* Button styles */
-        .btn-primary {
-            background: linear-gradient(135deg, #10b981 0%, #14b8a6 100%);
-            color: #080810;
-            padding: 12px 32px;
-            border-radius: 8px;
-            border: none;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 16px;
-            transition: all 0.3s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 20px 40px rgba(16, 185, 129, 0.3);
-        }
-
-        .btn-secondary {
-            background: transparent;
-            color: #10b981;
-            padding: 12px 32px;
-            border: 2px solid #10b981;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 16px;
-            transition: all 0.3s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .btn-secondary:hover {
-            background: rgba(16, 185, 129, 0.1);
-            transform: translateY(-2px);
-        }
-
-        /* Sticky nav */
-        nav {
-            position: sticky;
-            top: 0;
-            z-index: 1000;
-            background: rgba(8, 8, 16, 0.8);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(16, 185, 129, 0.1);
-        }
-
-        /* SVG icon styling */
-        .icon {
-            display: inline-block;
-            width: 24px;
-            height: 24px;
-            stroke-width: 2;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-            fill: none;
-        }
-
-        .icon-check {
-            color: #10b981;
-        }
-
-        .icon-x {
-            color: #ef4444;
-        }
-
-        /* Comparison table */
-        .compare-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .compare-table th,
-        .compare-table td {
-            padding: 16px;
-            text-align: left;
-            border-bottom: 1px solid rgba(16, 185, 129, 0.1);
-        }
-
-        .compare-table th {
-            background: rgba(16, 185, 129, 0.05);
-            color: #10b981;
-            font-weight: 600;
-        }
-
-        .compare-table tr:hover {
-            background: rgba(16, 185, 129, 0.05);
-        }
-
-        /* Scrollspy active state */
-        .nav-link.active {
-            color: #10b981;
-        }
-
-        /* Stat numbers */
-        .stat-number {
-            font-size: 32px;
-            font-weight: 700;
-            background: linear-gradient(135deg, #10b981 0%, #14b8a6 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        /* Feature icons background */
-        .icon-bg {
-            width: 48px;
-            height: 48px;
-            background: rgba(16, 185, 129, 0.1);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 16px;
-        }
-
-        .icon-bg svg {
-            color: #10b981;
-        }
-
-        /* Copy button */
-        .copy-btn {
-            background: none;
-            border: none;
-            color: #10b981;
-            cursor: pointer;
-            padding: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s ease;
-        }
-
-        .copy-btn:hover {
-            color: #14b8a6;
-            transform: scale(1.1);
-        }
-
-        .copy-btn.copied {
-            color: #06b6d4;
-        }
-
-        /* Before/after comparison */
-        .before-after {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 32px;
-            margin: 40px 0;
-        }
-
-        @media (max-width: 768px) {
-            .before-after {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        .before-box, .after-box {
-            background: rgba(30, 30, 48, 0.4);
-            border: 1px solid rgba(16, 185, 129, 0.1);
-            border-radius: 12px;
-            padding: 24px;
-        }
-
-        .before-box {
-            border-color: rgba(239, 68, 68, 0.2);
-        }
-
-        .after-box {
-            border-color: rgba(16, 185, 129, 0.2);
-        }
-
-        .before-label, .after-label {
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 12px;
-        }
-
-        .before-label {
-            color: #ef4444;
-        }
-
-        .after-label {
-            color: #10b981;
-        }
-
-        .before-code, .after-code {
-            font-family: 'Fira Code', monospace;
-            font-size: 14px;
-            line-height: 1.8;
-        }
-
-        .before-code {
-            color: #9ca3af;
-        }
-
-        .after-code {
-            color: #d1d5db;
-        }
-    </style>
+    .hero-radial { background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(168,85,247,0.16), transparent 70%); }
+
+    .grad-text {
+      background: linear-gradient(135deg, #c084fc 0%, #818cf8 50%, #38bdf8 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .grad-text-purple {
+      background: linear-gradient(135deg, #c084fc, #a78bfa);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+
+    .glass { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); }
+    .glass-hover { transition: all 0.25s ease; }
+    .glass-hover:hover { background: rgba(255,255,255,0.06); border-color: rgba(168,85,247,0.3); transform: translateY(-2px); box-shadow: 0 16px 48px rgba(168,85,247,0.08); }
+
+    .nav-blur { background: rgba(9,9,11,0.82); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.06); }
+
+    .code-block { background: #0d1117; border: 1px solid rgba(255,255,255,0.09); border-radius: 12px; overflow: hidden; }
+    .code-header { background: rgba(255,255,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.07); padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+    pre code.hljs { background: transparent !important; padding: 20px 22px !important; font-family: 'JetBrains Mono', monospace !important; font-size: 13px !important; line-height: 1.75 !important; }
+
+    .copy-btn { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1); color: #71717a; padding: 3px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+    .copy-btn:hover { background: rgba(168,85,247,0.15); border-color: rgba(168,85,247,0.35); color: #c084fc; }
+    .copy-btn.copied { background: rgba(34,197,94,0.15); border-color: rgba(34,197,94,0.35); color: #4ade80; }
+
+    .tab-btn { padding: 7px 15px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; color: #52525b; border: 1px solid transparent; font-family: inherit; background: transparent; }
+    .tab-btn.active { background: rgba(168,85,247,0.12); border-color: rgba(168,85,247,0.28); color: #c084fc; }
+    .tab-btn:hover:not(.active) { color: #a1a1aa; background: rgba(255,255,255,0.04); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 100px; font-size: 12px; font-weight: 500; }
+
+    .reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.55s ease, transform 0.55s ease; }
+    .reveal.in { opacity: 1; transform: translateY(0); }
+    .d1 { transition-delay: 0.08s; } .d2 { transition-delay: 0.16s; } .d3 { transition-delay: 0.24s; }
+    .d4 { transition-delay: 0.32s; } .d5 { transition-delay: 0.40s; }
+
+    .btn-primary { background: linear-gradient(135deg, #9333ea 0%, #6366f1 100%); border: none; border-radius: 10px; color: white; font-weight: 600; cursor: pointer; transition: opacity 0.2s, transform 0.2s; font-family: inherit; }
+    .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+
+    .compare-yes { color: #4ade80; }
+    .compare-no { color: #f87171; }
+    .compare-partial { color: #fbbf24; }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+    .stat-num { font-size: 2.75rem; font-weight: 900; line-height: 1; letter-spacing: -0.03em; }
+    .feature-icon { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .grad-border { position: relative; }
+    .grad-border::before { content: ''; position: absolute; inset: -1px; border-radius: 13px; background: linear-gradient(135deg, rgba(168,85,247,0.45), rgba(99,102,241,0.45), rgba(14,165,233,0.4)); z-index: -1; pointer-events: none; }
+
+    /* Log level colors */
+    .log-debug { color: #94a3b8; }
+    .log-info { color: #60a5fa; }
+    .log-warn { color: #fbbf24; }
+    .log-error { color: #f87171; }
+    .log-fatal { color: #c084fc; }
+
+    /* Transport badge colors */
+    .t-console { background: rgba(99,102,241,0.12); color: #818cf8; border: 1px solid rgba(99,102,241,0.2); }
+    .t-file { background: rgba(245,158,11,0.12); color: #f59e0b; border: 1px solid rgba(245,158,11,0.2); }
+    .t-db { background: rgba(34,197,94,0.12); color: #4ade80; border: 1px solid rgba(34,197,94,0.2); }
+    .t-analytics { background: rgba(236,72,153,0.12); color: #f472b6; border: 1px solid rgba(236,72,153,0.2); }
+    .t-webhook { background: rgba(6,182,212,0.12); color: #22d3ee; border: 1px solid rgba(6,182,212,0.2); }
+
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .anim-1 { animation: fadeUp 0.55s ease forwards; }
+    .anim-2 { animation: fadeUp 0.55s 0.1s ease forwards; opacity: 0; }
+    .anim-3 { animation: fadeUp 0.55s 0.2s ease forwards; opacity: 0; }
+    .anim-4 { animation: fadeUp 0.55s 0.3s ease forwards; opacity: 0; }
+  </style>
 </head>
 <body>
-    <!-- Navigation -->
-    <nav class="border-b border-gray-800">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-16">
-                <!-- Logo -->
-                <div class="flex items-center gap-2">
-                    <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2">
-                        <path d="M12 2v20M7 7h10M7 17h10M2 12h20"></path>
-                    </svg>
-                    <span class="text-xl font-bold gradient-text">logixia</span>
-                </div>
 
-                <!-- Links -->
-                <div class="flex items-center gap-6">
-                    <div class="flex items-center gap-2 px-3 py-1 bg-gray-900 rounded-full text-sm">
-                        <span class="text-gray-400">v</span>
-                        <span class="text-gray-300 font-semibold">1.1.2</span>
-                    </div>
-
-                    <a href="https://www.npmjs.com/package/logixia" target="_blank" rel="noopener noreferrer" class="text-gray-400 hover:text-gray-200 transition">
-                        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M11.6915026,0.00674995651 C5.50636508,0.00674995651 0.606989175,4.8863036 0.606989175,11.08 C0.606989175,17.2727705 5.50636508,22.1534241 11.6915026,22.1534241 C17.8769621,22.1534241 22.7720164,17.2727705 22.7720164,11.08 C22.7720164,4.8863036 17.8769621,0.00674995651 11.6915026,0.00674995651 Z M6.50636508,16.6595745 L6.50636508,5.57075471 L9.13498737,5.57075471 L9.13498737,16.6595745 L6.50636508,16.6595745 Z M18.5582822,16.6595745 L15.9292208,16.6595745 L15.9292208,11.2421225 C15.9292208,9.70304501 15.5157895,8.49028274 14.0833987,8.49028274 C12.769462,8.49028274 12.0651515,9.35261044 11.8056016,10.1760146 C11.7136534,10.4252111 11.6915026,10.7627387 11.6915026,11.0997283 L11.6915026,16.6595745 L9.06288031,16.6595745 L9.06288031,5.57075471 L11.6915026,5.57075471 L11.6915026,7.25475192 C12.1593834,6.41337394 13.3483013,5.12149534 15.6885246,5.12149534 C18.5034706,5.12149534 20.8760397,6.80550255 20.8760397,10.8521433 L20.8760397,16.6595745 Z"></path>
-                        </svg>
-                    </a>
-
-                    <a href="https://github.com/Logixia/logixia" target="_blank" rel="noopener noreferrer" class="text-gray-400 hover:text-gray-200 transition">
-                        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v 3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"></path>
-                        </svg>
-                    </a>
-                </div>
-            </div>
+<!-- NAV -->
+<nav class="nav-blur fixed top-0 left-0 right-0 z-50">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6">
+    <div class="flex items-center justify-between" style="height:60px">
+      <div class="flex items-center gap-7">
+        <a href="#" class="flex items-center gap-2.5 flex-shrink-0">
+          <div class="w-7 h-7 rounded-lg flex items-center justify-center" style="background:linear-gradient(135deg,#a855f7,#6366f1)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          </div>
+          <span class="font-bold text-white text-lg">logixia</span>
+        </a>
+        <div class="hidden md:flex items-center gap-0.5">
+          <a href="#features" class="px-3 py-1.5 text-sm text-zinc-400 hover:text-white rounded-lg hover:bg-white/5 transition-all">Features</a>
+          <a href="#examples" class="px-3 py-1.5 text-sm text-zinc-400 hover:text-white rounded-lg hover:bg-white/5 transition-all">Examples</a>
+          <a href="#transports" class="px-3 py-1.5 text-sm text-zinc-400 hover:text-white rounded-lg hover:bg-white/5 transition-all">Transports</a>
+          <a href="#comparison" class="px-3 py-1.5 text-sm text-zinc-400 hover:text-white rounded-lg hover:bg-white/5 transition-all">Compare</a>
+          <a href="https://github.com/webcoderspeed/logixia" target="_blank" rel="noopener" class="px-3 py-1.5 text-sm text-zinc-400 hover:text-white rounded-lg hover:bg-white/5 transition-all">Docs</a>
         </div>
-    </nav>
+      </div>
+      <div class="flex items-center gap-3">
+        <a href="https://github.com/webcoderspeed/logixia" target="_blank" rel="noopener" class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-zinc-400 hover:text-white glass rounded-lg transition-all">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+          GitHub
+        </a>
+        <a href="https://www.npmjs.com/package/logixia" target="_blank" rel="noopener" class="hidden sm:inline-flex items-center px-4 py-1.5 text-sm font-semibold btn-primary rounded-lg">
+          npm install logixia
+        </a>
+      </div>
+    </div>
+  </div>
+</nav>
 
-    <!-- Hero Section -->
-    <section class="hero-gradient relative min-h-screen flex items-center justify-center py-20">
-        <div class="blob blob1"></div>
-        <div class="blob blob2"></div>
-        <div class="blob blob3"></div>
+<!-- HERO -->
+<section class="hero-grid hero-radial relative min-h-screen flex flex-col items-center justify-center px-4 pt-16 pb-12 overflow-hidden">
+  <div class="absolute top-1/3 -left-32 w-96 h-96 rounded-full blur-3xl pointer-events-none" style="background:rgba(168,85,247,0.07)"></div>
+  <div class="absolute bottom-1/3 -right-32 w-96 h-96 rounded-full blur-3xl pointer-events-none" style="background:rgba(99,102,241,0.07)"></div>
 
-        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
-            <h1 class="text-5xl sm:text-6xl lg:text-7xl font-bold mb-6 gradient-text fade-in-up" style="animation-delay: 0.1s;">
-                The logging setup you copy-paste into every new project
-            </h1>
+  <div class="relative max-w-5xl w-full mx-auto text-center">
+    <div class="inline-flex items-center gap-2 mb-7 anim-1">
+      <span class="badge" style="background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.2);color:#c084fc">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        v1.1.2 &mdash; stable
+      </span>
+    </div>
 
-            <p class="text-lg sm:text-xl text-gray-400 mb-8 max-w-3xl mx-auto fade-in-up" style="animation-delay: 0.2s;">
-                TypeScript-first. Async multi-transport. NestJS module. Request tracing. Built-in search. All batteries included.
-            </p>
+    <h1 class="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight leading-[1.05] mb-6 anim-2">
+      TypeScript logging<br>
+      <span class="grad-text">done right.</span>
+    </h1>
 
-            <div class="mb-12 fade-in-up" style="animation-delay: 0.3s;">
-                <div class="code-block inline-block">
-                    <div class="flex items-center justify-between gap-4">
-                        <code class="text-emerald-400">npm install logixia</code>
-                        <button class="copy-btn" onclick="copyToClipboard('npm install logixia')">
-                            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-            </div>
+    <p class="text-lg sm:text-xl text-zinc-400 max-w-2xl mx-auto mb-10 leading-relaxed anim-3">
+      Async multi-transport logging — console, file, database, analytics — with a first-class
+      <code class="text-purple-400 font-mono text-base" style="background:rgba(168,85,247,0.1);padding:2px 7px;border-radius:5px">NestJS</code> module,
+      request tracing, built-in search, and zero-dep OpenTelemetry. Replace winston and pino in one install.
+    </p>
 
-            <div class="flex flex-col sm:flex-row gap-4 justify-center mb-12 fade-in-up" style="animation-delay: 0.4s;">
-                <button class="btn-primary" onclick="document.getElementById('quick-start').scrollIntoView({ behavior: 'smooth' })">
-                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="5 12 3 12 12 3 21 12 19 12"></polyline>
-                        <polyline points="12 17 12 9"></polyline>
-                    </svg>
-                    Get Started
-                </button>
-                <a href="https://github.com/Logixia/logixia" target="_blank" rel="noopener noreferrer" class="btn-secondary">
-                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v 3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"></path>
-                    </svg>
-                    View on GitHub
-                </a>
-            </div>
+    <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-14 anim-4">
+      <div class="code-block flex items-center gap-3 px-5 py-3 cursor-pointer select-none" onclick="copyHeroCmd(this)" style="border-radius:10px">
+        <span class="text-zinc-600 font-mono text-sm">$</span>
+        <code class="font-mono text-sm" style="color:#4ade80">npm install logixia</code>
+        <button class="copy-btn" style="padding:2px 8px;font-size:11px">copy</button>
+      </div>
+      <a href="https://github.com/webcoderspeed/logixia" target="_blank" rel="noopener" class="flex items-center gap-2 px-6 py-3 glass glass-hover rounded-xl text-sm font-semibold text-white">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+        View on GitHub
+      </a>
+    </div>
 
-            <p class="text-sm text-gray-500 fade-in-up" style="animation-delay: 0.5s;">
-                Drop-in replacement for winston and pino · MIT License · 100% TypeScript
-            </p>
+    <!-- Hero code preview -->
+    <div class="max-w-2xl mx-auto grad-border" style="border-radius:13px">
+      <div class="code-block" style="border-radius:12px;border:none">
+        <div class="code-header">
+          <div class="flex items-center gap-1.5">
+            <span class="dot bg-red-500"></span><span class="dot bg-yellow-500 mx-1.5"></span><span class="dot bg-green-500"></span>
+            <span class="ml-3 text-xs text-zinc-600 font-mono">logger.ts</span>
+          </div>
+          <button class="copy-btn" onclick="copyCode(this)">copy</button>
         </div>
-    </section>
+        <pre><code class="language-typescript">import { createLogger, ConsoleTransport, FileTransport } from 'logixia';
 
-    <!-- Stats Section -->
-    <section class="bg-gray-900 border-t border-gray-800 py-12">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-                <div class="text-center fade-in-up" style="animation-delay: 0.1s;">
-                    <div class="stat-number counter">840K+</div>
-                    <p class="text-gray-400 mt-2">logs/sec throughput</p>
-                </div>
-                <div class="text-center fade-in-up" style="animation-delay: 0.2s;">
-                    <div class="stat-number counter">6</div>
-                    <p class="text-gray-400 mt-2">transport types</p>
-                </div>
-                <div class="text-center fade-in-up" style="animation-delay: 0.3s;">
-                    <div class="stat-number counter">100%</div>
-                    <p class="text-gray-400 mt-2">TypeScript native</p>
-                </div>
-                <div class="text-center fade-in-up" style="animation-delay: 0.4s;">
-                    <div class="stat-number counter">MIT</div>
-                    <p class="text-gray-400 mt-2">License (Free)</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- One Package Section -->
-    <section class="py-20 border-t border-gray-800">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 class="text-4xl font-bold text-center mb-16 fade-in-up">
-                One package, <span class="gradient-text">every transport</span>
-            </h2>
-
-            <div class="before-after">
-                <div class="before-box fade-in-up" style="animation-delay: 0.2s;">
-                    <div class="before-label">Before (11 packages)</div>
-                    <div class="before-code">
-npm install winston<br>
-npm install winston-daily-rotate-file<br>
-npm install @sentry/node<br>
-npm install datadog-api-client<br>
-npm install segment<br>
-npm install pg<br>
-npm install mysql2<br>
-npm install mongodb<br>
-npm install better-sqlite3<br>
-npm install winston-transport<br>
-npm install pino-elasticsearch
-                    </div>
-                </div>
-
-                <div class="after-box fade-in-up" style="animation-delay: 0.3s;">
-                    <div class="after-label">After (1 package)</div>
-                    <div class="after-code">
-npm install logixia
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Features Section -->
-    <section class="py-20 border-t border-gray-800">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 class="text-4xl font-bold text-center mb-16 fade-in-up">
-                Built-in features for <span class="gradient-text">production</span>
-            </h2>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                <!-- Multi-Transport -->
-                <div class="card-glass p-8 fade-in-up" style="animation-delay: 0.1s;">
-                    <div class="icon-bg">
-                        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="1"></circle>
-                            <path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 0l4.24-4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08 0l4.24 4.24"></path>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-bold mb-3 text-white">Multi-Transport</h3>
-                    <p class="text-gray-400">Console, file rotation, PostgreSQL, MySQL, MongoDB, SQLite, Datadog, Segment, Mixpanel in one config.</p>
-                </div>
-
-                <!-- NestJS Module -->
-                <div class="card-glass p-8 fade-in-up" style="animation-delay: 0.2s;">
-                    <div class="icon-bg">
-                        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3" y="3" width="7" height="7"></rect>
-                            <rect x="14" y="3" width="7" height="7"></rect>
-                            <rect x="14" y="14" width="7" height="7"></rect>
-                            <rect x="3" y="14" width="7" height="7"></rect>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-bold mb-3 text-white">NestJS Module</h3>
-                    <p class="text-gray-400">Drop-in LogixiaModule.forRoot(), works with DI, request context interceptors, and provider injection.</p>
-                </div>
-
-                <!-- Request Tracing -->
-                <div class="card-glass p-8 fade-in-up" style="animation-delay: 0.3s;">
-                    <div class="icon-bg">
-                        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="7 10 12 15 17 10"></polyline>
-                            <line x1="12" y1="15" x2="12" y2="3"></line>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-bold mb-3 text-white">Request Tracing</h3>
-                    <p class="text-gray-400">AsyncLocalStorage trace IDs flow automatically across async boundaries. No manual propagation needed.</p>
-                </div>
-
-                <!-- Built-in Search -->
-                <div class="card-glass p-8 fade-in-up" style="animation-delay: 0.4s;">
-                    <div class="icon-bg">
-                        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <path d="m21 21-4.35-4.35"></path>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-bold mb-3 text-white">Built-in Log Search</h3>
-                    <p class="text-gray-400">NLP-powered pattern recognition, fuzzy search, and full-text indexing across all transports.</p>
-                </div>
-
-                <!-- Log Redaction -->
-                <div class="card-glass p-8 fade-in-up" style="animation-delay: 0.5s;">
-                    <div class="icon-bg">
-                        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-bold mb-3 text-white">Log Redaction</h3>
-                    <p class="text-gray-400">Automatically scrub passwords, tokens, API keys, and PII before writing to any transport.</p>
-                </div>
-
-                <!-- OpenTelemetry -->
-                <div class="card-glass p-8 fade-in-up" style="animation-delay: 0.6s;">
-                    <div class="icon-bg">
-                        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"></path>
-                            <path d="M12 6v6l5 2.88"></path>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-bold mb-3 text-white">OpenTelemetry</h3>
-                    <p class="text-gray-400">Zero-dep W3C trace context support. Ships spans to any OTLP collector out-of-box.</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Code Showcase Section -->
-    <section class="py-20 border-t border-gray-800">
-        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 class="text-4xl font-bold mb-12 text-center fade-in-up">
-                Built for <span class="gradient-text">every use case</span>
-            </h2>
-
-            <div class="card-glass p-8 fade-in-up" style="animation-delay: 0.2s;">
-                <!-- Tabs -->
-                <div class="flex gap-4 border-b border-gray-700 mb-8 overflow-x-auto">
-                    <button class="tab-button active" onclick="switchTab('quick-setup')">Quick Setup</button>
-                    <button class="tab-button" onclick="switchTab('nestjs')">NestJS</button>
-                    <button class="tab-button" onclick="switchTab('multi-transport')">Multi-Transport</button>
-                    <button class="tab-button" onclick="switchTab('request-tracing')">Request Tracing</button>
-                </div>
-
-                <!-- Quick Setup Tab -->
-                <div id="quick-setup" class="tab-content active">
-                    <pre><code class="language-typescript">import { LogixiaLogger } from 'logixia';
-
-const logger = new LogixiaLogger({
+const logger = createLogger({
   level: 'debug',
-  transports: ['console', 'file'],
+  transports: [
+    new ConsoleTransport({ colorize: true, pretty: true }),
+    new FileTransport({ filename: 'logs/app.log', rotate: true }),
+  ],
 });
 
-logger.info('Server started', { port: 3000 });
-logger.error('DB connection failed', { host: 'localhost' });</code></pre>
-                </div>
+// Structured logging — context travels with every log
+const reqLogger = logger.child({ requestId: 'req-abc', userId: 42 });
 
-                <!-- NestJS Tab -->
-                <div id="nestjs" class="tab-content">
-                    <pre><code class="language-typescript">// app.module.ts
-import { LogixiaModule } from 'logixia';
+reqLogger.info('User login', { method: 'oauth', provider: 'google' });
+reqLogger.warn('Rate limit approaching', { remaining: 5, limit: 100 });
+reqLogger.error('Payment failed', { orderId: 'ord-123', code: 'DECLINED' });</code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS STRIP -->
+<div style="border-top:1px solid rgba(255,255,255,0.05);border-bottom:1px solid rgba(255,255,255,0.05)" class="py-14">
+  <div class="max-w-4xl mx-auto px-4 grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+    <div class="reveal"><div class="stat-num grad-text-purple">5</div><div class="text-zinc-500 text-sm mt-1">transport types</div></div>
+    <div class="reveal d1"><div class="stat-num text-white">async</div><div class="text-zinc-500 text-sm mt-1">non-blocking I/O</div></div>
+    <div class="reveal d2"><div class="stat-num grad-text">0</div><div class="text-zinc-500 text-sm mt-1">prod dependencies</div></div>
+    <div class="reveal d3"><div class="stat-num text-white">NestJS</div><div class="text-zinc-500 text-sm mt-1">first-class module</div></div>
+  </div>
+</div>
+
+<!-- PROBLEM → SOLUTION -->
+<section class="py-24 max-w-7xl mx-auto px-4">
+  <div class="text-center mb-14 reveal">
+    <span class="badge mb-4" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#f87171">The Problem</span>
+    <h2 class="text-3xl sm:text-4xl font-bold text-white mb-4">Your current logger is holding you back.</h2>
+    <p class="text-zinc-400 max-w-xl mx-auto">winston needs 500 lines of config. pino is fast but inflexible. console.log doesn't scale. Every team ends up building a custom wrapper anyway.</p>
+  </div>
+
+  <div class="grid lg:grid-cols-2 gap-6">
+    <!-- Before -->
+    <div class="reveal d1">
+      <div class="flex items-center gap-2 mb-3">
+        <div class="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold" style="background:rgba(239,68,68,0.15);color:#f87171">✗</div>
+        <span class="text-sm font-semibold" style="color:#f87171">Before — winston setup everyone dreads</span>
+      </div>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="flex items-center gap-1.5"><span class="dot bg-red-500"></span><span class="dot bg-yellow-500 mx-1.5"></span><span class="dot bg-green-500"></span><span class="ml-3 text-xs text-zinc-600 font-mono">old-logger.ts</span></div>
+          <button class="copy-btn" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre><code class="language-typescript">// npm install winston winston-daily-rotate-file
+// + configure, + wrapper, + NestJS adapter...
+import * as winston from 'winston';
+
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    winston.format.splat(),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.simple()
+      ),
+    }),
+    new (require('winston-daily-rotate-file'))({
+      filename: 'logs/%DATE%.log',
+      datePattern: 'YYYY-MM-DD',
+      // ... 20 more options
+    }),
+  ],
+}); // and you still need a NestJS adapter...</code></pre>
+      </div>
+    </div>
+
+    <!-- After -->
+    <div class="reveal d2">
+      <div class="flex items-center gap-2 mb-3">
+        <div class="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold" style="background:rgba(34,197,94,0.15);color:#4ade80">✓</div>
+        <span class="text-sm font-semibold" style="color:#4ade80">After logixia — one package, everything</span>
+      </div>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="flex items-center gap-1.5"><span class="dot bg-red-500"></span><span class="dot bg-yellow-500 mx-1.5"></span><span class="dot bg-green-500"></span><span class="ml-3 text-xs text-zinc-600 font-mono">logger.ts</span></div>
+          <button class="copy-btn" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre><code class="language-typescript">// npm install logixia — that's it
+import { createLogger, ConsoleTransport, FileTransport } from 'logixia';
+
+const logger = createLogger({
+  level: 'debug',
+  transports: [
+    new ConsoleTransport({ colorize: true }),
+    new FileTransport({
+      filename: 'logs/app.log',
+      rotate: true,
+      maxFiles: 7,
+    }),
+  ],
+});
+
+// NestJS? One import.
+// import { LogixiaModule } from 'logixia/nest';
+
+logger.info('Ready', { version: process.env.npm_package_version });</code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features" class="py-24 relative">
+  <div class="absolute inset-0 pointer-events-none" style="background:linear-gradient(to bottom,transparent,rgba(168,85,247,0.03),transparent)"></div>
+  <div class="max-w-7xl mx-auto px-4 relative">
+    <div class="text-center mb-14 reveal">
+      <span class="badge mb-4" style="background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.2);color:#c084fc">Features</span>
+      <h2 class="text-3xl sm:text-4xl font-bold text-white mb-4">Logging that scales with your app.</h2>
+      <p class="text-zinc-400 max-w-xl mx-auto">From local development to multi-service production. logixia grows with you without changing your API.</p>
+    </div>
+
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+
+      <div class="glass glass-hover rounded-xl p-6 reveal d1">
+        <div class="feature-icon mb-4" style="background:rgba(168,85,247,0.12);color:#c084fc">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <h3 class="font-bold text-white mb-2">Async Multi-Transport</h3>
+        <p class="text-zinc-400 text-sm leading-relaxed mb-4">Log to console, rotating files, databases, analytics platforms, and custom webhooks — all asynchronously, in parallel, without blocking your event loop.</p>
+        <div class="flex flex-wrap gap-1.5">
+          <span class="text-xs px-2 py-1 rounded t-console">Console</span>
+          <span class="text-xs px-2 py-1 rounded t-file">File</span>
+          <span class="text-xs px-2 py-1 rounded t-db">Database</span>
+          <span class="text-xs px-2 py-1 rounded t-analytics">Analytics</span>
+          <span class="text-xs px-2 py-1 rounded t-webhook">Webhook</span>
+        </div>
+      </div>
+
+      <div class="glass glass-hover rounded-xl p-6 reveal d2">
+        <div class="feature-icon mb-4" style="background:rgba(99,102,241,0.12);color:#818cf8">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        </div>
+        <h3 class="font-bold text-white mb-2">First-Class NestJS Module</h3>
+        <p class="text-zinc-400 text-sm leading-relaxed mb-4">Drop-in <code class="text-indigo-400 text-xs" style="background:rgba(99,102,241,0.1);padding:1px 5px;border-radius:4px">LogixiaModule</code> with async configuration, DI support, per-module log levels, and request context propagation via <code class="text-xs text-zinc-300">AsyncLocalStorage</code>.</p>
+        <div class="flex flex-wrap gap-1.5">
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">LogixiaModule</span>
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">forRootAsync</span>
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">DI-ready</span>
+        </div>
+      </div>
+
+      <div class="glass glass-hover rounded-xl p-6 reveal d3">
+        <div class="feature-icon mb-4" style="background:rgba(14,165,233,0.12);color:#38bdf8">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </div>
+        <h3 class="font-bold text-white mb-2">Built-in Log Search</h3>
+        <p class="text-zinc-400 text-sm leading-relaxed mb-4">Query your stored logs with full-text search, level filters, time ranges, and field conditions — without spinning up Elasticsearch. Works on any database transport.</p>
+        <div class="flex flex-wrap gap-1.5">
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">full-text search</span>
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">time ranges</span>
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">field filters</span>
+        </div>
+      </div>
+
+      <div class="glass glass-hover rounded-xl p-6 reveal d1">
+        <div class="feature-icon mb-4" style="background:rgba(16,185,129,0.12);color:#34d399">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+        </div>
+        <h3 class="font-bold text-white mb-2">OpenTelemetry Tracing</h3>
+        <p class="text-zinc-400 text-sm leading-relaxed mb-4">Automatic trace/span/parent correlation. Every log line carries <code class="text-emerald-400 text-xs">traceId</code>, <code class="text-emerald-400 text-xs">spanId</code>, and <code class="text-emerald-400 text-xs">traceFlags</code> — no extra packages needed.</p>
+        <div class="flex flex-wrap gap-1.5">
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">traceId / spanId</span>
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">OTLP export</span>
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">zero deps</span>
+        </div>
+      </div>
+
+      <div class="glass glass-hover rounded-xl p-6 reveal d2">
+        <div class="feature-icon mb-4" style="background:rgba(245,158,11,0.12);color:#f59e0b">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        </div>
+        <h3 class="font-bold text-white mb-2">Request Context Tracing</h3>
+        <p class="text-zinc-400 text-sm leading-relaxed mb-4"><code class="text-amber-400 text-xs" style="background:rgba(245,158,11,0.1);padding:1px 5px;border-radius:4px">logger.child()</code> creates request-scoped loggers. Context fields (requestId, userId, tenantId) auto-attach to every log in that scope via <code class="text-xs text-zinc-300">AsyncLocalStorage</code>.</p>
+        <div class="flex flex-wrap gap-1.5">
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">child loggers</span>
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">AsyncLocalStorage</span>
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">request-scoped</span>
+        </div>
+      </div>
+
+      <div class="glass glass-hover rounded-xl p-6 reveal d3">
+        <div class="feature-icon mb-4" style="background:rgba(239,68,68,0.12);color:#f87171">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+        <h3 class="font-bold text-white mb-2">Structured + Pretty</h3>
+        <p class="text-zinc-400 text-sm leading-relaxed mb-4">JSON in production, human-readable in development. Automatic log level colorization, timestamps, diff highlighting. One flag switches the output format.</p>
+        <div class="flex flex-wrap gap-1.5">
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">JSON / pretty</span>
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">colorized</span>
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">timestamps</span>
+        </div>
+      </div>
+
+      <div class="glass glass-hover rounded-xl p-6 reveal d1">
+        <div class="feature-icon mb-4" style="background:rgba(236,72,153,0.12);color:#f472b6">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.13 11.52a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3 .94h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.09 8.9a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16z"/></svg>
+        </div>
+        <h3 class="font-bold text-white mb-2">Webhook + Analytics Transports</h3>
+        <p class="text-zinc-400 text-sm leading-relaxed mb-4">Send error logs to Slack, PagerDuty, or any webhook. Ship analytics events to Segment, Mixpanel, or PostHog. Batched delivery with retry and backpressure.</p>
+        <div class="flex flex-wrap gap-1.5">
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">Slack / webhook</span>
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">Segment</span>
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">batched</span>
+        </div>
+      </div>
+
+      <div class="glass glass-hover rounded-xl p-6 reveal d2">
+        <div class="feature-icon mb-4" style="background:rgba(6,182,212,0.12);color:#22d3ee">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        <h3 class="font-bold text-white mb-2">Log Levels + Sampling</h3>
+        <p class="text-zinc-400 text-sm leading-relaxed mb-4">Six levels: trace, debug, info, warn, error, fatal. Runtime level changes without restart. Sampling support — log only X% of debug events in high-throughput paths.</p>
+        <div class="flex flex-wrap gap-1.5">
+          <span class="log-debug text-xs px-2 py-1 rounded" style="background:rgba(148,163,184,0.08)">debug</span>
+          <span class="log-info text-xs px-2 py-1 rounded" style="background:rgba(96,165,250,0.08)">info</span>
+          <span class="log-warn text-xs px-2 py-1 rounded" style="background:rgba(251,191,36,0.08)">warn</span>
+          <span class="log-error text-xs px-2 py-1 rounded" style="background:rgba(248,113,113,0.08)">error</span>
+          <span class="log-fatal text-xs px-2 py-1 rounded" style="background:rgba(192,132,252,0.08)">fatal</span>
+        </div>
+      </div>
+
+      <div class="glass glass-hover rounded-xl p-6 reveal d3">
+        <div class="feature-icon mb-4" style="background:rgba(20,184,166,0.12);color:#2dd4bf">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+        </div>
+        <h3 class="font-bold text-white mb-2">Custom Transport API</h3>
+        <p class="text-zinc-400 text-sm leading-relaxed mb-4">Extend with any transport by implementing the <code class="text-teal-400 text-xs">Transport</code> interface. Two methods: <code class="text-xs text-zinc-300">write()</code> and <code class="text-xs text-zinc-300">close()</code>. Full TypeScript types.</p>
+        <div class="flex flex-wrap gap-1.5">
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">extensible</span>
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">typed API</span>
+          <span class="text-xs px-2 py-1 rounded" style="background:#18181b;color:#71717a">2-method interface</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- CODE EXAMPLES -->
+<section id="examples" class="py-24" style="background:rgba(9,9,11,0.7)">
+  <div class="max-w-4xl mx-auto px-4">
+    <div class="text-center mb-12 reveal">
+      <span class="badge mb-4" style="background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);color:#818cf8">Code Examples</span>
+      <h2 class="text-3xl sm:text-4xl font-bold text-white mb-4">See it in action.</h2>
+      <p class="text-zinc-400">From basic setup to production-grade configuration.</p>
+    </div>
+
+    <div class="flex flex-wrap gap-2 mb-5 reveal">
+      <button class="tab-btn active" onclick="switchTab('basic',this)">Basic</button>
+      <button class="tab-btn" onclick="switchTab('nestjs',this)">NestJS</button>
+      <button class="tab-btn" onclick="switchTab('transports',this)">Multi-Transport</button>
+      <button class="tab-btn" onclick="switchTab('context',this)">Request Context</button>
+      <button class="tab-btn" onclick="switchTab('search',this)">Log Search</button>
+      <button class="tab-btn" onclick="switchTab('custom',this)">Custom Transport</button>
+    </div>
+
+    <div class="reveal d1">
+
+      <div id="tab-basic" class="tab-panel active">
+        <div class="code-block">
+          <div class="code-header"><div class="flex items-center gap-1.5"><span class="dot bg-red-500"></span><span class="dot bg-yellow-500 mx-1.5"></span><span class="dot bg-green-500"></span><span class="ml-3 text-xs text-zinc-600 font-mono">logger.ts</span></div><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+          <pre><code class="language-typescript">import { createLogger, ConsoleTransport, FileTransport } from 'logixia';
+
+const logger = createLogger({
+  level: process.env.LOG_LEVEL ?? 'info',
+  transports: [
+    new ConsoleTransport({
+      colorize: process.env.NODE_ENV !== 'production',
+      pretty: process.env.NODE_ENV !== 'production',
+    }),
+    new FileTransport({
+      filename: 'logs/app.log',
+      rotate: true,
+      maxSize: '20m',
+      maxFiles: 14,
+    }),
+  ],
+});
+
+logger.info('Server started', { port: 3000, env: process.env.NODE_ENV });
+logger.warn('Config missing', { key: 'REDIS_URL', fallback: 'localhost' });
+logger.error('Unhandled error', { stack: err.stack, context: 'app' });</code></pre>
+        </div>
+      </div>
+
+      <div id="tab-nestjs" class="tab-panel">
+        <div class="code-block">
+          <div class="code-header"><div class="flex items-center gap-1.5"><span class="dot bg-red-500"></span><span class="dot bg-yellow-500 mx-1.5"></span><span class="dot bg-green-500"></span><span class="ml-3 text-xs text-zinc-600 font-mono">app.module.ts</span></div><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+          <pre><code class="language-typescript">import { Module } from '@nestjs/common';
+import { LogixiaModule } from 'logixia/nest';
+import { ConsoleTransport, FileTransport } from 'logixia';
+import { ConfigService } from '@nestjs/config';
 
 @Module({
   imports: [
-    LogixiaModule.forRoot({
-      level: 'info',
-      transports: ['console', 'file', 'postgresql'],
+    LogixiaModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        level: config.get('LOG_LEVEL', 'info'),
+        transports: [
+          new ConsoleTransport({ colorize: config.get('NODE_ENV') !== 'production' }),
+          new FileTransport({ filename: 'logs/nest.log', rotate: true }),
+        ],
+      }),
     }),
   ],
 })
 export class AppModule {}
 
-// my.service.ts
-constructor(private readonly logger: LogixiaLogger) {}
+// In your service:
+@Injectable()
+export class UserService {
+  constructor(private readonly logger: LogixiaLogger) {}
 
-this.logger.info('User created', { userId });</code></pre>
-                </div>
+  async findUser(id: string) {
+    this.logger.debug('Finding user', { id });
+    // logger automatically carries the request context
+  }
+}</code></pre>
+        </div>
+      </div>
 
-                <!-- Multi-Transport Tab -->
-                <div id="multi-transport" class="tab-content">
-                    <pre><code class="language-typescript">const logger = new LogixiaLogger({
+      <div id="tab-transports" class="tab-panel">
+        <div class="code-block">
+          <div class="code-header"><div class="flex items-center gap-1.5"><span class="dot bg-red-500"></span><span class="dot bg-yellow-500 mx-1.5"></span><span class="dot bg-green-500"></span><span class="ml-3 text-xs text-zinc-600 font-mono">multi-transport.ts</span></div><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+          <pre><code class="language-typescript">import {
+  createLogger,
+  ConsoleTransport,
+  FileTransport,
+  DatabaseTransport,
+  WebhookTransport,
+  AnalyticsTransport,
+} from 'logixia';
+
+const logger = createLogger({
+  level: 'debug',
   transports: [
-    { type: 'console', colorize: true },
-    { type: 'file', filename: 'app.log', rotate: '1d' },
-    {
-      type: 'postgresql',
-      connectionString: process.env.DATABASE_URL
-    },
-    {
-      type: 'datadog',
-      apiKey: process.env.DD_API_KEY
-    },
-    {
-      type: 'segment',
-      writeKey: process.env.SEGMENT_KEY
-    },
+    // Dev console with colors
+    new ConsoleTransport({ colorize: true, pretty: true }),
+
+    // Rotating file logs
+    new FileTransport({ filename: 'logs/app.log', rotate: true, maxFiles: 7 }),
+
+    // Persist errors to DB for search
+    new DatabaseTransport({
+      adapter: 'postgres',
+      connectionString: process.env.DATABASE_URL!,
+      minLevel: 'warn',
+      tableName: 'application_logs',
+    }),
+
+    // Slack alerts for errors
+    new WebhookTransport({
+      url: process.env.SLACK_WEBHOOK_URL!,
+      minLevel: 'error',
+      batch: { size: 5, intervalMs: 1000 },
+    }),
+
+    // Analytics events
+    new AnalyticsTransport({
+      provider: 'segment',
+      writeKey: process.env.SEGMENT_WRITE_KEY!,
+      minLevel: 'info',
+    }),
   ],
 });</code></pre>
-                </div>
-
-                <!-- Request Tracing Tab -->
-                <div id="request-tracing" class="tab-content">
-                    <pre><code class="language-typescript">// Trace IDs flow automatically
-// No manual passing needed
-app.use(logixia.tracingMiddleware());
-
-// Anywhere in your async call chain:
-logger.info('Processing order', { orderId: '123' });
-
-// Output includes trace context automatically:
-// {
-//   "level": "info",
-//   "message": "Processing order",
-//   "traceId": "abc-123",
-//   "spanId": "xyz-456",
-//   "orderId": "123",
-//   "timestamp": "2024-03-14T10:30:00Z"
-// }</code></pre>
-                </div>
-            </div>
         </div>
-    </section>
+      </div>
 
-    <!-- Performance Section -->
-    <section class="py-20 border-t border-gray-800">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 class="text-4xl font-bold mb-8 text-center fade-in-up">
-                <span class="gradient-text">Performance</span> you can trust
-            </h2>
-            <p class="text-center text-gray-400 mb-12 fade-in-up">Faster than winston. Competitive with pino.</p>
+      <div id="tab-context" class="tab-panel">
+        <div class="code-block">
+          <div class="code-header"><div class="flex items-center gap-1.5"><span class="dot bg-red-500"></span><span class="dot bg-yellow-500 mx-1.5"></span><span class="dot bg-green-500"></span><span class="ml-3 text-xs text-zinc-600 font-mono">request-context.ts</span></div><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+          <pre><code class="language-typescript">import { createLogger, createRequestContext } from 'logixia';
+import type { Request, Response, NextFunction } from 'express';
 
-            <div class="space-y-6 max-w-2xl mx-auto fade-in-up" style="animation-delay: 0.2s;">
-                <!-- logixia simple -->
-                <div class="perf-item fade-in-up" style="animation-delay: 0.3s;">
-                    <div class="flex justify-between mb-2">
-                        <span class="text-white font-semibold">logixia (simple)</span>
-                        <span class="text-emerald-400">840K logs/sec</span>
-                    </div>
-                    <div class="h-2 bg-gray-900 rounded-full overflow-hidden">
-                        <div class="perf-bar h-full bg-gradient-to-r from-emerald-500 to-teal-500" style="--bar-width: 100%; --delay: 0.3s;"></div>
-                    </div>
-                </div>
+const logger = createLogger({ level: 'info', transports: [...] });
 
-                <!-- pino -->
-                <div class="perf-item fade-in-up" style="animation-delay: 0.4s;">
-                    <div class="flex justify-between mb-2">
-                        <span class="text-white font-semibold">pino (basic, no transports)</span>
-                        <span class="text-blue-400">1.26M logs/sec</span>
-                    </div>
-                    <div class="h-2 bg-gray-900 rounded-full overflow-hidden">
-                        <div class="perf-bar h-full bg-gradient-to-r from-blue-500 to-cyan-500" style="--bar-width: 150%; --delay: 0.4s;"></div>
-                    </div>
-                </div>
+// Express middleware — attaches context to every log in this request
+export function requestLogger(req: Request, res: Response, next: NextFunction) {
+  const ctx = createRequestContext({
+    requestId: req.headers['x-request-id'] as string ?? crypto.randomUUID(),
+    userId: req.user?.id,
+    tenantId: req.headers['x-tenant-id'] as string,
+    ip: req.ip,
+    method: req.method,
+    path: req.path,
+  });
 
-                <!-- logixia structured -->
-                <div class="perf-item fade-in-up" style="animation-delay: 0.5s;">
-                    <div class="flex justify-between mb-2">
-                        <span class="text-white font-semibold">logixia (structured)</span>
-                        <span class="text-emerald-400">696K logs/sec</span>
-                    </div>
-                    <div class="h-2 bg-gray-900 rounded-full overflow-hidden">
-                        <div class="perf-bar h-full bg-gradient-to-r from-emerald-500 to-teal-500" style="--bar-width: 82.8%; --delay: 0.5s;"></div>
-                    </div>
-                </div>
+  // reqLogger carries all context fields automatically
+  const reqLogger = logger.withContext(ctx);
+  req.logger = reqLogger;
 
-                <!-- winston -->
-                <div class="perf-item fade-in-up" style="animation-delay: 0.6s;">
-                    <div class="flex justify-between mb-2">
-                        <span class="text-white font-semibold">winston</span>
-                        <span class="text-purple-400">738K logs/sec</span>
-                    </div>
-                    <div class="h-2 bg-gray-900 rounded-full overflow-hidden">
-                        <div class="perf-bar h-full bg-gradient-to-r from-purple-500 to-pink-500" style="--bar-width: 87.8%; --delay: 0.6s;"></div>
-                    </div>
-                </div>
+  reqLogger.info('Request started');
 
-                <!-- bunyan -->
-                <div class="perf-item fade-in-up" style="animation-delay: 0.7s;">
-                    <div class="flex justify-between mb-2">
-                        <span class="text-white font-semibold">bunyan</span>
-                        <span class="text-orange-400">450K logs/sec</span>
-                    </div>
-                    <div class="h-2 bg-gray-900 rounded-full overflow-hidden">
-                        <div class="perf-bar h-full bg-gradient-to-r from-orange-500 to-red-500" style="--bar-width: 53.5%; --delay: 0.7s;"></div>
-                    </div>
-                </div>
-            </div>
+  res.on('finish', () => {
+    reqLogger.info('Request completed', {
+      status: res.statusCode,
+      duration: Date.now() - req.startTime,
+    });
+  });
 
-            <p class="text-center text-sm text-gray-500 mt-12 fade-in-up" style="animation-delay: 0.8s;">
-                Benchmark: 1M log writes, Node.js 22. Pino measured without file transport.
-            </p>
+  next();
+}</code></pre>
         </div>
-    </section>
+      </div>
 
-    <!-- Comparison Table Section -->
-    <section class="py-20 border-t border-gray-800">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 class="text-4xl font-bold mb-12 text-center fade-in-up">
-                Feature <span class="gradient-text">comparison</span>
-            </h2>
+      <div id="tab-search" class="tab-panel">
+        <div class="code-block">
+          <div class="code-header"><div class="flex items-center gap-1.5"><span class="dot bg-red-500"></span><span class="dot bg-yellow-500 mx-1.5"></span><span class="dot bg-green-500"></span><span class="ml-3 text-xs text-zinc-600 font-mono">log-search.ts</span></div><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+          <pre><code class="language-typescript">import { LogSearcher } from 'logixia';
 
-            <div class="overflow-x-auto fade-in-up" style="animation-delay: 0.2s;">
-                <table class="compare-table">
-                    <thead>
-                        <tr>
-                            <th>Feature</th>
-                            <th>logixia</th>
-                            <th>pino</th>
-                            <th>winston</th>
-                            <th>bunyan</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td class="font-semibold">TypeScript native</td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                        </tr>
-                        <tr>
-                            <td class="font-semibold">Async writes</td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                        </tr>
-                        <tr>
-                            <td class="font-semibold">File rotation</td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                        </tr>
-                        <tr>
-                            <td class="font-semibold">Database transport</td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                        </tr>
-                        <tr>
-                            <td class="font-semibold">Analytics transport</td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                        </tr>
-                        <tr>
-                            <td class="font-semibold">NestJS module</td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                        </tr>
-                        <tr>
-                            <td class="font-semibold">Request tracing</td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                        </tr>
-                        <tr>
-                            <td class="font-semibold">Log search</td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                        </tr>
-                        <tr>
-                            <td class="font-semibold">Log redaction</td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                        </tr>
-                        <tr>
-                            <td class="font-semibold">OpenTelemetry</td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                        </tr>
-                        <tr>
-                            <td class="font-semibold">Graceful shutdown</td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                        </tr>
-                        <tr>
-                            <td class="font-semibold">Actively maintained</td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                            <td><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></td>
-                            <td><svg class="icon icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </section>
-
-    <!-- Quick Start Section -->
-    <section id="quick-start" class="py-20 border-t border-gray-800">
-        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 class="text-4xl font-bold mb-12 text-center fade-in-up">
-                Get started in <span class="gradient-text">2 steps</span>
-            </h2>
-
-            <div class="space-y-8">
-                <!-- Step 1 -->
-                <div class="flex gap-6 fade-in-up" style="animation-delay: 0.1s;">
-                    <div class="flex-shrink-0">
-                        <div class="flex items-center justify-center h-12 w-12 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500">
-                            <span class="text-white font-bold">1</span>
-                        </div>
-                    </div>
-                    <div class="flex-1">
-                        <h3 class="text-xl font-bold text-white mb-2">Install the package</h3>
-                        <div class="code-block">
-                            <code class="text-emerald-400">npm install logixia</code>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Step 2 -->
-                <div class="flex gap-6 fade-in-up" style="animation-delay: 0.2s;">
-                    <div class="flex-shrink-0">
-                        <div class="flex items-center justify-center h-12 w-12 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500">
-                            <span class="text-white font-bold">2</span>
-                        </div>
-                    </div>
-                    <div class="flex-1">
-                        <h3 class="text-xl font-bold text-white mb-2">Initialize and use</h3>
-                        <pre><code class="language-typescript">import { LogixiaLogger } from 'logixia';
-
-const logger = new LogixiaLogger({
-  level: 'info',
-  transports: ['console', 'file'],
+const searcher = new LogSearcher({
+  adapter: 'postgres',
+  connectionString: process.env.DATABASE_URL!,
+  tableName: 'application_logs',
 });
 
-logger.info('Hello, logixia!', { version: '1.1.2' });</code></pre>
-                    </div>
-                </div>
-            </div>
+// Full-text search with filters
+const results = await searcher.search({
+  query: 'payment failed',
+  levels: ['error', 'fatal'],
+  from: new Date('2025-01-01'),
+  to: new Date('2025-01-31'),
+  fields: { userId: '42', tenantId: 'acme' },
+  limit: 50,
+  orderBy: 'timestamp',
+  order: 'desc',
+});
 
-            <div class="mt-12 text-center fade-in-up" style="animation-delay: 0.3s;">
-                <p class="text-gray-400 mb-6">Ready to dive in?</p>
-                <a href="https://github.com/Logixia/logixia" target="_blank" rel="noopener noreferrer" class="btn-primary">
-                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v 3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"></path>
-                    </svg>
-                    View Documentation on GitHub
-                </a>
-            </div>
+console.log(results.total);  // total matching logs
+console.log(results.logs);   // LogEntry[] — fully typed</code></pre>
         </div>
-    </section>
+      </div>
 
-    <!-- Footer -->
-    <footer class="border-t border-gray-800 bg-gray-900 py-12">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex flex-col md:flex-row items-center justify-between">
-                <div class="flex items-center gap-2 mb-6 md:mb-0">
-                    <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2">
-                        <path d="M12 2v20M7 7h10M7 17h10M2 12h20"></path>
-                    </svg>
-                    <span class="text-white font-semibold">logixia</span>
-                    <span class="text-gray-600">·</span>
-                    <span class="text-gray-400">MIT License</span>
-                </div>
+      <div id="tab-custom" class="tab-panel">
+        <div class="code-block">
+          <div class="code-header"><div class="flex items-center gap-1.5"><span class="dot bg-red-500"></span><span class="dot bg-yellow-500 mx-1.5"></span><span class="dot bg-green-500"></span><span class="ml-3 text-xs text-zinc-600 font-mono">custom-transport.ts</span></div><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+          <pre><code class="language-typescript">import { Transport, LogEntry } from 'logixia';
 
-                <div class="flex items-center gap-6">
-                    <a href="https://github.com/Logixia/logixia" target="_blank" rel="noopener noreferrer" class="text-gray-400 hover:text-gray-200 transition">
-                        GitHub
-                    </a>
-                    <a href="https://www.npmjs.com/package/logixia" target="_blank" rel="noopener noreferrer" class="text-gray-400 hover:text-gray-200 transition">
-                        npm
-                    </a>
-                    <span class="text-gray-600">·</span>
-                    <span class="text-gray-500 text-sm">Made with care</span>
-                </div>
-            </div>
+// Implement 2 methods. That's all.
+class DatadogTransport implements Transport {
+  private readonly apiKey: string;
+
+  constructor({ apiKey }: { apiKey: string }) {
+    this.apiKey = apiKey;
+  }
+
+  async write(entry: LogEntry): Promise&lt;void&gt; {
+    await fetch('https://http-intake.logs.datadoghq.com/v1/input/' + this.apiKey, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        level: entry.level,
+        message: entry.message,
+        timestamp: entry.timestamp,
+        ...entry.fields,
+      }),
+    });
+  }
+
+  async close(): Promise&lt;void&gt; {
+    // flush pending batches
+  }
+}
+
+// Use like any built-in transport
+const logger = createLogger({
+  transports: [new DatadogTransport({ apiKey: process.env.DD_API_KEY! })],
+});</code></pre>
         </div>
-    </footer>
+      </div>
 
-    <script>
-        // Tailwind config
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        accent: '#10b981',
-                        'accent-light': '#14b8a6',
-                    }
-                }
-            }
-        }
+    </div>
+  </div>
+</section>
 
-        // Copy to clipboard
-        function copyToClipboard(text) {
-            navigator.clipboard.writeText(text).then(() => {
-                const btn = event.target.closest('.copy-btn');
-                btn.classList.add('copied');
-                setTimeout(() => {
-                    btn.classList.remove('copied');
-                }, 2000);
-            }).catch(err => {
-                console.error('Failed to copy:', err);
-            });
-        }
+<!-- TRANSPORTS VISUAL -->
+<section id="transports" class="py-24 max-w-7xl mx-auto px-4">
+  <div class="text-center mb-14 reveal">
+    <span class="badge mb-4" style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2);color:#f59e0b">Transports</span>
+    <h2 class="text-3xl font-bold text-white mb-4">One logger. Every destination.</h2>
+    <p class="text-zinc-400 max-w-xl mx-auto">logixia routes each log to every transport in parallel. Failures in one transport never affect the others.</p>
+  </div>
 
-        // Tab switching
-        function switchTab(tabId) {
-            const contents = document.querySelectorAll('.tab-content');
-            const buttons = document.querySelectorAll('.tab-button');
+  <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 reveal reveal-d1">
 
-            contents.forEach(el => el.classList.remove('active'));
-            buttons.forEach(el => el.classList.remove('active'));
+    <div class="glass glass-hover rounded-xl p-5 flex items-start gap-4 d1 reveal">
+      <div class="w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center t-console" style="border:none">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      </div>
+      <div>
+        <h4 class="font-semibold text-white text-sm mb-1">ConsoleTransport</h4>
+        <p class="text-zinc-500 text-xs leading-relaxed">Colorized, pretty-printed output for local dev. JSON mode for production log aggregators (Datadog, Grafana Loki).</p>
+      </div>
+    </div>
 
-            document.getElementById(tabId).classList.add('active');
-            event.target.classList.add('active');
+    <div class="glass glass-hover rounded-xl p-5 flex items-start gap-4 d2 reveal">
+      <div class="w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center t-file" style="border:none">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      </div>
+      <div>
+        <h4 class="font-semibold text-white text-sm mb-1">FileTransport</h4>
+        <p class="text-zinc-500 text-xs leading-relaxed">Rotating log files with size and date-based rotation, compression, and configurable retention. Buffered writes for performance.</p>
+      </div>
+    </div>
 
-            // Highlight code
-            document.querySelectorAll('pre code').forEach(el => {
-                hljs.highlightElement(el);
-            });
-        }
+    <div class="glass glass-hover rounded-xl p-5 flex items-start gap-4 d3 reveal">
+      <div class="w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center t-db" style="border:none">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></ellipse></svg>
+      </div>
+      <div>
+        <h4 class="font-semibold text-white text-sm mb-1">DatabaseTransport</h4>
+        <p class="text-zinc-500 text-xs leading-relaxed">PostgreSQL, MySQL, MongoDB, SQLite adapters. Enables built-in log search. Schema auto-migration included.</p>
+      </div>
+    </div>
 
-        // Highlight all code blocks on load
-        document.addEventListener('DOMContentLoaded', () => {
-            document.querySelectorAll('pre code').forEach(el => {
-                hljs.highlightElement(el);
-            });
-        });
+    <div class="glass glass-hover rounded-xl p-5 flex items-start gap-4 d1 reveal">
+      <div class="w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center t-webhook" style="border:none">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.13 11.52a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3 .94h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.09 8.9a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16z"/></svg>
+      </div>
+      <div>
+        <h4 class="font-semibold text-white text-sm mb-1">WebhookTransport</h4>
+        <p class="text-zinc-500 text-xs leading-relaxed">POST logs to Slack, PagerDuty, Discord, or any HTTP endpoint. Batched delivery with retry and per-level filtering.</p>
+      </div>
+    </div>
 
-        // Counter animation
-        function animateCounter(element) {
-            const text = element.textContent;
-            const match = text.match(/(\d+)/);
+    <div class="glass glass-hover rounded-xl p-5 flex items-start gap-4 d2 reveal">
+      <div class="w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center t-analytics" style="border:none">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </div>
+      <div>
+        <h4 class="font-semibold text-white text-sm mb-1">AnalyticsTransport</h4>
+        <p class="text-zinc-500 text-xs leading-relaxed">Ship log events to Segment, Mixpanel, PostHog, or Amplitude. Maps log fields to analytics event properties automatically.</p>
+      </div>
+    </div>
 
-            if (!match) return;
+    <div class="glass glass-hover rounded-xl p-5 flex items-start gap-4 d3 reveal" style="border-style:dashed">
+      <div class="w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center" style="background:rgba(255,255,255,0.05);color:#52525b">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </div>
+      <div>
+        <h4 class="font-semibold text-zinc-400 text-sm mb-1">Custom Transport</h4>
+        <p class="text-zinc-600 text-xs leading-relaxed">Implement the <code class="text-zinc-500 text-xs">Transport</code> interface. Two methods: <code class="text-zinc-500 text-xs">write()</code> and <code class="text-zinc-500 text-xs">close()</code>. Send logs anywhere.</p>
+      </div>
+    </div>
 
-            const value = parseInt(match[1]);
-            let current = 0;
+  </div>
+</section>
 
-            const increment = Math.ceil(value / 30);
-            const interval = setInterval(() => {
-                current += increment;
-                if (current >= value) {
-                    element.textContent = text;
-                    clearInterval(interval);
-                } else {
-                    element.textContent = current + text.replace(/\d+/, '');
-                }
-            }, 20);
-        }
+<!-- COMPARISON TABLE -->
+<section id="comparison" class="py-24" style="background:rgba(9,9,11,0.5)">
+  <div class="max-w-7xl mx-auto px-4">
+    <div class="text-center mb-12 reveal">
+      <span class="badge mb-4" style="background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.2);color:#a78bfa">Comparison</span>
+      <h2 class="text-3xl sm:text-4xl font-bold text-white mb-4">How logixia stacks up.</h2>
+      <p class="text-zinc-400 max-w-xl mx-auto">Every missing feature in the table below represents something your team builds and maintains manually.</p>
+    </div>
 
-        // Intersection Observer for fade-in and counter animations
-        const observerOptions = {
-            threshold: 0.1,
-            rootMargin: '0px 0px -100px 0px'
-        };
+    <div class="reveal overflow-x-auto">
+      <table class="w-full" style="min-width:680px">
+        <thead>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+            <th class="text-left py-4 pr-6 text-sm font-semibold text-zinc-300" style="width:220px">Feature</th>
+            <th class="text-center py-4 px-4 text-sm font-bold text-purple-400">logixia</th>
+            <th class="text-center py-4 px-4 text-sm font-medium text-zinc-500">winston</th>
+            <th class="text-center py-4 px-4 text-sm font-medium text-zinc-500">pino</th>
+            <th class="text-center py-4 px-4 text-sm font-medium text-zinc-500">bunyan</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04)"><td class="py-3.5 pr-6 text-sm text-zinc-300">TypeScript-first</td><td class="text-center py-3.5 compare-yes font-bold">✓</td><td class="text-center py-3.5 compare-partial">~</td><td class="text-center py-3.5 compare-partial">~</td><td class="text-center py-3.5 compare-no">✗</td></tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04)"><td class="py-3.5 pr-6 text-sm text-zinc-300">NestJS module</td><td class="text-center py-3.5 compare-yes font-bold">✓</td><td class="text-center py-3.5 compare-partial">~</td><td class="text-center py-3.5 compare-partial">~</td><td class="text-center py-3.5 compare-no">✗</td></tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04)"><td class="py-3.5 pr-6 text-sm text-zinc-300">Async transports</td><td class="text-center py-3.5 compare-yes font-bold">✓</td><td class="text-center py-3.5 compare-partial">~</td><td class="text-center py-3.5 compare-yes">✓</td><td class="text-center py-3.5 compare-no">✗</td></tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04)"><td class="py-3.5 pr-6 text-sm text-zinc-300">Database transport</td><td class="text-center py-3.5 compare-yes font-bold">✓</td><td class="text-center py-3.5 compare-partial">~</td><td class="text-center py-3.5 compare-no">✗</td><td class="text-center py-3.5 compare-partial">~</td></tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04)"><td class="py-3.5 pr-6 text-sm text-zinc-300">Built-in log search</td><td class="text-center py-3.5 compare-yes font-bold">✓</td><td class="text-center py-3.5 compare-no">✗</td><td class="text-center py-3.5 compare-no">✗</td><td class="text-center py-3.5 compare-no">✗</td></tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04)"><td class="py-3.5 pr-6 text-sm text-zinc-300">OpenTelemetry tracing</td><td class="text-center py-3.5 compare-yes font-bold">✓</td><td class="text-center py-3.5 compare-no">✗</td><td class="text-center py-3.5 compare-partial">~</td><td class="text-center py-3.5 compare-no">✗</td></tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04)"><td class="py-3.5 pr-6 text-sm text-zinc-300">Request context</td><td class="text-center py-3.5 compare-yes font-bold">✓</td><td class="text-center py-3.5 compare-no">✗</td><td class="text-center py-3.5 compare-yes">✓</td><td class="text-center py-3.5 compare-no">✗</td></tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04)"><td class="py-3.5 pr-6 text-sm text-zinc-300">Webhook / analytics transport</td><td class="text-center py-3.5 compare-yes font-bold">✓</td><td class="text-center py-3.5 compare-no">✗</td><td class="text-center py-3.5 compare-no">✗</td><td class="text-center py-3.5 compare-no">✗</td></tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04)"><td class="py-3.5 pr-6 text-sm text-zinc-300">File rotation built-in</td><td class="text-center py-3.5 compare-yes font-bold">✓</td><td class="text-center py-3.5 compare-partial">~</td><td class="text-center py-3.5 compare-partial">~</td><td class="text-center py-3.5 compare-partial">~</td></tr>
+          <tr><td class="py-3.5 pr-6 text-sm text-zinc-300">Zero prod dependencies</td><td class="text-center py-3.5 compare-yes font-bold">✓</td><td class="text-center py-3.5 compare-no">✗</td><td class="text-center py-3.5 compare-partial">~</td><td class="text-center py-3.5 compare-no">✗</td></tr>
+        </tbody>
+      </table>
+      <p class="text-xs text-zinc-700 mt-3 text-right">~ partial/via plugin &nbsp;·&nbsp; ✓ built-in &nbsp;·&nbsp; ✗ unavailable</p>
+    </div>
+  </div>
+</section>
 
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.classList.add('is-visible');
+<!-- INSTALL / QUICKSTART -->
+<section class="py-24 max-w-4xl mx-auto px-4">
+  <div class="text-center mb-12 reveal">
+    <span class="badge mb-4" style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.2);color:#4ade80">Get Started</span>
+    <h2 class="text-3xl sm:text-4xl font-bold text-white mb-4">Up and running in 60 seconds.</h2>
+  </div>
 
-                    // Animate counters
-                    if (entry.target.classList.contains('counter')) {
-                        animateCounter(entry.target);
-                    }
+  <div class="grid sm:grid-cols-4 gap-3 mb-8 reveal">
+    <div class="code-block p-4 cursor-pointer hover:border-purple-500/30 transition-colors" onclick="copyInstall('npm install logixia',this)">
+      <div class="text-xs text-zinc-600 mb-2 font-mono">npm</div>
+      <code class="font-mono text-sm" style="color:#4ade80">npm install logixia</code>
+    </div>
+    <div class="code-block p-4 cursor-pointer hover:border-purple-500/30 transition-colors" onclick="copyInstall('pnpm add logixia',this)">
+      <div class="text-xs text-zinc-600 mb-2 font-mono">pnpm</div>
+      <code class="font-mono text-sm" style="color:#4ade80">pnpm add logixia</code>
+    </div>
+    <div class="code-block p-4 cursor-pointer hover:border-purple-500/30 transition-colors" onclick="copyInstall('yarn add logixia',this)">
+      <div class="text-xs text-zinc-600 mb-2 font-mono">yarn</div>
+      <code class="font-mono text-sm" style="color:#4ade80">yarn add logixia</code>
+    </div>
+    <div class="code-block p-4 cursor-pointer hover:border-purple-500/30 transition-colors" onclick="copyInstall('bun add logixia',this)">
+      <div class="text-xs text-zinc-600 mb-2 font-mono">bun</div>
+      <code class="font-mono text-sm" style="color:#4ade80">bun add logixia</code>
+    </div>
+  </div>
 
-                    // Animate bars
-                    if (entry.target.classList.contains('perf-item')) {
-                        entry.target.querySelector('.perf-bar').style.animation = 'slideIn 1s ease-out forwards';
-                    }
-                }
-            });
-        }, observerOptions);
+  <div class="reveal d1">
+    <div class="code-block">
+      <div class="code-header"><div class="flex items-center gap-1.5"><span class="dot bg-red-500"></span><span class="dot bg-yellow-500 mx-1.5"></span><span class="dot bg-green-500"></span><span class="ml-3 text-xs text-zinc-600 font-mono">quickstart.ts</span></div><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+      <pre><code class="language-typescript">import { createLogger, ConsoleTransport } from 'logixia';
 
-        document.querySelectorAll('.fade-in-up, .counter, .perf-item').forEach(el => {
-            observer.observe(el);
-        });
+// 1. Create a logger — export and share it
+const logger = createLogger({
+  level: 'debug',
+  transports: [new ConsoleTransport({ colorize: true })],
+});
 
-        // Smooth scroll for anchor links
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
-                const href = this.getAttribute('href');
-                if (href === '#') return;
-                e.preventDefault();
-                const target = document.querySelector(href);
-                if (target) {
-                    target.scrollIntoView({ behavior: 'smooth' });
-                }
-            });
-        });
-    </script>
+// 2. Log with structured context
+logger.info('App started', { version: '1.0.0', port: 3000 });
 
-    <script async src="https://cdn.tailwindcss.com"></script>
+// 3. Create request-scoped child loggers
+const reqLogger = logger.child({ requestId: 'abc-123', userId: 42 });
+
+reqLogger.debug('Processing request');
+reqLogger.warn('Slow query detected', { duration: 1240, query: 'SELECT ...' });
+
+// All logs from reqLogger automatically include requestId and userId</code></pre>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="py-28 relative overflow-hidden">
+  <div class="absolute inset-0" style="background:linear-gradient(135deg,rgba(168,85,247,0.06),rgba(99,102,241,0.06),rgba(14,165,233,0.05))"></div>
+  <div class="absolute inset-0 hero-grid" style="opacity:0.4"></div>
+  <div class="relative max-w-2xl mx-auto px-4 text-center">
+    <div class="reveal">
+      <h2 class="text-4xl sm:text-5xl font-black text-white mb-6 tracking-tight leading-tight">
+        Stop configuring<br><span class="grad-text">your logger.</span>
+      </h2>
+      <p class="text-zinc-400 text-lg mb-10 leading-relaxed">logixia gives you async multi-transport, NestJS integration, request tracing, and search out of the box. One package. Done.</p>
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a href="https://github.com/webcoderspeed/logixia" target="_blank" rel="noopener" class="btn-primary px-8 py-3.5 rounded-xl text-base font-semibold">Get started on GitHub</a>
+        <a href="https://www.npmjs.com/package/logixia" target="_blank" rel="noopener" class="flex items-center gap-2 px-8 py-3.5 glass glass-hover rounded-xl text-base font-semibold text-white">View on npm</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer style="border-top:1px solid rgba(255,255,255,0.05)" class="py-12">
+  <div class="max-w-7xl mx-auto px-4">
+    <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+      <div class="flex items-center gap-2">
+        <div class="w-6 h-6 rounded-md flex items-center justify-center" style="background:linear-gradient(135deg,#a855f7,#6366f1)">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <span class="font-bold text-white">logixia</span>
+        <span class="text-zinc-700 text-sm ml-1">v1.1.2</span>
+      </div>
+      <div class="flex flex-wrap items-center gap-5 text-sm text-zinc-600">
+        <a href="https://github.com/webcoderspeed/logixia" target="_blank" rel="noopener" class="hover:text-white transition-colors">GitHub</a>
+        <a href="https://www.npmjs.com/package/logixia" target="_blank" rel="noopener" class="hover:text-white transition-colors">npm</a>
+        <a href="https://github.com/webcoderspeed/logixia/blob/main/LICENSE" target="_blank" rel="noopener" class="hover:text-white transition-colors">MIT License</a>
+        <a href="https://github.com/webcoderspeed/logixia/issues" target="_blank" rel="noopener" class="hover:text-white transition-colors">Issues</a>
+        <a href="https://github.com/webcoderspeed/logixia/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener" class="hover:text-white transition-colors">Contributing</a>
+      </div>
+      <p class="text-zinc-700 text-sm">
+        By <a href="https://webcoderspeed.com" target="_blank" rel="noopener" class="text-zinc-500 hover:text-white transition-colors">Sanjeev Sharma</a>
+      </p>
+    </div>
+  </div>
+</footer>
+
+<script>
+  hljs.highlightAll();
+
+  const obs = new IntersectionObserver(
+    entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('in'); }),
+    { threshold: 0.08, rootMargin: '0px 0px -40px 0px' }
+  );
+  document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+
+  function switchTab(name, btn) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    const panel = document.getElementById('tab-' + name);
+    if (panel) { panel.classList.add('active'); hljs.highlightAll(); }
+    btn.classList.add('active');
+  }
+
+  function copyCode(btn) {
+    const pre = btn.closest('.code-block').querySelector('pre');
+    if (!pre) return;
+    navigator.clipboard.writeText(pre.innerText || pre.textContent || '').then(() => {
+      btn.textContent = 'copied!'; btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 2000);
+    });
+  }
+
+  function copyHeroCmd(el) {
+    navigator.clipboard.writeText('npm install logixia').then(() => {
+      const btn = el.querySelector('.copy-btn');
+      btn.textContent = 'copied!'; btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 2000);
+    });
+  }
+
+  function copyInstall(text, el) {
+    navigator.clipboard.writeText(text).then(() => {
+      const prev = el.style.borderColor;
+      el.style.borderColor = 'rgba(34,197,94,0.5)';
+      setTimeout(() => { el.style.borderColor = prev; }, 1500);
+    });
+  }
+</script>
 </body>
 </html>
