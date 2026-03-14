@@ -71,6 +71,49 @@ export interface TraceIdConfig {
   extractor?: TraceIdExtractorConfig;
 }
 
+// ── Redaction ──────────────────────────────────────────────────────────────────
+export interface RedactConfig {
+  /**
+   * Dot-notation field paths to redact. Supports `*` (one segment) and `**` (any depth).
+   * @example `['req.headers.authorization', '*.password', 'user.creditCard']`
+   */
+  paths?: string[];
+  /**
+   * Regex patterns applied to string values — replaces matches with the censor string.
+   * @example `[/Bearer\s+\S+/gi, /sk-[a-z0-9]{32,}/gi]`
+   */
+  patterns?: RegExp[];
+  /** Replacement value for redacted content. Default: `"[REDACTED]"` */
+  censor?: string;
+}
+
+// ── Namespace Levels ───────────────────────────────────────────────────────────
+/**
+ * Per-namespace log level overrides.
+ * Keys are namespace patterns (dot-separated, `*` wildcard); values are log levels.
+ *
+ * @example
+ * ```ts
+ * namespaceLevels: {
+ *   'db.*':    'debug',   // all db.* namespaces → DEBUG
+ *   'http.*':  'warn',    // all http.* → WARN only
+ *   'payment': 'trace',   // payment namespace → TRACE
+ * }
+ * ```
+ * ENV overrides: `LOGIXIA_LEVEL_DB=debug` maps to namespace `db`.
+ */
+export type NamespaceLevels = Record<string, LogLevelString>;
+
+// ── Graceful Shutdown ──────────────────────────────────────────────────────────
+export interface GracefulShutdownConfig {
+  /** Auto-register SIGTERM/SIGINT handlers to flush this logger on exit. Default: false */
+  enabled: boolean;
+  /** Max ms to wait for transports to flush. Default: 5000 */
+  timeout?: number;
+  /** Signals to listen on. Default: ['SIGTERM', 'SIGINT'] */
+  signals?: NodeJS.Signals[];
+}
+
 export interface LoggerConfig<TLevels extends Record<string, number> = Record<string, number>> {
   appName?: string;
   environment?: Environment;
@@ -88,8 +131,24 @@ export interface LoggerConfig<TLevels extends Record<string, number> = Record<st
         colors?: Record<string, LogColor>;
       }
     | undefined;
-  fields?: Partial<Record<LogFieldKey, string | boolean>>; // Enable/disable fields or customize their format
-  // Example: { timestamp: '[yyyy-mm-dd HH:MM:ss.MS]', level: true, appName: false, message: true }
+  fields?: Partial<Record<LogFieldKey, string | boolean>>;
+  /**
+   * Built-in log redaction — masks sensitive fields before they reach any transport.
+   * @see RedactConfig
+   */
+  redact?: RedactConfig;
+  /**
+   * Per-namespace log level overrides.
+   * A child logger's context is used as its namespace for matching.
+   * ENV vars `LOGIXIA_LEVEL_<NS>=<level>` also apply.
+   */
+  namespaceLevels?: NamespaceLevels;
+  /**
+   * Automatically register SIGTERM/SIGINT handlers that flush all transports
+   * before the process exits — prevents losing the last N seconds of logs on
+   * deployments / restarts.
+   */
+  gracefulShutdown?: boolean | GracefulShutdownConfig;
   [key: string]: unknown;
 }
 

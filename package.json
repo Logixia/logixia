@@ -94,12 +94,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/webcoderspeed/logixia.git"
+    "url": "git+https://github.com/Logixia/logixia.git"
   },
   "bugs": {
-    "url": "https://github.com/webcoderspeed/logixia/issues"
+    "url": "https://github.com/Logixia/logixia/issues"
   },
-  "homepage": "https://github.com/webcoderspeed/logixia#readme",
+  "homepage": "https://github.com/Logixia/logixia#readme",
   "peerDependencies": {
     "@nestjs/common": "^10.0.0",
     "express": "^4.18.0",
