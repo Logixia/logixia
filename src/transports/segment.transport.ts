@@ -1,13 +1,13 @@
-import {
-  TransportLogEntry,
+import type {
   SegmentTransportConfig,
+  TransportLogEntry,
 } from "../types/transport.types";
-import {
-  AnalyticsTransport,
-  AnalyticsEvent,
-  AnalyticsUser,
-} from "./analytics.transport";
 import { internalError } from "../utils/internal-log";
+import type {
+  AnalyticsUser} from "./analytics.transport";
+import {
+  AnalyticsTransport
+} from "./analytics.transport";
 
 export class SegmentTransport extends AnalyticsTransport {
   private segmentConfig: SegmentTransportConfig;
@@ -66,7 +66,7 @@ export class SegmentTransport extends AnalyticsTransport {
     // Segment doesn't require explicit cleanup
   }
 
-  private transformToSegmentEvent(entry: TransportLogEntry): any {
+  private transformToSegmentEvent(entry: TransportLogEntry): Record<string, unknown> {
     const transformed = this.transformEntry(entry);
 
     return {
@@ -109,11 +109,11 @@ export class SegmentTransport extends AnalyticsTransport {
     };
   }
 
-  private async track(event: any): Promise<void> {
+  private async track(event: unknown): Promise<void> {
     await this.makeRequest("/v1/track", event);
   }
 
-  private async batchTrack(events: any[]): Promise<void> {
+  private async batchTrack(events: unknown[]): Promise<void> {
     // Split into chunks based on maxBatchSize
     const chunks = this.chunkArray(
       events,
@@ -129,7 +129,7 @@ export class SegmentTransport extends AnalyticsTransport {
     }
   }
 
-  private async makeRequest(endpoint: string, data: any): Promise<void> {
+  private async makeRequest(endpoint: string, data: unknown): Promise<void> {
     const url = `${this.baseUrl}${endpoint}`;
 
     // Encode write key for basic auth
@@ -157,6 +157,7 @@ export class SegmentTransport extends AnalyticsTransport {
     } catch (error) {
       throw new Error(
         `Failed to send data to Segment: ${(error as Error).message}`,
+        { cause: error },
       );
     }
   }
@@ -187,16 +188,19 @@ export class SegmentTransport extends AnalyticsTransport {
   private extractUserId(entry: TransportLogEntry): string | undefined {
     // Try to extract user ID from entry data
     if (entry.data) {
-      return entry.data.userId || entry.data.user_id || entry.data.id;
+      const d = entry.data as Record<string, unknown>;
+      const id = d['userId'] ?? d['user_id'] ?? d['id'];
+      return typeof id === 'string' ? id : undefined;
     }
     return undefined;
   }
 
   private generateAnonymousId(): string {
-    // Generate a UUID-like anonymous ID
+    // Generate a UUID-like anonymous ID (non-security use)
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
       /[xy]/g,
       function (c) {
+        // eslint-disable-next-line sonarjs/pseudo-random -- non-security UUID generation
         const r = (Math.random() * 16) | 0;
         const v = c === "x" ? r : (r & 0x3) | 0x8;
         return v.toString(16);
@@ -236,7 +240,7 @@ export class SegmentTransport extends AnalyticsTransport {
 
   public async page(
     name: string,
-    properties: Record<string, any> = {},
+    properties: Record<string, unknown> = {},
   ): Promise<void> {
     const payload = {
       type: "page",
@@ -265,7 +269,7 @@ export class SegmentTransport extends AnalyticsTransport {
 
   public async screen(
     name: string,
-    properties: Record<string, any> = {},
+    properties: Record<string, unknown> = {},
   ): Promise<void> {
     const payload = {
       type: "screen",
@@ -291,7 +295,7 @@ export class SegmentTransport extends AnalyticsTransport {
 
   public async group(
     groupId: string,
-    traits: Record<string, any> = {},
+    traits: Record<string, unknown> = {},
     userId?: string,
   ): Promise<void> {
     const payload = {
@@ -331,7 +335,7 @@ export class SegmentTransport extends AnalyticsTransport {
 
   public async trackCustomEvent(
     eventName: string,
-    properties: Record<string, any> = {},
+    properties: Record<string, unknown> = {},
     userId?: string,
   ): Promise<void> {
     const payload = {
@@ -355,7 +359,7 @@ export class SegmentTransport extends AnalyticsTransport {
   // E-commerce tracking methods
   public async trackPurchase(
     orderId: string,
-    products: any[],
+    products: unknown[],
     revenue: number,
     currency: string = "USD",
   ): Promise<void> {
@@ -381,7 +385,7 @@ export class SegmentTransport extends AnalyticsTransport {
     await this.makeRequest("/v1/track", payload);
   }
 
-  public async trackProductViewed(product: any): Promise<void> {
+  public async trackProductViewed(product: unknown): Promise<void> {
     const payload = {
       type: "track",
       event: "Product Viewed",

@@ -1,9 +1,9 @@
-import {
-  TransportLogEntry,
+import type {
   GoogleAnalyticsTransportConfig,
+  TransportLogEntry,
 } from "../types/transport.types";
-import { AnalyticsTransport, AnalyticsEvent } from "./analytics.transport";
 import { internalError, internalLog } from "../utils/internal-log";
+import { AnalyticsTransport } from "./analytics.transport";
 
 export class GoogleAnalyticsTransport extends AnalyticsTransport {
   private gaConfig: GoogleAnalyticsTransportConfig;
@@ -49,7 +49,7 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
     // Google Analytics doesn't require explicit cleanup
   }
 
-  private transformToGAEvent(entry: TransportLogEntry): any {
+  private transformToGAEvent(entry: TransportLogEntry): Record<string, unknown> {
     const transformed = this.transformEntry(entry);
 
     // Map log levels to GA event categories
@@ -91,10 +91,10 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
   }
 
   private flattenData(
-    data: Record<string, any>,
+    data: Record<string, unknown>,
     prefix: string = "",
-  ): Record<string, any> {
-    const flattened: Record<string, any> = {};
+  ): Record<string, unknown> {
+    const flattened: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(data)) {
       const newKey = prefix ? `${prefix}_${key}` : key;
@@ -105,13 +105,13 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
         !Array.isArray(value) &&
         !(value instanceof Date)
       ) {
-        Object.assign(flattened, this.flattenData(value, newKey));
+        Object.assign(flattened, this.flattenData(value as Record<string, unknown>, newKey));
       } else {
         // GA4 has parameter value limits
         const stringValue = String(value);
         flattened[newKey] =
           stringValue.length > 100
-            ? stringValue.substring(0, 100)
+            ? stringValue.slice(0, 100)
             : stringValue;
       }
     }
@@ -119,7 +119,7 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
     return flattened;
   }
 
-  private async sendEvent(event: any): Promise<void> {
+  private async sendEvent(event: unknown): Promise<void> {
     const payload = {
       client_id: this.gaConfig.clientId || this.generateClientId(),
       events: [event],
@@ -128,7 +128,7 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
     await this.makeRequest(payload);
   }
 
-  private async sendEvents(events: any[]): Promise<void> {
+  private async sendEvents(events: unknown[]): Promise<void> {
     // GA4 allows up to 25 events per request
     const chunks = this.chunkArray(events, 25);
 
@@ -143,7 +143,7 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
   }
 
   private async makeRequest(
-    payload: any,
+    payload: unknown,
     debug: boolean = false,
   ): Promise<void> {
     const url = debug ? this.debugUrl : this.baseUrl;
@@ -175,6 +175,7 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
     } catch (error) {
       throw new Error(
         `Failed to send data to Google Analytics: ${(error as Error).message}`,
+        { cause: error },
       );
     }
   }
@@ -201,10 +202,11 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
   }
 
   private generateClientId(): string {
-    // Generate a UUID-like client ID
+    // Generate a UUID-like client ID (non-security use)
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
       /[xy]/g,
       function (c) {
+        // eslint-disable-next-line sonarjs/pseudo-random -- non-security UUID generation
         const r = (Math.random() * 16) | 0;
         const v = c === "x" ? r : (r & 0x3) | 0x8;
         return v.toString(16);
@@ -239,7 +241,7 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
 
   public async trackCustomEvent(
     eventName: string,
-    parameters: Record<string, any> = {},
+    parameters: Record<string, unknown> = {},
   ): Promise<void> {
     // Ensure event name follows GA4 conventions
     const sanitizedEventName = eventName
@@ -293,7 +295,7 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
   }
 
   public async setUserProperties(
-    properties: Record<string, any>,
+    properties: Record<string, unknown>,
   ): Promise<void> {
     // GA4 user properties are set with events
     const event = {

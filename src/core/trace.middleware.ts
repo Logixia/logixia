@@ -2,17 +2,19 @@
  * Trace ID middleware for NestJS integration
  */
 
-import { Injectable, NestMiddleware } from "@nestjs/common";
-import { Request, Response, NextFunction } from "express";
-import {
-  generateTraceId,
-  extractTraceId,
-  runWithTraceId,
-  getCurrentTraceId,
-} from "../utils/trace.utils";
-import type { TraceIdConfig } from "../types";
+import type { NestMiddleware } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
+import type { NextFunction,Request, Response } from "express";
 
-// Extend Express Request interface
+import type { TraceIdConfig } from "../types";
+import {
+  extractTraceId,
+  generateTraceId,
+  runWithTraceId,
+} from "../utils/trace.utils";
+
+// Extend Express Request interface — requires namespace to augment Express typings
+/* eslint-disable @typescript-eslint/no-namespace */
 declare global {
   namespace Express {
     interface Request {
@@ -21,6 +23,7 @@ declare global {
     }
   }
 }
+/* eslint-enable @typescript-eslint/no-namespace */
 
 /**
  * Default headers checked when extracting an incoming trace ID, in priority order:

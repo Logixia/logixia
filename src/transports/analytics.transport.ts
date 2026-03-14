@@ -1,8 +1,8 @@
-import {
-  ITransport,
-  IBatchTransport,
-  TransportLogEntry,
+import type {
   AnalyticsTransportConfig,
+  IBatchTransport,
+  ITransport,
+  TransportLogEntry,
 } from "../types/transport.types";
 import { internalError } from "../utils/internal-log";
 
@@ -71,7 +71,7 @@ export abstract class AnalyticsTransport
 
     if (this.batchTimer) {
       clearTimeout(this.batchTimer);
-      this.batchTimer = undefined as any;
+      delete this.batchTimer;
     }
 
     try {
@@ -97,8 +97,8 @@ export abstract class AnalyticsTransport
     return skipLevels.includes(entry.level.toLowerCase());
   }
 
-  protected transformEntry(entry: TransportLogEntry): Record<string, any> {
-    const transformed: Record<string, any> = {
+  protected transformEntry(entry: TransportLogEntry): Record<string, unknown> {
+    const transformed: Record<string, unknown> = {
       timestamp: entry.timestamp.toISOString(),
       level: entry.level,
       message: entry.message,
@@ -151,7 +151,7 @@ export abstract class AnalyticsTransport
 // Analytics Event Types
 export interface AnalyticsEvent {
   name: string;
-  properties?: Record<string, any>;
+  properties?: Record<string, unknown>;
   userId?: string;
   sessionId?: string;
   timestamp?: Date;
@@ -159,8 +159,8 @@ export interface AnalyticsEvent {
 
 export interface AnalyticsUser {
   id: string;
-  properties?: Record<string, any>;
-  traits?: Record<string, any>;
+  properties?: Record<string, unknown>;
+  traits?: Record<string, unknown>;
 }
 
 export interface AnalyticsMetric {

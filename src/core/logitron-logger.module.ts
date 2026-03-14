@@ -1,21 +1,22 @@
-import {
-  MiddlewareConsumer,
-  Module,
-  NestModule,
-  RequestMethod,
-  ModuleMetadata,
-  Type,
+import type {
   InjectionToken,
-  OptionalFactoryDependency,
+  MiddlewareConsumer,
+  ModuleMetadata,
+  NestModule,
+  OptionalFactoryDependency,  Type} from "@nestjs/common";
+import {
+  Module,
+  RequestMethod
 } from "@nestjs/common";
-import { RouteInfo } from "@nestjs/common/interfaces/middleware/middleware-configuration.interface";
-import { LoggerConfig, TraceIdConfig } from "../types";
-import { LogixiaLoggerService } from "./logitron-nestjs.service";
+import type { RouteInfo } from "@nestjs/common/interfaces/middleware/middleware-configuration.interface";
+import type { NextFunction, Request, Response } from "express";
+
+import type { LoggerConfig, TraceIdConfig } from "../types";
 import { generateTraceId } from "../utils/trace.utils";
-import { TraceMiddleware, traceMiddleware } from "./trace.middleware";
 import { KafkaTraceInterceptor } from "./kafka-trace.interceptor";
+import { LogixiaLoggerService } from "./logitron-nestjs.service";
+import { TraceMiddleware } from "./trace.middleware";
 import { WebSocketTraceInterceptor } from "./websocket-trace.interceptor";
-import { NextFunction, Request, Response } from "express";
 
 const DEFAULT_ROUTES: RouteInfo[] = [{ path: "*", method: RequestMethod.ALL }];
 
@@ -24,8 +25,8 @@ export const LOGIXIA_LOGGER_CONFIG = "LOGIXIA_LOGGER_CONFIG";
 export const LOGIXIA_LOGGER_PREFIX = "LOGIXIA_LOGGER_";
 
 // Export the service and interceptors for external use
-export { LogixiaLoggerService } from "./logitron-nestjs.service";
 export { KafkaTraceInterceptor } from "./kafka-trace.interceptor";
+export { LogixiaLoggerService } from "./logitron-nestjs.service";
 export { WebSocketTraceInterceptor } from "./websocket-trace.interceptor";
 
 // Interface for module configuration
@@ -39,7 +40,7 @@ export interface LogixiaAsyncOptions extends Pick<ModuleMetadata, "imports"> {
   useExisting?: Type<LogixiaOptionsFactory>;
   useClass?: Type<LogixiaOptionsFactory>;
   useFactory?: (
-    ...args: any[]
+    ...args: unknown[]
   ) => Promise<Partial<LoggerConfig>> | Partial<LoggerConfig>;
   inject?: Array<InjectionToken | OptionalFactoryDependency>;
 }
@@ -155,12 +156,14 @@ export class LogixiaLoggerModule implements NestModule {
         },
         {
           provide: KafkaTraceInterceptor,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NestJS DI injects typed config
           useFactory: (traceConfig: any) =>
             new KafkaTraceInterceptor(traceConfig),
           inject: ["TRACE_CONFIG"],
         },
         {
           provide: WebSocketTraceInterceptor,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NestJS DI injects typed config
           useFactory: (traceConfig: any) =>
             new WebSocketTraceInterceptor(traceConfig),
           inject: ["TRACE_CONFIG"],
@@ -231,12 +234,14 @@ export class LogixiaLoggerModule implements NestModule {
         },
         {
           provide: KafkaTraceInterceptor,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NestJS DI injects typed config
           useFactory: (traceConfig: any) =>
             new KafkaTraceInterceptor(traceConfig),
           inject: ["TRACE_CONFIG"],
         },
         {
           provide: WebSocketTraceInterceptor,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NestJS DI injects typed config
           useFactory: (traceConfig: any) =>
             new WebSocketTraceInterceptor(traceConfig),
           inject: ["TRACE_CONFIG"],

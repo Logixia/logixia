@@ -2,18 +2,18 @@
  * Search engine interface for log search operations
  */
 
-import {
-  SearchResult,
+import type { LogEntry } from '../../types';
+import type {
+  CorrelatedLogs,
+  ParsedNLQuery,
   SearchFilters,
   SearchOptions,
-  CorrelatedLogs,
-  SimilarLog,
-  SearchSuggestion,
-  SearchStats,
-  ParsedNLQuery,
   SearchPreset,
+  SearchResult,
+  SearchStats,
+  SearchSuggestion,
+  SimilarLog,
 } from '../types';
-import { LogEntry } from '../../types';
 
 /**
  * Main search engine interface

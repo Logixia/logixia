@@ -2,27 +2,26 @@
  * Advanced search engine with Natural Language Processing capabilities
  */
 
-import { LogEntry } from '../../types';
-import {
-  SearchResult,
+import { BasicSearchEngine } from '../core/basic-search-engine';
+import type {
+  EntityType,
+  ParsedNLQuery,
+  QueryEntity,
+  QueryIntent,
   SearchFilters,
   SearchOptions,
-  ParsedNLQuery,
-  QueryIntent,
-  QueryEntity,
-  EntityType,
+  SearchResult,
   TimeRange,
 } from '../types';
-import { BasicSearchEngine } from '../core/basic-search-engine';
 
 /**
  * NLP-enhanced search engine
  */
 export class NLPSearchEngine extends BasicSearchEngine {
-  private intentPatterns: Map<QueryIntent, RegExp[]>;
-  private entityPatterns: Map<EntityType, RegExp>;
+  private intentPatterns!: Map<QueryIntent, RegExp[]>;
+  private entityPatterns!: Map<EntityType, RegExp>;
 
-  constructor(options?: any) {
+  constructor(options?: Record<string, unknown>) {
     super(options);
     this.initializePatterns();
   }
@@ -30,8 +29,7 @@ export class NLPSearchEngine extends BasicSearchEngine {
   /**
    * Enhanced natural language query parsing
    */
-  async parseNaturalLanguageQuery(query: string): Promise<ParsedNLQuery> {
-    const lowerQuery = query.toLowerCase();
+  override async parseNaturalLanguageQuery(query: string): Promise<ParsedNLQuery> {
     const entities: QueryEntity[] = [];
     const filters: SearchFilters = {};
 
@@ -61,7 +59,7 @@ export class NLPSearchEngine extends BasicSearchEngine {
       intent,
       entities,
       filters,
-      timeRange,
+      ...(timeRange !== undefined ? { timeRange } : {}),
       confidence,
     };
   }
@@ -69,7 +67,7 @@ export class NLPSearchEngine extends BasicSearchEngine {
   /**
    * Enhanced natural language search
    */
-  async naturalLanguageSearch(query: string): Promise<SearchResult[]> {
+  override async naturalLanguageSearch(query: string): Promise<SearchResult[]> {
     const parsed = await this.parseNaturalLanguageQuery(query);
 
     // Adjust search options based on intent
@@ -155,6 +153,7 @@ export class NLPSearchEngine extends BasicSearchEngine {
       ['user_id', /user\s+(?:id\s+)?['"]?(\w+)['"]?/i],
       ['trace_id', /trace\s+(?:id\s+)?['"]?([\w-]+)['"]?/i],
       ['time', /(?:last|past|previous)\s+(\d+)\s+(second|minute|hour|day|week)s?/i],
+      // eslint-disable-next-line sonarjs/slow-regex -- bounded pattern, DoS risk is acceptable for log search
       ['error_type', /(\w+Error|\w+Exception)/i],
     ]);
   }
@@ -241,7 +240,7 @@ export class NLPSearchEngine extends BasicSearchEngine {
     for (const { pattern, unit } of relativePatterns) {
       const match = query.match(pattern);
       if (match) {
-        const value = parseInt(match[1]);
+        const value = Number.parseInt(match[1] ?? '0');
         const multiplier = {
           seconds: 1000,
           minutes: 60 * 1000,

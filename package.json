@@ -28,8 +28,8 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "lint": "eslint src/**/*.ts",
-    "lint:fix": "eslint src/**/*.ts --fix",
-    "format": "prettier --write src/**/*.ts",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --write src/",
     "dev:basic-usage": "ts-node examples/basic-usage.ts",
     "dev:express": "ts-node examples/express-example.ts",
     "dev:nestjs": "ts-node examples/nestjs-example.ts",
@@ -37,7 +37,12 @@
     "dev:performance": "ts-node examples/performance-monitoring.ts",
     "dev:fields": "ts-node examples/field-configuration.ts",
     "dev:search": "ts-node examples/search-quickstart.ts",
-    "dev:intelligent-search": "ts-node examples/intelligent-search.ts"
+    "dev:intelligent-search": "ts-node examples/intelligent-search.ts",
+    "lint:check": "eslint src/",
+    "format:check": "prettier --check src/",
+    "typecheck": "tsc --noEmit",
+    "prepare": "husky install",
+    "commit": "cz"
   },
   "keywords": [
     "logger",
@@ -109,6 +114,10 @@
     }
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.4.4",
+    "@commitlint/config-conventional": "^20.4.4",
+    "@commitlint/types": "^20.4.4",
+    "@eslint/js": "^10.0.1",
     "@nestjs/common": "^10.0.0",
     "@types/express": "^4.17.0",
     "@types/jest": "^29.0.0",
@@ -117,9 +126,17 @@
     "@types/uuid": "^9.0.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
-    "eslint": "^8.0.0",
+    "commitizen": "^4.3.1",
+    "cz-conventional-changelog": "^3.3.0",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "eslint-plugin-sonarjs": "^4.0.2",
+    "eslint-plugin-unicorn": "^63.0.0",
     "express": "^4.18.0",
+    "husky": "^9.1.7",
     "jest": "^29.0.0",
+    "lint-staged": "^16.3.3",
     "mongodb": "^6.20.0",
     "mysql2": "^3.14.5",
     "pg": "^8.16.3",
@@ -130,6 +147,7 @@
     "ts-node": "^10.9.2",
     "tsdown": "^0.15.0",
     "typescript": "^5.0.0",
+    "typescript-eslint": "^8.57.0",
     "uuid": "^9.0.0"
   },
   "engines": {
@@ -146,5 +164,26 @@
     "commander": "^11.1.0",
     "inquirer": "^9.3.8",
     "ora": "^6.3.1"
+  },
+  "lint-staged": {
+    "src/**/*.{ts,js}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml,mjs,cjs}": [
+      "prettier --write"
+    ]
+  },
+  "config": {
+    "commitizen": {
+      "path": "cz-conventional-changelog"
+    }
+  },
+  "prettier": {
+    "semi": true,
+    "trailingComma": "es5",
+    "singleQuote": true,
+    "printWidth": 100,
+    "tabWidth": 2
   }
 }

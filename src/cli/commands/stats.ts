@@ -1,7 +1,10 @@
-import { Command } from 'commander';
-import fs from 'fs';
-import path from 'path';
+/* eslint-disable @typescript-eslint/no-explicit-any -- CLI tools process raw JSON log data */
+import fs from 'node:fs';
+import path from 'node:path';
+
 import chalk from 'chalk';
+import { Command } from 'commander';
+
 import { safeParseLogs } from '../utils';
 
 export async function generateStats(raw: string, opts: any = {}) {
@@ -32,27 +35,28 @@ export async function generateStats(raw: string, opts: any = {}) {
   };
 }
 
-function formatStatsOutput(stats: any, filename: string): string {
+function formatStatsOutput(stats: unknown, filename: string): string {
+  const s = stats as Record<string, unknown>;
   const lines: string[] = [];
   
   lines.push(chalk.bold(`\nLog Statistics for ${path.basename(filename)}`));
   lines.push(chalk.bold('='.repeat(50)));
-  lines.push(chalk.cyan(`Total Entries: ${stats.total.toLocaleString()}`));
+  lines.push(chalk.cyan(`Total Entries: ${(s['total'] as number).toLocaleString()}`));
   
-  if (stats.timeRange) {
-    lines.push(chalk.cyan(`Time Range: ${stats.timeRange.start.toISOString()} - ${stats.timeRange.end.toISOString()}`));
+  if (s['timeRange']) {
+    lines.push(chalk.cyan(`Time Range: ${((s['timeRange'] as Record<string, Date>)['start'] as Date).toISOString()} - ${((s['timeRange'] as Record<string, Date>)['end'] as Date).toISOString()}`));
   }
   
   lines.push('');
-  lines.push(chalk.bold(`${stats.groupBy.charAt(0).toUpperCase() + stats.groupBy.slice(1)} Distribution:`));
+  lines.push(chalk.bold(`${(s['groupBy'] as string).charAt(0).toUpperCase() + (s['groupBy'] as string).slice(1)} Distribution:`));
   
   // Sort by count descending
-  const sorted = Object.entries(stats.distribution as Record<string, number>)
+  const sorted = Object.entries(s['distribution'] as Record<string, number>)
     .sort(([, a], [, b]) => (b as number) - (a as number));
   
   for (const [key, count] of sorted) {
-    const percentage = ((count as number / stats.total) * 100).toFixed(1);
-    const bar = '█'.repeat(Math.floor((count as number / stats.total) * 30));
+    const percentage = ((count as number / (s['total'] as number)) * 100).toFixed(1);
+    const bar = '█'.repeat(Math.floor((count as number / (s['total'] as number)) * 30));
     
     let colorFn = chalk.white;
     if (key === 'ERROR') colorFn = chalk.red;

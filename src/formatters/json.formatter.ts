@@ -2,7 +2,7 @@
  * JSON formatter for Logixia
  */
 
-import { ILogFormatter, LogEntry, LogLevel } from "../types";
+import type { ILogFormatter, LogEntry} from "../types";
 import { serializeError } from "../utils/error.utils";
 
 export class JsonFormatter implements ILogFormatter {
@@ -32,7 +32,7 @@ export class JsonFormatter implements ILogFormatter {
   }
 
   format(entry: LogEntry): string {
-    const formatted: Record<string, any> = {};
+    const formatted: Record<string, unknown> = {};
 
     // Add timestamp
     if (this.includeTimestamp) {
@@ -85,8 +85,8 @@ export class JsonFormatter implements ILogFormatter {
       : JSON.stringify(formatted);
   }
 
-  private serializePayload(payload: Record<string, any>): Record<string, any> {
-    const serialized: Record<string, any> = {};
+  private serializePayload(payload: Record<string, unknown>): Record<string, unknown> {
+    const serialized: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(payload)) {
       try {

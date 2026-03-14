@@ -2,27 +2,27 @@
  * Main search manager that orchestrates all search capabilities
  */
 
-import { LogEntry } from '../types';
-import {
-  SearchResult,
-  SearchFilters,
-  SearchOptions,
-  CorrelatedLogs,
-  SimilarLog,
-  SearchSuggestion,
-  SearchStats,
-  ParsedNLQuery,
-  SearchPreset,
-  LogPattern,
-  AnomalyDetection,
-  RelatedLog,
-  ExportOptions,
-} from './types';
-import { BasicSearchEngine } from './core/basic-search-engine';
+import type { LogEntry } from '../types';
 import { BasicLogIndexer } from './core/basic-log-indexer';
+import { BasicSearchEngine } from './core/basic-search-engine';
+import { CorrelationEngine } from './engines/correlation-engine';
 import { NLPSearchEngine } from './engines/nlp-search-engine';
 import { PatternRecognitionEngine } from './engines/pattern-recognition-engine';
-import { CorrelationEngine } from './engines/correlation-engine';
+import type {
+  AnomalyDetection,
+  CorrelatedLogs,
+  ExportOptions,
+  LogPattern,
+  ParsedNLQuery,
+  RelatedLog,
+  SearchFilters,
+  SearchOptions,
+  SearchPreset,
+  SearchResult,
+  SearchStats,
+  SearchSuggestion,
+  SimilarLog,
+} from './types';
 
 /**
  * Configuration for search manager
@@ -346,7 +346,7 @@ export class SearchManager {
     const rows = logs.map((log) => {
       return fields
         .map((field) => {
-          const value = (log as any)[field];
+          const value = (log as unknown as Record<string, unknown>)[field];
           return this.escapeCSVValue(value);
         })
         .join(',');
@@ -373,12 +373,13 @@ export class SearchManager {
       .join('\n\n');
   }
 
-  private filterFields(obj: any, fields: string[]): any {
-    const filtered: any = {};
+   
+  private filterFields(obj: unknown, fields: string[]): Record<string, unknown> {
+    const filtered: Record<string, unknown> = {};
     
     for (const field of fields) {
-      if (field in obj) {
-        filtered[field] = obj[field];
+      if (obj !== null && typeof obj === 'object' && field in obj) {
+        filtered[field] = (obj as Record<string, unknown>)[field];
       } else if (field.includes('.')) {
         // Handle nested fields
         const value = this.getNestedValue(obj, field);
@@ -391,11 +392,17 @@ export class SearchManager {
     return filtered;
   }
 
-  private getNestedValue(obj: any, path: string): any {
-    return path.split('.').reduce((current, key) => current?.[key], obj);
+  private getNestedValue(obj: unknown, path: string): unknown {
+    return path.split('.').reduce((current: unknown, key) => {
+      if (current !== null && typeof current === 'object') {
+        return (current as Record<string, unknown>)[key];
+      }
+      // Not an object — path lookup stops here
+      return current;
+    }, obj);
   }
 
-  private escapeCSVValue(value: any): string {
+  private escapeCSVValue(value: unknown): string {
     if (value === null || value === undefined) {
       return '';
     }

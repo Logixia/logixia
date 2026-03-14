@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- CLI tools process raw JSON log data */
 export function formatAsTable(rows: any[], columns: string[]) {
   // very small table printer
   const colWidths: number[] = columns.map(c => Math.max(c.length, ...rows.map(r => (r[c] || '').toString().length)));
@@ -16,7 +17,7 @@ export function safeParseLogs(raw: string) {
       const j = JSON.parse(l);
       parsed.push(j);
       continue;
-    } catch (e) {
+    } catch {
       // not json
     }
     parsed.push({ message: l });

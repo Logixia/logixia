@@ -1,14 +1,13 @@
-import * as fs from "fs";
-import * as path from "path";
-import { promisify } from "util";
-import { createWriteStream, WriteStream } from "fs";
-import {
-  ITransport,
-  IBatchTransport,
-  TransportLogEntry,
+import type { WriteStream } from "node:fs";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { promisify } from "node:util";
+
+import type {
   FileTransportConfig,
-  RotationConfig,
-} from "../types/transport.types";
+  IBatchTransport,
+  ITransport,
+  TransportLogEntry} from "../types/transport.types";
 import { internalError } from "../utils/internal-log";
 
 const writeFile = promisify(fs.writeFile);
@@ -58,6 +57,7 @@ export class FileTransport implements ITransport, IBatchTransport {
     } catch (error) {
       throw new Error(
         `File transport write failed: ${(error as Error).message}`,
+        { cause: error },
       );
     }
   }
@@ -84,7 +84,7 @@ export class FileTransport implements ITransport, IBatchTransport {
           ...(entry.data || {}),
         });
 
-      case "csv":
+      case "csv": {
         const fields = [
           entry.timestamp.toISOString(),
           entry.level,
@@ -94,6 +94,7 @@ export class FileTransport implements ITransport, IBatchTransport {
           JSON.stringify(entry.data || {}),
         ];
         return fields.join(",");
+      }
 
       case "text":
       default:
@@ -142,10 +143,11 @@ export class FileTransport implements ITransport, IBatchTransport {
   }
 
   private parseInterval(interval: string): number {
+    // eslint-disable-next-line sonarjs/slow-regex -- simple bounded pattern for interval parsing
     const match = interval.match(/(\d+)([hdwmy])/i);
     if (!match) return 24 * 60 * 60 * 1000; // Default 1 day
 
-    const value = parseInt(match[1] || "1", 10);
+    const value = Number.parseInt(match[1] || "1", 10);
     const unit = (match[2] || "h").toLowerCase();
 
     switch (unit) {
@@ -207,12 +209,12 @@ export class FileTransport implements ITransport, IBatchTransport {
     const dir = path.dirname(this.currentFilePath);
     try {
       await mkdir(dir, { recursive: true });
-    } catch (error) {
+    } catch {
       // Directory might already exist
     }
   }
 
-  private async compressFile(filePath: string): Promise<void> {
+  private async compressFile(_filePath: string): Promise<void> {
     // Simple gzip compression implementation would go here
     // For now, just rename with .gz extension
     // In a real implementation, you'd use zlib

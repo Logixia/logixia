@@ -9,7 +9,7 @@ export interface TransportLogEntry {
   timestamp: Date;
   level: string;
   message: string;
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
   context?: string;
   traceId?: string;
   appName?: string;
@@ -66,7 +66,7 @@ export interface AnalyticsTransportConfig {
   flushInterval?: number;
   enableUserTracking?: boolean;
   enableEventTracking?: boolean;
-  customProperties?: Record<string, any>;
+  customProperties?: Record<string, unknown>;
 }
 
 // Mixpanel Transport Configuration
@@ -74,7 +74,7 @@ export interface MixpanelTransportConfig extends AnalyticsTransportConfig {
   token: string;
   distinct_id?: string;
   enableSuperProperties?: boolean;
-  superProperties?: Record<string, any>;
+  superProperties?: Record<string, unknown>;
 }
 
 // DataDog Transport Configuration

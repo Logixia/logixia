@@ -2,8 +2,8 @@
  * Pattern recognition engine for detecting and analyzing log patterns
  */
 
-import { LogEntry } from '../../types';
-import { LogPattern, AnomalyDetection } from '../types';
+import type { LogEntry } from '../../types';
+import type { AnomalyDetection,LogPattern } from '../types';
 
 /**
  * Pattern recognition engine for log analysis
@@ -144,8 +144,8 @@ export class PatternRecognitionEngine {
       pattern,
       examples: data.examples,
       frequency: data.count,
-      lastSeen: data.examples[data.examples.length - 1]?.timestamp 
-        ? new Date(data.examples[data.examples.length - 1].timestamp)
+      lastSeen: (data.examples[data.examples.length - 1])?.timestamp 
+        ? new Date((data.examples[data.examples.length - 1] as (typeof data.examples)[0]).timestamp)
         : new Date(),
       category: 'message',
     }));
@@ -174,8 +174,8 @@ export class PatternRecognitionEngine {
       pattern,
       examples: data.examples,
       frequency: data.count,
-      lastSeen: data.examples[data.examples.length - 1]?.timestamp
-        ? new Date(data.examples[data.examples.length - 1].timestamp)
+      lastSeen: (data.examples[data.examples.length - 1])?.timestamp
+        ? new Date((data.examples[data.examples.length - 1] as (typeof data.examples)[0]).timestamp)
         : new Date(),
       category: 'error',
       severity: 'high',

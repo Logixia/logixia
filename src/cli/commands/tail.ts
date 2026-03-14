@@ -1,8 +1,10 @@
-import { Command } from 'commander';
-import fs from 'fs';
-import path from 'path';
+/* eslint-disable @typescript-eslint/no-explicit-any -- CLI tools process raw JSON log data */
+import fs from 'node:fs';
+import path from 'node:path';
+
 import chalk from 'chalk';
-import { safeParseLogs } from '../utils';
+import { Command } from 'commander';
+
 
 function parseFilter(filter?: string): { field: string; value: string } | null {
   if (!filter) return null;
@@ -19,7 +21,7 @@ function applyFilter(line: string, filter: { field: string; value: string } | nu
     const fieldValue = parsed[filter.field];
     if (fieldValue === undefined) return false;
     return fieldValue.toString().toLowerCase().includes(filter.value.toLowerCase());
-  } catch (e) {
+  } catch {
     // For non-JSON lines, check if the pattern exists
     return line.toLowerCase().includes(filter.value.toLowerCase());
   }
@@ -39,7 +41,7 @@ function highlightLine(line: string, highlight?: string): string {
     if (level === 'DEBUG') return chalk.gray(line);
     
     return line;
-  } catch (e) {
+  } catch {
     // Highlight pattern matches
     const regex = new RegExp(highlight, 'gi');
     return line.replace(regex, (match) => chalk.bgYellow.black(match));
@@ -67,9 +69,9 @@ export const tailCommand = new Command('tail')
     const filteredLines = lines.filter(line => applyFilter(line, filterCriteria));
     const last = filteredLines.slice(-10);
     
-    last.forEach(line => {
+    for (const line of last) {
       console.log(highlightLine(line, opts.highlight));
-    });
+    }
 
     if (opts.follow) {
       console.log(chalk.dim('--- following (ctrl-c to exit) ---'));
@@ -84,11 +86,11 @@ export const tailCommand = new Command('tail')
             const lines = buffer.split(/\r?\n/);
             buffer = lines.pop() || '';
             
-            lines.filter(Boolean).forEach(line => {
+            for (const line of lines.filter(Boolean)) {
               if (applyFilter(line, filterCriteria)) {
                 console.log(highlightLine(line, opts.highlight));
               }
-            });
+            }
           });
           rs.on('end', () => { pos = curr.size; });
         }

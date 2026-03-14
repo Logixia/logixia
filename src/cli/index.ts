@@ -1,16 +1,19 @@
 #!/usr/bin/env node
-import { Command } from 'commander';
-import chalk from 'chalk';
-import { analyzeCommand } from './commands/analyze';
-import { tailCommand } from './commands/tail';
-import { statsCommand } from './commands/stats';
-import { searchCommand } from './commands/search';
-import { exportCommand } from './commands/export';
+import path from 'node:path';
 
-import path from 'path';
+import chalk from 'chalk';
+import { Command } from 'commander';
+
+import { analyzeCommand } from './commands/analyze';
+import { exportCommand } from './commands/export';
+import { searchCommand } from './commands/search';
+import { statsCommand } from './commands/stats';
+import { tailCommand } from './commands/tail';
 const pkgPath = path.resolve(__dirname, '../../..', 'package.json');
-let pkg: any = {};
-try { pkg = require(pkgPath); } catch (e) { pkg = { version: '0.0.0' }; }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let pkg: any;
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- CJS entry point
+try { pkg = require(pkgPath); } catch { pkg = { version: '0.0.0' }; }
 
 const program = new Command();
 program

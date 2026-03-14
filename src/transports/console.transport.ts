@@ -1,7 +1,7 @@
-import {
+import type {
+  ConsoleTransportConfig,
   ITransport,
   TransportLogEntry,
-  ConsoleTransportConfig,
 } from "../types/transport.types";
 
 export class ConsoleTransport implements ITransport {

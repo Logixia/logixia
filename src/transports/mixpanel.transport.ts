@@ -1,13 +1,14 @@
-import {
-  TransportLogEntry,
+import type {
   MixpanelTransportConfig,
+  TransportLogEntry,
 } from "../types/transport.types";
-import {
-  AnalyticsTransport,
-  AnalyticsEvent,
-  AnalyticsUser,
-} from "./analytics.transport";
 import { internalError } from "../utils/internal-log";
+import type {
+  AnalyticsEvent,
+  AnalyticsUser} from "./analytics.transport";
+import {
+  AnalyticsTransport
+} from "./analytics.transport";
 
 export class MixpanelTransport extends AnalyticsTransport {
   private mixpanelConfig: MixpanelTransportConfig;
@@ -91,7 +92,7 @@ export class MixpanelTransport extends AnalyticsTransport {
     await this.makeRequest("/track", payload);
   }
 
-  private async makeRequest(endpoint: string, data: any): Promise<void> {
+  private async makeRequest(endpoint: string, data: unknown): Promise<void> {
     const url = `${this.mixpanelConfig.endpoint || this.baseUrl}${endpoint}`;
 
     try {
@@ -117,6 +118,7 @@ export class MixpanelTransport extends AnalyticsTransport {
     } catch (error) {
       throw new Error(
         `Failed to send data to Mixpanel: ${(error as Error).message}`,
+        { cause: error },
       );
     }
   }
@@ -170,7 +172,7 @@ export class MixpanelTransport extends AnalyticsTransport {
 
   public async setUserProperties(
     userId: string,
-    properties: Record<string, any>,
+    properties: Record<string, unknown>,
   ): Promise<void> {
     if (!this.mixpanelConfig.enableUserTracking) {
       return;
@@ -187,7 +189,7 @@ export class MixpanelTransport extends AnalyticsTransport {
 
   public async trackCustomEvent(
     eventName: string,
-    properties: Record<string, any> = {},
+    properties: Record<string, unknown> = {},
   ): Promise<void> {
     if (!this.mixpanelConfig.enableEventTracking) {
       return;

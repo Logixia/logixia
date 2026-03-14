@@ -1,18 +1,20 @@
 /** @format */
 
-import {
+import type {
   CallHandler,
   ExecutionContext,
-  Injectable,
-  NestInterceptor,
+  NestInterceptor} from "@nestjs/common";
+import {
+  Injectable
 } from "@nestjs/common";
 import { Observable } from "rxjs";
-import {
-  runWithTraceId,
-  getCurrentTraceId,
-  extractTraceId,
-} from "../utils/trace.utils";
+
 import type { TraceIdConfig } from "../types";
+import {
+  extractTraceId,
+  getCurrentTraceId,
+  runWithTraceId,
+} from "../utils/trace.utils";
 
 @Injectable()
 export class KafkaTraceInterceptor implements NestInterceptor {
@@ -28,6 +30,7 @@ export class KafkaTraceInterceptor implements NestInterceptor {
     };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NestJS interceptor interface requires Observable<any>
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     // Check if trace ID is enabled
     if (!this.config?.enabled) {

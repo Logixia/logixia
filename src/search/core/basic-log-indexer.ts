@@ -2,9 +2,9 @@
  * Basic log indexer implementation for indexing and managing log entries
  */
 
-import { LogEntry } from '../../types';
-import { SemanticIndex, SearchQuery, LogCluster } from '../types';
-import { ILogIndexer } from './log-indexer.interface';
+import type { LogEntry } from '../../types';
+import type { LogCluster,SearchQuery, SemanticIndex } from '../types';
+import type { ILogIndexer } from './log-indexer.interface';
 
 /**
  * Basic log indexer implementation
@@ -12,7 +12,7 @@ import { ILogIndexer } from './log-indexer.interface';
 export class BasicLogIndexer implements ILogIndexer {
   private index: Map<string, LogEntry> = new Map();
   private fieldIndices: Map<string, Map<string, Set<string>>> = new Map();
-  private semanticIndex?: SemanticIndex;
+  private semanticIndex: SemanticIndex | undefined;
   private lastOptimized?: Date;
 
   constructor(private options?: {
@@ -102,12 +102,8 @@ export class BasicLogIndexer implements ILogIndexer {
       patterns.set(normalizedQuery, (patterns.get(normalizedQuery) || 0) + 1);
     }
 
-    // Store top patterns (this could be expanded to a more sophisticated system)
-    const topPatterns = Array.from(patterns.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 100);
-
-    // In a real implementation, this would persist to storage
+    // In a real implementation, this would persist top patterns to storage
+    // Top patterns (sorted by frequency) would be stored here
   }
 
   /**
@@ -146,7 +142,7 @@ export class BasicLogIndexer implements ILogIndexer {
     return {
       totalDocuments: this.index.size,
       indexSize: this.calculateIndexSize(),
-      lastOptimized: this.lastOptimized,
+      ...(this.lastOptimized !== undefined ? { lastOptimized: this.lastOptimized } : {}),
     };
   }
 
@@ -245,7 +241,8 @@ export class BasicLogIndexer implements ILogIndexer {
   }
 
   private generateLogId(log: LogEntry): string {
-    return `${log.timestamp}_${log.level}_${Math.random().toString(36).substr(2, 9)}`;
+    // eslint-disable-next-line sonarjs/pseudo-random -- non-security log ID suffix
+    return `${log.timestamp}_${log.level}_${Math.random().toString(36).slice(2, 11)}`;
   }
 
   private calculateIndexSize(): number {

@@ -2,12 +2,14 @@
  * NestJS Service integration for Logitron Logger
  */
 
-import { Injectable, LoggerService, Scope } from "@nestjs/common";
-import { LogixiaLogger } from "./logitron-logger";
-import type { LoggerConfig } from "../types";
-import { LogLevel, LogLevelString } from "../types";
-import { getCurrentTraceId } from "../utils/trace.utils";
+import type { LoggerService} from "@nestjs/common";
+import { Injectable, Scope } from "@nestjs/common";
+
+import type { LoggerConfig , LogLevelString } from "../types";
+import { LogLevel } from "../types";
 import { internalError } from "../utils/internal-log";
+import { getCurrentTraceId } from "../utils/trace.utils";
+import { LogixiaLogger } from "./logitron-logger";
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class LogixiaLoggerService implements LoggerService {
@@ -59,14 +61,14 @@ export class LogixiaLoggerService implements LoggerService {
   /**
    * NestJS LoggerService interface implementation
    */
-  log(message: any, context?: string): void {
+  log(message: unknown, context?: string): void {
     this.setContextIfProvided(context);
     this.logger
       .info(this.formatMessage(message))
       .catch((err: unknown) => internalError("LogixiaLoggerService.log failed", err));
   }
 
-  error(message: any, trace?: string, context?: string): void {
+  error(message: unknown, trace?: string, context?: string): void {
     this.setContextIfProvided(context);
     const errorData: Record<string, string> = {};
 
@@ -84,21 +86,21 @@ export class LogixiaLoggerService implements LoggerService {
     );
   }
 
-  warn(message: any, context?: string): void {
+  warn(message: unknown, context?: string): void {
     this.setContextIfProvided(context);
     this.logger
       .warn(this.formatMessage(message))
       .catch((err: unknown) => internalError("LogixiaLoggerService.warn failed", err));
   }
 
-  debug(message: any, context?: string): void {
+  debug(message: unknown, context?: string): void {
     this.setContextIfProvided(context);
     this.logger
       .debug(this.formatMessage(message))
       .catch((err: unknown) => internalError("LogixiaLoggerService.debug failed", err));
   }
 
-  verbose(message: any, context?: string): void {
+  verbose(message: unknown, context?: string): void {
     this.setContextIfProvided(context);
     this.logger
       .trace(this.formatMessage(message))
@@ -108,18 +110,18 @@ export class LogixiaLoggerService implements LoggerService {
   /**
    * Extended Logitron methods
    */
-  async info(message: string, data?: Record<string, any>): Promise<void> {
+  async info(message: string, data?: Record<string, unknown>): Promise<void> {
     return this.logger.info(message, data);
   }
 
-  async trace(message: string, data?: Record<string, any>): Promise<void> {
+  async trace(message: string, data?: Record<string, unknown>): Promise<void> {
     return this.logger.trace(message, data);
   }
 
   logLevel(
     level: string,
     message: string,
-    data?: Record<string, any>,
+    data?: Record<string, unknown>,
   ): Promise<void> {
     return this.logger.logLevel(level, message, data);
   }
@@ -162,7 +164,7 @@ export class LogixiaLoggerService implements LoggerService {
   /**
    * Create child logger
    */
-  child(context: string, data?: Record<string, any>): LogixiaLoggerService {
+  child(context: string, data?: Record<string, unknown>): LogixiaLoggerService {
     const childService = new LogixiaLoggerService();
     childService.logger = this.logger.child(context, data) as LogixiaLogger;
     childService.context = context;
@@ -192,7 +194,7 @@ export class LogixiaLoggerService implements LoggerService {
     }
   }
 
-  private formatMessage(message: any): string {
+  private formatMessage(message: unknown): string {
     if (typeof message === "string") {
       return message;
     }

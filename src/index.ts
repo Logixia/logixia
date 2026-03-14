@@ -12,23 +12,24 @@
  * - Pattern recognition and anomaly detection
  */
 
-import { LogixiaLogger, createLogger as createLoggerFromCore } from './core/logitron-logger';
+import { createLogger as createLoggerFromCore,LogixiaLogger } from './core/logitron-logger';
 import { LogixiaLoggerService } from './core/logitron-nestjs.service';
-import { LoggerConfig, LogLevel, LogColor, Environment } from './types';
+import type { Environment,LogColor, LoggerConfig} from './types';
+import { LogLevel } from './types';
 
 // Type exports
-export * from './types';
-export * from './core/logitron-nestjs.service';
 export * from './core/logitron-logger.module';
+export * from './core/logitron-nestjs.service';
 export * from './formatters';
-export * from './utils/trace.utils';
+export * from './types';
 export * from './utils/error.utils';
+export * from './utils/trace.utils';
 
 // Search module exports
 export * from './search';
 
 // Core exports
-export { LogixiaLogger, LogixiaLoggerService, DEFAULT_CONFIG };
+export { DEFAULT_CONFIG,LogixiaLogger, LogixiaLoggerService };
 
 /**
  * Default configuration for Logixia logger

@@ -2,22 +2,23 @@
  * Basic search engine implementation with full-text search and filtering
  */
 
-import { LogEntry } from '../../types';
-import {
-  SearchResult,
-  SearchFilters,
-  SearchOptions,
+import type { LogEntry } from '../../types';
+import type {
   CorrelatedLogs,
-  SimilarLog,
-  SearchSuggestion,
-  SearchStats,
-  ParsedNLQuery,
-  SearchPreset,
-  SearchHighlight,
-  TimelineEvent,
   LogCorrelationSummary,
+  ParsedNLQuery,
+  SearchFilters,
+  SearchHighlight,
+  SearchOptions,
+  SearchPreset,
+  SearchResult,
+  SearchStats,
+  SearchSuggestion,
+  SimilarLog,
+  TimelineEvent,
+  TimeRange,
 } from '../types';
-import { ILogSearchEngine } from './search-engine.interface';
+import type { ILogSearchEngine } from './search-engine.interface';
 
 /**
  * Basic search engine implementation
@@ -65,10 +66,8 @@ export class BasicSearchEngine implements ILogSearchEngine {
     filters?: SearchFilters,
     options?: SearchOptions
   ): Promise<SearchResult[]> {
-    const startTime = Date.now();
-
     // Apply filters first
-    let filteredLogs = this.applyFilters(this.logs, filters);
+    const filteredLogs = this.applyFilters(this.logs, filters);
 
     // Perform text search
     const results = this.performTextSearch(filteredLogs, query, options);
@@ -138,8 +137,8 @@ export class BasicSearchEngine implements ILogSearchEngine {
 
     // Calculate duration if we have start and end
     if (timeline.length > 0) {
-      const start = timeline[0].timestamp.getTime();
-      const end = timeline[timeline.length - 1].timestamp.getTime();
+      const start = timeline[0]!.timestamp.getTime();
+      const end = timeline[timeline.length - 1]!.timestamp.getTime();
       summary.duration = end - start;
     }
 
@@ -243,8 +242,8 @@ export class BasicSearchEngine implements ILogSearchEngine {
 
     // Trim cache if too large
     if (this.suggestionCache.size > (this.options?.cacheSize || 100)) {
-      const firstKey = this.suggestionCache.keys().next().value;
-      this.suggestionCache.delete(firstKey);
+      const firstKey = this.suggestionCache.keys().next().value as string | undefined;
+      if (firstKey !== undefined) this.suggestionCache.delete(firstKey);
     }
 
     return suggestions.slice(0, limit);
@@ -282,13 +281,13 @@ export class BasicSearchEngine implements ILogSearchEngine {
 
     // Extract service names (basic pattern matching)
     const serviceMatch = query.match(/from\s+(?:the\s+)?(\w+)\s+service/i);
-    if (serviceMatch) {
+    if (serviceMatch?.[1]) {
       filters.services = [serviceMatch[1]];
     }
 
     // Extract user ID
     const userMatch = query.match(/user\s+(?:id\s+)?(\w+)/i);
-    if (userMatch) {
+    if (userMatch?.[1]) {
       filters.userIds = [userMatch[1]];
     }
 
@@ -436,11 +435,12 @@ export class BasicSearchEngine implements ILogSearchEngine {
           });
         }
 
-        results.push({
+        const result: { log: typeof log; score: number; highlights?: typeof highlights } = {
           log,
           score: score / queryTerms.length, // Normalize score
-          highlights: highlights.length > 0 ? highlights : undefined,
-        });
+        };
+        if (highlights.length > 0) result.highlights = highlights;
+        results.push(result as Parameters<typeof results.push>[0]);
       }
     }
 
@@ -468,7 +468,7 @@ export class BasicSearchEngine implements ILogSearchEngine {
       if (index !== -1) {
         const start = Math.max(0, index - 30);
         const end = Math.min(text.length, index + term.length + 30);
-        fragments.push(text.substring(start, end));
+        fragments.push(text.slice(start, end));
       }
     }
 
@@ -483,7 +483,7 @@ export class BasicSearchEngine implements ILogSearchEngine {
     const sorted = [...results];
 
     sorted.sort((a, b) => {
-      let comparison = 0;
+      let comparison: number;
 
       switch (sortBy) {
         case 'timestamp':
@@ -590,7 +590,7 @@ export class BasicSearchEngine implements ILogSearchEngine {
       : `${Math.round(similarity * 100)}% content similarity`;
   }
 
-  private extractTimeRange(query: string): any {
+  private extractTimeRange(query: string): TimeRange | undefined {
     const lowerQuery = query.toLowerCase();
 
     // Last hour
@@ -604,7 +604,7 @@ export class BasicSearchEngine implements ILogSearchEngine {
     const hoursMatch = query.match(/last\s+(\d+)\s+hours?/i);
     if (hoursMatch) {
       return {
-        start: new Date(Date.now() - parseInt(hoursMatch[1]) * 60 * 60 * 1000),
+        start: new Date(Date.now() - Number.parseInt(hoursMatch[1] ?? '0') * 60 * 60 * 1000),
       };
     }
 
@@ -650,6 +650,7 @@ export class BasicSearchEngine implements ILogSearchEngine {
   }
 
   private generateId(): string {
-    return `preset_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // eslint-disable-next-line sonarjs/pseudo-random -- non-security preset ID generation
+    return `preset_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
   }
 }

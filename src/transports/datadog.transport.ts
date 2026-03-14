@@ -1,9 +1,10 @@
-import {
-  TransportLogEntry,
+import type {
   DataDogTransportConfig,
+  TransportLogEntry,
 } from "../types/transport.types";
-import { AnalyticsTransport, AnalyticsMetric } from "./analytics.transport";
 import { internalError } from "../utils/internal-log";
+import type { AnalyticsMetric} from "./analytics.transport";
+import {AnalyticsTransport } from "./analytics.transport";
 
 export class DataDogTransport extends AnalyticsTransport {
   private datadogConfig: DataDogTransportConfig;
@@ -88,7 +89,6 @@ export class DataDogTransport extends AnalyticsTransport {
   }
 
   private async sendLog(entry: TransportLogEntry): Promise<void> {
-    const logEntry = this.transformToDataDogLog(entry);
     await this.sendLogBatch([entry]);
   }
 
@@ -106,7 +106,6 @@ export class DataDogTransport extends AnalyticsTransport {
   }
 
   private async sendMetric(entry: TransportLogEntry): Promise<void> {
-    const metric = this.transformToDataDogMetric(entry);
     await this.sendMetricBatch([entry]);
   }
 
@@ -123,8 +122,6 @@ export class DataDogTransport extends AnalyticsTransport {
   }
 
   private async sendTrace(entry: TransportLogEntry): Promise<void> {
-    // Implement trace sending logic
-    const trace = this.transformToDataDogTrace(entry);
     // DataDog traces are typically sent via the trace agent
     // For simplicity, we'll log this as a structured log with trace information
     await this.sendLog(entry);
@@ -135,7 +132,7 @@ export class DataDogTransport extends AnalyticsTransport {
     await this.sendLogBatch(entries);
   }
 
-  private transformToDataDogLog(entry: TransportLogEntry): any {
+  private transformToDataDogLog(entry: TransportLogEntry): Record<string, unknown> {
     const transformed = this.transformEntry(entry);
 
     return {
@@ -158,7 +155,7 @@ export class DataDogTransport extends AnalyticsTransport {
     };
   }
 
-  private transformToDataDogMetric(entry: TransportLogEntry): any {
+  private transformToDataDogMetric(entry: TransportLogEntry): Record<string, unknown> {
     return {
       metric: `logitron.logs.${entry.level}`,
       points: [[Math.floor(entry.timestamp.getTime() / 1000), 1]],
@@ -174,7 +171,7 @@ export class DataDogTransport extends AnalyticsTransport {
     };
   }
 
-  private transformToDataDogTrace(entry: TransportLogEntry): any {
+  private transformToDataDogTrace(entry: TransportLogEntry): Record<string, unknown> {
     return {
       trace_id: entry.traceId,
       span_id: this.generateSpanId(),
@@ -218,7 +215,7 @@ export class DataDogTransport extends AnalyticsTransport {
     return levelMap[level.toLowerCase()] || "info";
   }
 
-  private async makeLogsRequest(endpoint: string, data: any): Promise<void> {
+  private async makeLogsRequest(endpoint: string, data: unknown): Promise<void> {
     const url = `${this.logsUrl}${endpoint}`;
 
     try {
@@ -239,11 +236,12 @@ export class DataDogTransport extends AnalyticsTransport {
     } catch (error) {
       throw new Error(
         `Failed to send logs to DataDog: ${(error as Error).message}`,
+        { cause: error },
       );
     }
   }
 
-  private async makeMetricsRequest(endpoint: string, data: any): Promise<void> {
+  private async makeMetricsRequest(endpoint: string, data: unknown): Promise<void> {
     const url = `${this.metricsUrl}${endpoint}`;
 
     try {
@@ -264,6 +262,7 @@ export class DataDogTransport extends AnalyticsTransport {
     } catch (error) {
       throw new Error(
         `Failed to send metrics to DataDog: ${(error as Error).message}`,
+        { cause: error },
       );
     }
   }
@@ -286,12 +285,14 @@ export class DataDogTransport extends AnalyticsTransport {
   }
 
   private generateSpanId(): string {
-    return Math.floor(Math.random() * 0xffffffffffffffff).toString(16);
+    // eslint-disable-next-line sonarjs/pseudo-random -- non-security span ID generation
+    return Math.floor(Math.random() * 0xffffffffffff).toString(16);
   }
 
   private getHostname(): string {
     try {
-      return require("os").hostname();
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      return require("node:os").hostname() as string;
     } catch {
       return "unknown";
     }
@@ -359,6 +360,7 @@ export class DataDogTransport extends AnalyticsTransport {
     } catch (error) {
       throw new Error(
         `Failed to send event to DataDog: ${(error as Error).message}`,
+        { cause: error },
       );
     }
   }

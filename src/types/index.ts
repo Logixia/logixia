@@ -2,7 +2,7 @@
  * Core type definitions for Logitron Logger
  */
 
-import { HttpRequest, HttpResponse } from "./http.types";
+import type { HttpRequest, HttpResponse } from "./http.types";
 
 // Log levels const object for better flexibility
 export const LogLevel = {
@@ -92,22 +92,22 @@ export interface LoggerConfig<
     | undefined;
   fields?: Partial<Record<LogFieldKey, string | boolean>>; // Enable/disable fields or customize their format
   // Example: { timestamp: '[yyyy-mm-dd HH:MM:ss.MS]', level: true, appName: false, message: true }
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 // Base logger interface with standard methods
 export interface IBaseLogger {
-  error(message: string, data?: Record<string, any>): Promise<void>;
-  error(error: Error, data?: Record<string, any>): Promise<void>;
-  warn(message: string, data?: Record<string, any>): Promise<void>;
-  info(message: string, data?: Record<string, any>): Promise<void>;
-  debug(message: string, data?: Record<string, any>): Promise<void>;
-  trace(message: string, data?: Record<string, any>): Promise<void>;
-  verbose(message: string, data?: Record<string, any>): Promise<void>;
+  error(message: string, data?: Record<string, unknown>): Promise<void>;
+  error(error: Error, data?: Record<string, unknown>): Promise<void>;
+  warn(message: string, data?: Record<string, unknown>): Promise<void>;
+  info(message: string, data?: Record<string, unknown>): Promise<void>;
+  debug(message: string, data?: Record<string, unknown>): Promise<void>;
+  trace(message: string, data?: Record<string, unknown>): Promise<void>;
+  verbose(message: string, data?: Record<string, unknown>): Promise<void>;
   logLevel(
     level: string,
     message: string,
-    data?: Record<string, any>,
+    data?: Record<string, unknown>,
   ): Promise<void>;
 
   time(label: string): void;
@@ -134,7 +134,7 @@ export interface IBaseLogger {
   clearTransportLevelPreferences(): void;
   getAvailableTransports(): string[];
 
-  child(context: string, data?: Record<string, any>): ILogger;
+  child(context: string, data?: Record<string, unknown>): ILogger;
   close(): Promise<void>;
 }
 
@@ -142,18 +142,21 @@ export interface IBaseLogger {
 export type CustomLevelMethods<T extends Record<string, number>> = {
   [K in keyof T]: (
     message: string,
-    data?: Record<string, any>,
+    data?: Record<string, unknown>,
   ) => Promise<void>;
 };
 
 // Generic logger type that combines base logger with custom level methods
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- empty default is intentional for optional generic
 export type ILogger<TLevels extends Record<string, number> = {}> = IBaseLogger &
   CustomLevelMethods<TLevels>;
 
 // Default logger interface for backward compatibility
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- marker interface for backward compat
 export interface ILoggerDefault extends IBaseLogger {}
 
 // Helper type to create logger with specific custom levels
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic type needs any to accept all LoggerConfig shapes
 export type LoggerWithLevels<T extends LoggerConfig<any>> =
   T["levelOptions"] extends { levels: infer L }
     ? L extends Record<string, number>
@@ -173,7 +176,7 @@ export interface LogEntry {
   environment?: string;
   traceId?: string;
   message: string;
-  payload?: Record<string, any>;
+  payload?: Record<string, unknown>;
   context?: string;
   error?: Error;
 }
@@ -195,7 +198,7 @@ export interface TimingEntry {
 
 // Context data interface
 export interface ContextData {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 // Log formatter interface

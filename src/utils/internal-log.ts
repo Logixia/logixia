@@ -39,12 +39,12 @@ export function internalWarn(message: string): void {
  */
 export function internalError(message: string, error?: unknown): void {
   if (!silent) {
-    const errStr =
-      error instanceof Error
-        ? ` — ${error.message}`
-        : error != null
-          ? ` — ${String(error)}`
-          : "";
+    let errStr = "";
+    if (error instanceof Error) {
+      errStr = ` — ${error.message}`;
+    } else if (error != null) {
+      errStr = ` — ${String(error)}`;
+    }
     process.stderr.write(`[logixia:error] ${message}${errStr}\n`);
   }
 }

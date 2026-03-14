@@ -2,7 +2,7 @@
  * Request context tracking for Logitron
  */
 
-import { RequestContext, HttpRequest, HttpResponse } from "../types";
+import type { HttpRequest, HttpResponse,RequestContext } from "../types";
 import {
   generateTraceId,
   getCurrentTraceId,
@@ -147,9 +147,9 @@ export function createHttpRequest(
   url: string,
   headers: Record<string, string | string[]> = {},
   options: {
-    query?: Record<string, any>;
-    params?: Record<string, any>;
-    body?: any;
+    query?: Record<string, unknown>;
+    params?: Record<string, unknown>;
+    body?: unknown;
     ip?: string;
     userAgent?: string;
   } = {},
@@ -173,7 +173,7 @@ export function createHttpRequest(
 export function createHttpResponse(
   statusCode: number,
   headers: Record<string, string | string[]> = {},
-  body?: any,
+  body?: unknown,
   contentLength?: number,
 ): HttpResponse {
   return {

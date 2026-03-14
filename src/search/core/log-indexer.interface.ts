@@ -2,8 +2,8 @@
  * Log indexer interface for indexing and managing log entries
  */
 
-import { LogEntry } from '../../types';
-import { SemanticIndex, SearchQuery } from '../types';
+import type { LogEntry } from '../../types';
+import type { SearchQuery,SemanticIndex } from '../types';
 
 /**
  * Log indexer interface

@@ -1,6 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- CLI tools process raw JSON log data */
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { Command } from 'commander';
-import fs from 'fs';
-import path from 'path';
+
 import { safeParseLogs } from '../utils';
 
 export async function exportLogs(raw: string, opts: any = {}) {
