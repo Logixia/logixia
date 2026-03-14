@@ -28,6 +28,7 @@ const _fastStringifyEntry = buildFastStringify({
   additionalProperties: true,
 });
 
+import { LogixiaContext } from '../context/async-context';
 import { TransportManager } from '../transports/transport.manager';
 import type {
   ContextData,
@@ -44,6 +45,7 @@ import { LogLevel } from '../types';
 import { isError, serializeError } from '../utils/error.utils';
 import { internalError, internalLog, internalWarn } from '../utils/internal-log';
 import { applyRedaction } from '../utils/redact.utils';
+import { Sampler } from '../utils/sampling.utils';
 import { deregisterFromShutdown, flushOnExit, registerForShutdown } from '../utils/shutdown.utils';
 import { generateTraceId, getCurrentTraceId } from '../utils/trace.utils';
 
@@ -128,6 +130,8 @@ export class LogixiaLogger<
   private _formattedAppName = '';
   /** True when a redact config is present — short-circuits applyRedaction when false. */
   private _hasRedact = false;
+  /** Sampling engine — only created when sampling config is present. */
+  private _sampler?: Sampler;
 
   constructor(config: TConfig, context?: string) {
     const defaultConfig: LoggerConfig = {
@@ -183,6 +187,20 @@ export class LogixiaLogger<
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (this.config as any).transports
       );
+    }
+
+    // ── Feature 8: Log sampling ───────────────────────────────────────────────
+    if (this.config.sampling) {
+      this._sampler = new Sampler(this.config.sampling, (stats) => {
+        // Emit sampling stats as an INFO log via direct stdout to avoid recursion
+        process.stdout.write(
+          JSON.stringify({
+            level: 'info',
+            message: '[logixia/sampling] stats',
+            ...stats,
+          }) + '\n'
+        );
+      });
     }
 
     // ── Feature 1: Graceful shutdown ─────────────────────────────────────────
@@ -525,6 +543,7 @@ export class LogixiaLogger<
       await this.transportManager.close();
     }
 
+    this._sampler?.destroy();
     deregisterFromShutdown(this);
   }
 
@@ -534,9 +553,24 @@ export class LogixiaLogger<
     if (this.config.silent) return;
     if (!this.shouldLog(level)) return;
 
+    // ── Feature 8: Sampling ───────────────────────────────────────────────────
+    if (this._sampler) {
+      const traceId = this.config.traceId
+        ? (getCurrentTraceId() ?? this.fallbackTraceId)
+        : undefined;
+      if (!this._sampler.shouldEmit(level, traceId)) return;
+    }
+
+    // ── Feature 6: AsyncLocalStorage context auto-merge ───────────────────────
+    // Merge ALS-stored fields (requestId, userId, …) into the payload so every
+    // log call inside a LogixiaContext.run() scope automatically carries them.
+    const alsContext = LogixiaContext.get();
+    const mergedData =
+      alsContext && Object.keys(alsContext).length > 0 ? { ...alsContext, ...data } : data;
+
     // ── Feature 2: Redaction ─────────────────────────────────────────────────
     // Avoid spread allocation when contextData is empty (the common case)
-    const rawPayload = this._hasContextData ? { ...this.contextData, ...data } : data;
+    const rawPayload = this._hasContextData ? { ...this.contextData, ...mergedData } : mergedData;
     // _hasRedact is pre-computed in _buildPerfCaches() — skips the entire redaction
     // code path when no redact config is present (fast path for the common case).
     let payload: Record<string, unknown> | undefined;

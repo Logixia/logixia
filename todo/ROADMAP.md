@@ -472,11 +472,11 @@ appearing, response times shifting. Export anomaly events as structured logs the
 | 3   | ✅ Per-namespace log levels + ENV override                       | S      | P1     | v1.1       |
 | 4   | ✅ Structured error serialization (cause chain + AggregateError) | S      | P1     | v1.1       |
 | 5   | ✅ Adaptive log level by environment (NODE_ENV + CI)             | S      | P2     | v1.1       |
-| 6   | AsyncLocalStorage context propagation                            | M      | P1     | v1.2       |
-| 7   | Express/Fastify HTTP middleware (Morgan replacement)             | M      | P1     | v1.2       |
-| 8   | Log sampling / rate limiting                                     | M      | P0     | v1.2       |
-| 9   | Multi-transport retry + failover                                 | M      | P1     | v1.2       |
-| 10  | Testing utilities (`createMockLogger`)                           | S      | P2     | v1.2       |
+| 6   | ✅ AsyncLocalStorage context propagation                         | M      | P1     | v1.2       |
+| 7   | ✅ Express/Fastify HTTP middleware (Morgan replacement)          | M      | P1     | v1.2       |
+| 8   | ✅ Log sampling / rate limiting                                  | M      | P0     | v1.2       |
+| 9   | ✅ Multi-transport retry + failover                              | M      | P1     | v1.2       |
+| 10  | ✅ Testing utilities (`createMockLogger`)                        | S      | P2     | v1.2       |
 | 11  | NestJS deep integration (DI, decorators, lifecycle)              | L      | P1     | v1.3       |
 | 12  | Auto-redaction (PII detection regex)                             | M      | P0     | v1.3       |
 | 13  | TypeScript typed log fields (generics + schema)                  | M      | P2     | v1.3       |

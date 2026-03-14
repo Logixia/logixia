@@ -87,6 +87,53 @@ export interface RedactConfig {
   censor?: string;
 }
 
+// ── Log Sampling ───────────────────────────────────────────────────────────────
+/**
+ * Built-in log sampling / rate limiting.
+ *
+ * @example
+ * ```ts
+ * sampling: {
+ *   rate: 0.1,                       // log 10% of all entries
+ *   perLevel: { debug: 0.01 },       // override: debug at 1%
+ *   maxLogsPerSecond: 500,           // hard cap — extras dropped
+ *   traceConsistent: true,           // if a traceId is sampled, keep all logs for that trace
+ * }
+ * ```
+ */
+export interface SamplingConfig {
+  /**
+   * Global sample rate for all log levels: 0.0 (drop all) → 1.0 (keep all).
+   * Default: 1.0 (no sampling).
+   */
+  rate?: number;
+  /**
+   * Per-level rate overrides. Unmentioned levels fall back to `rate`.
+   * ERROR and WARN default to 1.0 even when a lower global rate is set,
+   * unless you explicitly override them here.
+   * @example `{ debug: 0.05, info: 0.5 }`
+   */
+  perLevel?: Partial<Record<string, number>>;
+  /**
+   * Hard cap on logs emitted per second across all levels.
+   * Excess entries are silently dropped and counted in the sampling stats.
+   * Default: unlimited.
+   */
+  maxLogsPerSecond?: number;
+  /**
+   * When true, all log entries sharing a traceId are either all kept or all
+   * dropped — preventing a sampled trace from having missing log entries.
+   * Default: false.
+   */
+  traceConsistent?: boolean;
+  /**
+   * Emit a periodic sampling stats entry at this interval (ms).
+   * Stats include: sampled, dropped, and rate per level over the window.
+   * Set to 0 to disable. Default: 60_000 (60 s).
+   */
+  statsIntervalMs?: number;
+}
+
 // ── Namespace Levels ───────────────────────────────────────────────────────────
 /**
  * Per-namespace log level overrides.
@@ -149,6 +196,12 @@ export interface LoggerConfig<TLevels extends Record<string, number> = Record<st
    * deployments / restarts.
    */
   gracefulShutdown?: boolean | GracefulShutdownConfig;
+  /**
+   * Built-in log sampling & rate limiting.
+   * Completely missing from all existing loggers — eliminates the need to
+   * implement sampling logic in application code.
+   */
+  sampling?: SamplingConfig;
   [key: string]: unknown;
 }
 
