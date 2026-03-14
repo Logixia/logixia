@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.3.1](https://github.com/Logixia/logixia/compare/v1.3.0...v1.3.1) (2026-03-14)
+
+### 📚 Documentation
+
+* add dynamic metadata fetch and refactor package scripts ([dcb706f](https://github.com/Logixia/logixia/commit/dcb706f097d6ac2a1b5d745e2f172a5e7a5d57f7))
+
 ## [1.3.0](https://github.com/Logixia/logixia/compare/v1.2.1...v1.3.0) (2026-03-14)
 
 ### ✨ Features
