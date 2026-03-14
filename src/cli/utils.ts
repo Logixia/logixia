@@ -1,10 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- CLI tools process raw JSON log data */
 export function formatAsTable(rows: any[], columns: string[]) {
   // very small table printer
-  const colWidths: number[] = columns.map(c => Math.max(c.length, ...rows.map(r => (r[c] || '').toString().length)));
-  const hdr = columns.map((c,i) => c.padEnd(colWidths[i] ?? 0)).join(' | ');
-  const sep = colWidths.map(w => '-'.repeat(w)).join('-|-');
-  const body = rows.map(r => columns.map((c,i) => (r[c] || '').toString().padEnd(colWidths[i] ?? 0)).join(' | ')).join('\n');
+  const colWidths: number[] = columns.map((c) =>
+    Math.max(c.length, ...rows.map((r) => (r[c] || '').toString().length))
+  );
+  const hdr = columns.map((c, i) => c.padEnd(colWidths[i] ?? 0)).join(' | ');
+  const sep = colWidths.map((w) => '-'.repeat(w)).join('-|-');
+  const body = rows
+    .map((r) =>
+      columns.map((c, i) => (r[c] || '').toString().padEnd(colWidths[i] ?? 0)).join(' | ')
+    )
+    .join('\n');
   return [hdr, sep, body].join('\n');
 }
 

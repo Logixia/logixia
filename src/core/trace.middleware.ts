@@ -2,16 +2,12 @@
  * Trace ID middleware for NestJS integration
  */
 
-import type { NestMiddleware } from "@nestjs/common";
-import { Injectable } from "@nestjs/common";
-import type { NextFunction,Request, Response } from "express";
+import type { NestMiddleware } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import type { NextFunction, Request, Response } from 'express';
 
-import type { TraceIdConfig } from "../types";
-import {
-  extractTraceId,
-  generateTraceId,
-  runWithTraceId,
-} from "../utils/trace.utils";
+import type { TraceIdConfig } from '../types';
+import { extractTraceId, generateTraceId, runWithTraceId } from '../utils/trace.utils';
 
 // Extend Express Request interface — requires namespace to augment Express typings
 /* eslint-disable @typescript-eslint/no-namespace */
@@ -39,11 +35,11 @@ declare global {
  * custom extractor via TraceIdConfig.extractor.
  */
 const DEFAULT_TRACE_HEADERS = [
-  "traceparent",
-  "x-trace-id",
-  "x-request-id",
-  "x-correlation-id",
-  "trace-id",
+  'traceparent',
+  'x-trace-id',
+  'x-request-id',
+  'x-correlation-id',
+  'trace-id',
 ];
 
 @Injectable()
@@ -52,10 +48,10 @@ export class TraceMiddleware implements NestMiddleware {
     this.config = {
       enabled: true,
       generator: generateTraceId,
-      contextKey: "traceId",
+      contextKey: 'traceId',
       extractor: {
         header: DEFAULT_TRACE_HEADERS,
-        query: ["traceId", "trace_id"],
+        query: ['traceId', 'trace_id'],
       },
       ...config,
     };
@@ -75,9 +71,7 @@ export class TraceMiddleware implements NestMiddleware {
 
     // Generate new trace ID if not found
     if (!traceId) {
-      traceId = this.config.generator
-        ? this.config.generator()
-        : generateTraceId();
+      traceId = this.config.generator ? this.config.generator() : generateTraceId();
     }
 
     // Set trace ID in request
@@ -85,8 +79,8 @@ export class TraceMiddleware implements NestMiddleware {
     req.requestId = req.requestId || generateTraceId();
 
     // Set response headers
-    res.setHeader("X-Trace-Id", traceId);
-    res.setHeader("X-Request-Id", req.requestId);
+    res.setHeader('X-Trace-Id', traceId);
+    res.setHeader('X-Request-Id', req.requestId);
 
     // Run with trace context
     runWithTraceId(
@@ -98,9 +92,9 @@ export class TraceMiddleware implements NestMiddleware {
         requestId: req.requestId,
         method: req.method,
         url: req.url,
-        userAgent: req.get("User-Agent"),
+        userAgent: req.get('User-Agent'),
         ip: req.ip || req.connection.remoteAddress,
-      },
+      }
     );
   }
 }
@@ -119,10 +113,10 @@ export function traceMiddleware(config?: TraceIdConfig) {
   const traceConfig = {
     enabled: true,
     generator: generateTraceId,
-    contextKey: "traceId",
+    contextKey: 'traceId',
     extractor: {
       header: DEFAULT_TRACE_HEADERS,
-      query: ["traceId", "trace_id"],
+      query: ['traceId', 'trace_id'],
     },
     ...config,
   };
@@ -141,9 +135,7 @@ export function traceMiddleware(config?: TraceIdConfig) {
 
     // Generate new trace ID if not found
     if (!traceId) {
-      traceId = traceConfig.generator
-        ? traceConfig.generator()
-        : generateTraceId();
+      traceId = traceConfig.generator ? traceConfig.generator() : generateTraceId();
     }
 
     // Set trace ID in request
@@ -151,8 +143,8 @@ export function traceMiddleware(config?: TraceIdConfig) {
     req.requestId = req.requestId || generateTraceId();
 
     // Set response headers
-    res.setHeader("X-Trace-Id", traceId);
-    res.setHeader("X-Request-Id", req.requestId);
+    res.setHeader('X-Trace-Id', traceId);
+    res.setHeader('X-Request-Id', req.requestId);
 
     // Run with trace context
     runWithTraceId(
@@ -164,9 +156,9 @@ export function traceMiddleware(config?: TraceIdConfig) {
         requestId: req.requestId,
         method: req.method,
         url: req.url,
-        userAgent: req.get("User-Agent"),
+        userAgent: req.get('User-Agent'),
         ip: req.ip || req.connection.remoteAddress,
-      },
+      }
     );
   };
 }

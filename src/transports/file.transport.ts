@@ -1,14 +1,15 @@
-import type { WriteStream } from "node:fs";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { promisify } from "node:util";
+import type { WriteStream } from 'node:fs';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { promisify } from 'node:util';
 
 import type {
   FileTransportConfig,
   IBatchTransport,
   ITransport,
-  TransportLogEntry} from "../types/transport.types";
-import { internalError } from "../utils/internal-log";
+  TransportLogEntry,
+} from '../types/transport.types';
+import { internalError } from '../utils/internal-log';
 
 const writeFile = promisify(fs.writeFile);
 const mkdir = promisify(fs.mkdir);
@@ -17,7 +18,7 @@ const readdir = promisify(fs.readdir);
 const stat = promisify(fs.stat);
 
 export class FileTransport implements ITransport, IBatchTransport {
-  public readonly name = "file";
+  public readonly name = 'file';
   public readonly level?: string | undefined;
   public readonly batchSize?: number;
   public readonly flushInterval?: number;
@@ -31,7 +32,7 @@ export class FileTransport implements ITransport, IBatchTransport {
 
   constructor(config: FileTransportConfig) {
     this.config = {
-      format: "json",
+      format: 'json',
       batchSize: 100,
       flushInterval: 5000,
       ...config,
@@ -55,10 +56,7 @@ export class FileTransport implements ITransport, IBatchTransport {
         await this.writeBatch([entry]);
       }
     } catch (error) {
-      throw new Error(
-        `File transport write failed: ${(error as Error).message}`,
-        { cause: error },
-      );
+      throw new Error(`File transport write failed: ${(error as Error).message}`, { cause: error });
     }
   }
 
@@ -76,7 +74,7 @@ export class FileTransport implements ITransport, IBatchTransport {
 
   private formatEntry(entry: TransportLogEntry): string {
     switch (this.config.format) {
-      case "json":
+      case 'json':
         return JSON.stringify({
           timestamp: entry.timestamp.toISOString(),
           level: entry.level,
@@ -84,21 +82,21 @@ export class FileTransport implements ITransport, IBatchTransport {
           ...(entry.data || {}),
         });
 
-      case "csv": {
+      case 'csv': {
         const fields = [
           entry.timestamp.toISOString(),
           entry.level,
           `"${entry.message.replace(/"/g, '""')}"`,
-          entry.context || "",
-          entry.traceId || "",
+          entry.context || '',
+          entry.traceId || '',
           JSON.stringify(entry.data || {}),
         ];
-        return fields.join(",");
+        return fields.join(',');
       }
 
-      case "text":
+      case 'text':
       default:
-        return `${entry.timestamp.toISOString()} [${entry.level.toUpperCase()}] ${entry.message}${entry.data ? " " + JSON.stringify(entry.data) : ""}`;
+        return `${entry.timestamp.toISOString()} [${entry.level.toUpperCase()}] ${entry.message}${entry.data ? ' ' + JSON.stringify(entry.data) : ''}`;
     }
   }
 
@@ -106,10 +104,12 @@ export class FileTransport implements ITransport, IBatchTransport {
     this.batch.push(entry);
 
     if (this.batch.length >= (this.config.batchSize || 100)) {
-      this.flush().catch((err: unknown) => internalError("FileTransport batch flush failed", err));
+      this.flush().catch((err: unknown) => internalError('FileTransport batch flush failed', err));
     } else if (!this.batchTimer && this.config.flushInterval) {
       this.batchTimer = setTimeout(() => {
-        this.flush().catch((err: unknown) => internalError("FileTransport interval flush failed", err));
+        this.flush().catch((err: unknown) =>
+          internalError('FileTransport interval flush failed', err)
+        );
       }, this.config.flushInterval);
     }
   }
@@ -117,8 +117,7 @@ export class FileTransport implements ITransport, IBatchTransport {
   private async writeBatch(entries: TransportLogEntry[]): Promise<void> {
     if (entries.length === 0) return;
 
-    const content =
-      entries.map((entry) => this.formatEntry(entry)).join("\n") + "\n";
+    const content = entries.map((entry) => this.formatEntry(entry)).join('\n') + '\n';
 
     if (this.writeStream) {
       return new Promise((resolve, reject) => {
@@ -128,7 +127,7 @@ export class FileTransport implements ITransport, IBatchTransport {
         });
       });
     } else {
-      await writeFile(this.currentFilePath, content, { flag: "a" });
+      await writeFile(this.currentFilePath, content, { flag: 'a' });
     }
   }
 
@@ -147,19 +146,19 @@ export class FileTransport implements ITransport, IBatchTransport {
     const match = interval.match(/(\d+)([hdwmy])/i);
     if (!match) return 24 * 60 * 60 * 1000; // Default 1 day
 
-    const value = Number.parseInt(match[1] || "1", 10);
-    const unit = (match[2] || "h").toLowerCase();
+    const value = Number.parseInt(match[1] || '1', 10);
+    const unit = (match[2] || 'h').toLowerCase();
 
     switch (unit) {
-      case "h":
+      case 'h':
         return value * 60 * 60 * 1000;
-      case "d":
+      case 'd':
         return value * 24 * 60 * 60 * 1000;
-      case "w":
+      case 'w':
         return value * 7 * 24 * 60 * 60 * 1000;
-      case "m":
+      case 'm':
         return value * 30 * 24 * 60 * 60 * 1000;
-      case "y":
+      case 'y':
         return value * 365 * 24 * 60 * 60 * 1000;
       default:
         return value * 60 * 60 * 1000;
@@ -193,7 +192,7 @@ export class FileTransport implements ITransport, IBatchTransport {
 
   private generateFilePath(): string {
     const now = new Date();
-    const timestamp = now.toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const dir = path.dirname(this.config.filename);
     const ext = path.extname(this.config.filename);
     const base = path.basename(this.config.filename, ext);
@@ -226,10 +225,7 @@ export class FileTransport implements ITransport, IBatchTransport {
     try {
       const dir = path.dirname(this.config.filename);
       const files = await readdir(dir);
-      const base = path.basename(
-        this.config.filename,
-        path.extname(this.config.filename),
-      );
+      const base = path.basename(this.config.filename, path.extname(this.config.filename));
 
       const logFiles = files
         .filter((file) => file.startsWith(base))
@@ -240,9 +236,7 @@ export class FileTransport implements ITransport, IBatchTransport {
         });
 
       const fileStats = await Promise.all(logFiles);
-      const sortedFiles = fileStats.sort(
-        (a, b) => b.mtime.getTime() - a.mtime.getTime(),
-      );
+      const sortedFiles = fileStats.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
       const filesToDelete = sortedFiles.slice(this.config.rotation!.maxFiles!);
 
@@ -250,7 +244,7 @@ export class FileTransport implements ITransport, IBatchTransport {
         await unlink(file.path);
       }
     } catch (error) {
-      internalError("Failed to cleanup old log files", error);
+      internalError('Failed to cleanup old log files', error);
     }
   }
 

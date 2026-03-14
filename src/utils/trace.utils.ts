@@ -2,11 +2,11 @@
  * Trace ID utilities for Logitron
  */
 
-import { AsyncLocalStorage } from "node:async_hooks";
+import { AsyncLocalStorage } from 'node:async_hooks';
 
-import { v4 as uuidv4 } from "uuid";
+import { v4 as uuidv4 } from 'uuid';
 
-import type { TraceIdConfig, TraceIdExtractorConfig } from "../types";
+import type { TraceIdConfig, TraceIdExtractorConfig } from '../types';
 
 // Async local storage for trace context
 export const traceStorage = new AsyncLocalStorage<{
@@ -46,11 +46,7 @@ export function setTraceId(traceId: string, data?: Record<string, unknown>): voi
 /**
  * Run function with trace ID context
  */
-export function runWithTraceId<T>(
-  traceId: string,
-  fn: () => T,
-  data?: Record<string, unknown>,
-): T {
+export function runWithTraceId<T>(traceId: string, fn: () => T, data?: Record<string, unknown>): T {
   return traceStorage.run({ traceId, ...data }, fn);
 }
 
@@ -67,14 +63,12 @@ interface RequestLike {
  */
 export function extractTraceId(
   request: unknown,
-  config: TraceIdExtractorConfig,
+  config: TraceIdExtractorConfig
 ): string | undefined {
   const req = request as RequestLike;
   // Try headers first
   if (config.header) {
-    const headers = Array.isArray(config.header)
-      ? config.header
-      : [config.header];
+    const headers = Array.isArray(config.header) ? config.header : [config.header];
     for (const header of headers) {
       const value = req.headers?.[header.toLowerCase()];
       if (value) {
@@ -107,9 +101,7 @@ export function extractTraceId(
 
   // Try route parameters
   if (config.params) {
-    const paramFields = Array.isArray(config.params)
-      ? config.params
-      : [config.params];
+    const paramFields = Array.isArray(config.params) ? config.params : [config.params];
     for (const param of paramFields) {
       const value = req.params?.[param];
       if (value) {
@@ -126,11 +118,11 @@ export function extractTraceId(
  *   traceparent (W3C/OTel) → x-trace-id → x-request-id → x-correlation-id → trace-id
  */
 export const DEFAULT_TRACE_HEADERS = [
-  "traceparent",
-  "x-trace-id",
-  "x-request-id",
-  "x-correlation-id",
-  "trace-id",
+  'traceparent',
+  'x-trace-id',
+  'x-request-id',
+  'x-correlation-id',
+  'trace-id',
 ];
 
 /**
@@ -140,7 +132,7 @@ export function createTraceMiddleware(config: TraceIdConfig) {
   const resolvedConfig: TraceIdConfig = {
     extractor: {
       header: DEFAULT_TRACE_HEADERS,
-      query: ["traceId", "trace_id"],
+      query: ['traceId', 'trace_id'],
     },
     ...config,
   };
@@ -155,14 +147,12 @@ export function createTraceMiddleware(config: TraceIdConfig) {
 
     // Generate new trace ID if none was provided by the caller
     if (!traceId) {
-      traceId = resolvedConfig.generator
-        ? resolvedConfig.generator()
-        : generateTraceId();
+      traceId = resolvedConfig.generator ? resolvedConfig.generator() : generateTraceId();
     }
 
     // Set trace ID on the request object and propagate back in response header
     (req as Record<string, unknown>).traceId = traceId;
-    (res as { setHeader: (k: string, v: string) => void }).setHeader("X-Trace-Id", traceId);
+    (res as { setHeader: (k: string, v: string) => void }).setHeader('X-Trace-Id', traceId);
 
     // Run the rest of the middleware/handler chain inside the trace context.
     // AsyncLocalStorage.run() propagates the context through all awaited async
@@ -173,7 +163,12 @@ export function createTraceMiddleware(config: TraceIdConfig) {
       () => {
         next();
       },
-      { requestId: (req as Record<string, unknown>)['id'] as string || (req as Record<string, unknown>)['requestId'] as string || generateTraceId() },
+      {
+        requestId:
+          ((req as Record<string, unknown>)['id'] as string) ||
+          ((req as Record<string, unknown>)['requestId'] as string) ||
+          generateTraceId(),
+      }
     );
   };
 }

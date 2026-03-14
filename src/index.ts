@@ -1,6 +1,6 @@
 /**
  * Logixia - Advanced TypeScript Logger
- * 
+ *
  * A comprehensive logging library with support for:
  * - Multiple output formats (console, file, JSON)
  * - Trace ID tracking
@@ -12,9 +12,9 @@
  * - Pattern recognition and anomaly detection
  */
 
-import { createLogger as createLoggerFromCore,LogixiaLogger } from './core/logitron-logger';
+import { createLogger as createLoggerFromCore, LogixiaLogger } from './core/logitron-logger';
 import { LogixiaLoggerService } from './core/logitron-nestjs.service';
-import type { Environment,LogColor, LoggerConfig} from './types';
+import type { Environment, LogColor, LoggerConfig } from './types';
 import { LogLevel } from './types';
 
 // Type exports
@@ -29,7 +29,7 @@ export * from './utils/trace.utils';
 export * from './search';
 
 // Core exports
-export { DEFAULT_CONFIG,LogixiaLogger, LogixiaLoggerService };
+export { DEFAULT_CONFIG, LogixiaLogger, LogixiaLoggerService };
 
 /**
  * Default configuration for Logixia logger

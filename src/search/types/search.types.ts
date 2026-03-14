@@ -81,7 +81,7 @@ export interface RelatedLog {
 /**
  * Type of relationship between logs
  */
-export type RelationshipType = 
+export type RelationshipType =
   | 'same_trace'
   | 'same_user'
   | 'same_session'
@@ -178,7 +178,7 @@ export interface SearchSuggestion {
 /**
  * Suggestion type
  */
-export type SuggestionType = 
+export type SuggestionType =
   | 'field'
   | 'value'
   | 'operator'
@@ -260,7 +260,7 @@ export interface ParsedNLQuery {
 /**
  * Query intent
  */
-export type QueryIntent = 
+export type QueryIntent =
   | 'find_errors'
   | 'trace_request'
   | 'find_user_activity'
@@ -283,7 +283,7 @@ export interface QueryEntity {
 /**
  * Entity type
  */
-export type EntityType = 
+export type EntityType =
   | 'level'
   | 'service'
   | 'user_id'

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import fs from 'node:fs';
 import path from 'node:path';
 
 import chalk from 'chalk';
@@ -12,8 +13,11 @@ import { tailCommand } from './commands/tail';
 const pkgPath = path.resolve(__dirname, '../../..', 'package.json');
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let pkg: any;
-// eslint-disable-next-line @typescript-eslint/no-require-imports -- CJS entry point
-try { pkg = require(pkgPath); } catch { pkg = { version: '0.0.0' }; }
+try {
+  pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: string };
+} catch {
+  pkg = { version: '0.0.0' };
+}
 
 const program = new Command();
 program
@@ -28,10 +32,13 @@ program.addCommand(searchCommand);
 program.addCommand(exportCommand);
 
 program.on('command:*', () => {
-  console.error(chalk.red('Invalid command: %s\nSee --help for a list of available commands.'), program.args.join(' '));
+  console.error(
+    chalk.red('Invalid command: %s\nSee --help for a list of available commands.'),
+    program.args.join(' ')
+  );
   process.exit(1);
 });
 
-if (require.main === module) {
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
   program.parse(process.argv);
 }

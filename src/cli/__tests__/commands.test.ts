@@ -1,5 +1,5 @@
 // Test the core logic without chalk/UI dependencies
-import { formatAsTable,safeParseLogs } from '../utils';
+import { formatAsTable, safeParseLogs } from '../utils';
 
 describe('CLI Utils', () => {
   const sampleLogs = `
@@ -11,7 +11,7 @@ describe('CLI Utils', () => {
   describe('safeParseLogs', () => {
     test('parses JSON-lines correctly', () => {
       const logs = safeParseLogs(sampleLogs);
-      
+
       expect(logs).toHaveLength(3);
       expect(logs[0]).toHaveProperty('level', 'info');
       expect(logs[1]).toHaveProperty('level', 'error');
@@ -26,7 +26,7 @@ describe('CLI Utils', () => {
     test('handles mixed JSON and plain text', () => {
       const mixed = '{"level":"info"}\nplain text\n{"level":"error"}';
       const logs = safeParseLogs(mixed);
-      
+
       expect(logs).toHaveLength(3);
       expect(logs[0]).toHaveProperty('level', 'info');
       expect(logs[1]).toHaveProperty('message', 'plain text');
@@ -38,10 +38,10 @@ describe('CLI Utils', () => {
     test('formats data as table', () => {
       const data = [
         { name: 'Alice', age: 30 },
-        { name: 'Bob', age: 25 }
+        { name: 'Bob', age: 25 },
       ];
       const table = formatAsTable(data, ['name', 'age']);
-      
+
       expect(table).toContain('Alice');
       expect(table).toContain('Bob');
       expect(table).toContain('30');
@@ -58,7 +58,7 @@ describe('CLI Utils', () => {
     test('filters by level', () => {
       const logs = safeParseLogs(sampleLogs);
       const errors = logs.filter((l: unknown) => l.level === 'error');
-      
+
       expect(errors).toHaveLength(1);
       expect(errors[0].message).toBe('Test 2');
     });
@@ -66,16 +66,16 @@ describe('CLI Utils', () => {
     test('filters by user_id', () => {
       const logs = safeParseLogs(sampleLogs);
       const user123Logs = logs.filter((l: unknown) => l.user_id === '123');
-      
+
       expect(user123Logs).toHaveLength(2);
     });
 
     test('searches across fields', () => {
       const logs = safeParseLogs(sampleLogs);
-      const searchResults = logs.filter((l: unknown) => 
+      const searchResults = logs.filter((l: unknown) =>
         JSON.stringify(l).toLowerCase().includes('test')
       );
-      
+
       expect(searchResults).toHaveLength(3);
     });
   });
@@ -84,7 +84,7 @@ describe('CLI Utils', () => {
     test('generates CSV header', () => {
       const logs = safeParseLogs(sampleLogs);
       const columns = Object.keys(logs[0] || {});
-      
+
       expect(columns).toContain('timestamp');
       expect(columns).toContain('level');
       expect(columns).toContain('message');
@@ -95,10 +95,12 @@ describe('CLI Utils', () => {
       const fields = ['level', 'message'];
       const extracted = logs.map((log: unknown) => {
         const obj: any = {};
-        for (const f of fields) { if (log[f]) obj[f] = log[f]; }
+        for (const f of fields) {
+          if (log[f]) obj[f] = log[f];
+        }
         return obj;
       });
-      
+
       expect(extracted[0]).toHaveProperty('level');
       expect(extracted[0]).toHaveProperty('message');
       expect(extracted[0]).not.toHaveProperty('timestamp');

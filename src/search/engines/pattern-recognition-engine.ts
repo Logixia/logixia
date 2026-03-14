@@ -3,7 +3,7 @@
  */
 
 import type { LogEntry } from '../../types';
-import type { AnomalyDetection,LogPattern } from '../types';
+import type { AnomalyDetection, LogPattern } from '../types';
 
 /**
  * Pattern recognition engine for log analysis
@@ -12,11 +12,13 @@ export class PatternRecognitionEngine {
   private patterns: Map<string, LogPattern> = new Map();
   private patternFrequencies: Map<string, number> = new Map();
 
-  constructor(private options?: {
-    minFrequency?: number;
-    maxPatterns?: number;
-    anomalyThreshold?: number;
-  }) {
+  constructor(
+    private options?: {
+      minFrequency?: number;
+      maxPatterns?: number;
+      anomalyThreshold?: number;
+    }
+  ) {
     this.options = {
       minFrequency: 3,
       maxPatterns: 1000,
@@ -39,11 +41,7 @@ export class PatternRecognitionEngine {
     const timingPatterns = this.extractTimingPatterns(logs);
 
     // Combine all patterns
-    const allPatterns = [
-      ...messagePatterns,
-      ...errorPatterns,
-      ...timingPatterns,
-    ];
+    const allPatterns = [...messagePatterns, ...errorPatterns, ...timingPatterns];
 
     // Filter by frequency
     const frequentPatterns = allPatterns.filter(
@@ -54,10 +52,7 @@ export class PatternRecognitionEngine {
     frequentPatterns.sort((a, b) => b.frequency - a.frequency);
 
     // Limit number of patterns
-    const limitedPatterns = frequentPatterns.slice(
-      0,
-      this.options?.maxPatterns || 1000
-    );
+    const limitedPatterns = frequentPatterns.slice(0, this.options?.maxPatterns || 1000);
 
     // Store patterns
     for (const pattern of limitedPatterns) {
@@ -75,7 +70,7 @@ export class PatternRecognitionEngine {
 
     for (const log of logs) {
       const anomalyScore = await this.calculateAnomalyScore(log);
-      
+
       if (anomalyScore > (this.options?.anomalyThreshold || 0.3)) {
         anomalies.push({
           log,
@@ -126,11 +121,11 @@ export class PatternRecognitionEngine {
     for (const log of logs) {
       // Normalize message by replacing numbers and IDs
       const normalizedMessage = this.normalizeMessage(log.message);
-      
+
       if (!patternMap.has(normalizedMessage)) {
         patternMap.set(normalizedMessage, { examples: [], count: 0 });
       }
-      
+
       const pattern = patternMap.get(normalizedMessage)!;
       if (pattern.examples.length < 3) {
         pattern.examples.push(log);
@@ -144,7 +139,7 @@ export class PatternRecognitionEngine {
       pattern,
       examples: data.examples,
       frequency: data.count,
-      lastSeen: (data.examples[data.examples.length - 1])?.timestamp 
+      lastSeen: data.examples[data.examples.length - 1]?.timestamp
         ? new Date((data.examples[data.examples.length - 1] as (typeof data.examples)[0]).timestamp)
         : new Date(),
       category: 'message',
@@ -157,11 +152,11 @@ export class PatternRecognitionEngine {
 
     for (const log of errorLogs) {
       const errorPattern = this.extractErrorPattern(log);
-      
+
       if (!patternMap.has(errorPattern)) {
         patternMap.set(errorPattern, { examples: [], count: 0 });
       }
-      
+
       const pattern = patternMap.get(errorPattern)!;
       if (pattern.examples.length < 3) {
         pattern.examples.push(log);
@@ -174,7 +169,7 @@ export class PatternRecognitionEngine {
       pattern,
       examples: data.examples,
       frequency: data.count,
-      lastSeen: (data.examples[data.examples.length - 1])?.timestamp
+      lastSeen: data.examples[data.examples.length - 1]?.timestamp
         ? new Date((data.examples[data.examples.length - 1] as (typeof data.examples)[0]).timestamp)
         : new Date(),
       category: 'error',
@@ -193,8 +188,7 @@ export class PatternRecognitionEngine {
     }
 
     // Find peak hours
-    const peakHour = Array.from(hourCounts.entries())
-      .sort((a, b) => b[1] - a[1])[0];
+    const peakHour = Array.from(hourCounts.entries()).sort((a, b) => b[1] - a[1])[0];
 
     if (peakHour) {
       patterns.push({
@@ -304,11 +298,11 @@ export class PatternRecognitionEngine {
 
   private doesLogMatchPattern(log: LogEntry, pattern: LogPattern): boolean {
     const normalizedMessage = this.normalizeMessage(log.message);
-    
+
     if (pattern.regex) {
       return pattern.regex.test(log.message);
     }
-    
+
     return normalizedMessage === pattern.pattern;
   }
 }

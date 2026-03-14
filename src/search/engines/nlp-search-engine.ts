@@ -184,7 +184,7 @@ export class NLPSearchEngine extends BasicSearchEngine {
 
     for (const [type, pattern] of this.entityPatterns.entries()) {
       const matches = query.matchAll(new RegExp(pattern, 'gi'));
-      
+
       for (const match of matches) {
         const value = match[1] || match[0];
         entities.push({
@@ -204,22 +204,22 @@ export class NLPSearchEngine extends BasicSearchEngine {
         if (!filters.levels) filters.levels = [];
         filters.levels.push(entity.value.toLowerCase());
         break;
-      
+
       case 'service':
         if (!filters.services) filters.services = [];
         filters.services.push(entity.value);
         break;
-      
+
       case 'user_id':
         if (!filters.userIds) filters.userIds = [];
         filters.userIds.push(entity.value);
         break;
-      
+
       case 'trace_id':
         if (!filters.traceIds) filters.traceIds = [];
         filters.traceIds.push(entity.value);
         break;
-      
+
       case 'error_type':
         // Could be used for more specific filtering
         break;
@@ -282,11 +282,7 @@ export class NLPSearchEngine extends BasicSearchEngine {
     return undefined;
   }
 
-  private calculateConfidence(
-    intent: QueryIntent,
-    entities: QueryEntity[],
-    query: string
-  ): number {
+  private calculateConfidence(intent: QueryIntent, entities: QueryEntity[], query: string): number {
     let confidence = 0.5; // Base confidence
 
     // Boost confidence for specific intents
@@ -368,24 +364,33 @@ export class NLPSearchEngine extends BasicSearchEngine {
     // Remove entity text from query
     for (const entity of entities) {
       // Remove common patterns
-      cleanQuery = cleanQuery.replace(
-        new RegExp(`\\b${entity.value}\\b`, 'gi'),
-        ''
-      );
+      cleanQuery = cleanQuery.replace(new RegExp(`\\b${entity.value}\\b`, 'gi'), '');
     }
 
     // Remove common filter words
     const filterWords = [
-      'show', 'find', 'get', 'all', 'from', 'in', 'the',
-      'for', 'with', 'last', 'past', 'today', 'yesterday',
-      'service', 'user', 'trace', 'error', 'errors',
+      'show',
+      'find',
+      'get',
+      'all',
+      'from',
+      'in',
+      'the',
+      'for',
+      'with',
+      'last',
+      'past',
+      'today',
+      'yesterday',
+      'service',
+      'user',
+      'trace',
+      'error',
+      'errors',
     ];
 
     for (const word of filterWords) {
-      cleanQuery = cleanQuery.replace(
-        new RegExp(`\\b${word}\\b`, 'gi'),
-        ''
-      );
+      cleanQuery = cleanQuery.replace(new RegExp(`\\b${word}\\b`, 'gi'), '');
     }
 
     // Clean up extra whitespace

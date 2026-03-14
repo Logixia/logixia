@@ -13,11 +13,16 @@ function parseDurationToMs(input?: string) {
   const n = Number.parseInt(m[1]!, 10);
   const unit = m[2]!.toLowerCase();
   switch (unit) {
-    case 's': return n * 1000;
-    case 'm': return n * 60 * 1000;
-    case 'h': return n * 60 * 60 * 1000;
-    case 'd': return n * 24 * 60 * 60 * 1000;
-    default: return;
+    case 's':
+      return n * 1000;
+    case 'm':
+      return n * 60 * 1000;
+    case 'h':
+      return n * 60 * 60 * 1000;
+    case 'd':
+      return n * 24 * 60 * 60 * 1000;
+    default:
+      return;
   }
 }
 
@@ -39,7 +44,11 @@ export async function analyzeFileContents(raw: string, opts: any = {}) {
   }
 
   if (opts.level) {
-    filtered = filtered.filter((e: unknown) => (((e as Record<string, unknown>)['level'] ?? '') as string).toLowerCase() === opts.level.toLowerCase());
+    filtered = filtered.filter(
+      (e: unknown) =>
+        (((e as Record<string, unknown>)['level'] ?? '') as string).toLowerCase() ===
+        opts.level.toLowerCase()
+    );
   }
 
   const byLevel: Record<string, number> = {};
@@ -52,16 +61,16 @@ export async function analyzeFileContents(raw: string, opts: any = {}) {
     return { total: filtered.length, byLevel };
   }
 
-  const rows = Object.keys(byLevel).map(k => ({ level: k, count: byLevel[k] }));
-  return formatAsTable(rows, ['level','count']);
+  const rows = Object.keys(byLevel).map((k) => ({ level: k, count: byLevel[k] }));
+  return formatAsTable(rows, ['level', 'count']);
 }
 
 export const analyzeCommand = new Command('analyze')
   .description('Analyze log files for patterns and insights')
-  .argument('<file>','Path to log file')
-  .option('--level <level>','Filter by log level')
-  .option('--last <range>','Time range (e.g., 24h, 7d)')
-  .option('--format <fmt>','Output format (table,json,csv)','table')
+  .argument('<file>', 'Path to log file')
+  .option('--level <level>', 'Filter by log level')
+  .option('--last <range>', 'Time range (e.g., 24h, 7d)')
+  .option('--format <fmt>', 'Output format (table,json,csv)', 'table')
   .action(async (file: string, opts: any) => {
     const full = path.resolve(process.cwd(), file);
     if (!fs.existsSync(full)) {

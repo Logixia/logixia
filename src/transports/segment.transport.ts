@@ -1,20 +1,14 @@
-import type {
-  SegmentTransportConfig,
-  TransportLogEntry,
-} from "../types/transport.types";
-import { internalError } from "../utils/internal-log";
-import type {
-  AnalyticsUser} from "./analytics.transport";
-import {
-  AnalyticsTransport
-} from "./analytics.transport";
+import type { SegmentTransportConfig, TransportLogEntry } from '../types/transport.types';
+import { internalError } from '../utils/internal-log';
+import type { AnalyticsUser } from './analytics.transport';
+import { AnalyticsTransport } from './analytics.transport';
 
 export class SegmentTransport extends AnalyticsTransport {
   private segmentConfig: SegmentTransportConfig;
   private baseUrl: string;
 
   constructor(config: SegmentTransportConfig) {
-    super("segment", config);
+    super('segment', config);
     this.segmentConfig = {
       enableBatching: true,
       maxBatchSize: 100,
@@ -23,21 +17,21 @@ export class SegmentTransport extends AnalyticsTransport {
       ...config,
     };
 
-    this.baseUrl = config.dataPlaneUrl || "https://api.segment.io";
+    this.baseUrl = config.dataPlaneUrl || 'https://api.segment.io';
   }
 
   protected async initialize(): Promise<void> {
     try {
       // Validate required configuration
       if (!this.segmentConfig.writeKey) {
-        throw new Error("Segment Write Key is required");
+        throw new Error('Segment Write Key is required');
       }
 
       // Test connection
       await this.testConnection();
       this.isReady = true;
     } catch (error) {
-      internalError("Segment transport initialization failed", error);
+      internalError('Segment transport initialization failed', error);
       throw error;
     }
   }
@@ -56,9 +50,7 @@ export class SegmentTransport extends AnalyticsTransport {
       return;
     }
 
-    const segmentEvents = entries.map((entry) =>
-      this.transformToSegmentEvent(entry),
-    );
+    const segmentEvents = entries.map((entry) => this.transformToSegmentEvent(entry));
     await this.batchTrack(segmentEvents);
   }
 
@@ -70,7 +62,7 @@ export class SegmentTransport extends AnalyticsTransport {
     const transformed = this.transformEntry(entry);
 
     return {
-      type: "track",
+      type: 'track',
       event: `Log ${entry.level.charAt(0).toUpperCase() + entry.level.slice(1)}`,
       userId: this.extractUserId(entry),
       anonymousId: this.generateAnonymousId(),
@@ -78,7 +70,7 @@ export class SegmentTransport extends AnalyticsTransport {
       properties: {
         level: entry.level,
         message: entry.message,
-        logger: "logixia",
+        logger: 'logixia',
         ...transformed,
         ...(entry.context && { context: entry.context }),
         ...(entry.traceId && { traceId: entry.traceId }),
@@ -87,13 +79,13 @@ export class SegmentTransport extends AnalyticsTransport {
       },
       context: {
         library: {
-          name: "logixia",
-          version: "1.0.0",
+          name: 'logixia',
+          version: '1.0.0',
         },
         app: {
-          name: entry.appName || "unknown",
-          version: "1.0.0",
-          environment: entry.environment || "production",
+          name: entry.appName || 'unknown',
+          version: '1.0.0',
+          environment: entry.environment || 'production',
         },
         ...(entry.traceId && {
           trace: {
@@ -104,28 +96,25 @@ export class SegmentTransport extends AnalyticsTransport {
       integrations: {
         // Disable integrations that might interfere
         All: false,
-        "Segment.io": true,
+        'Segment.io': true,
       },
     };
   }
 
   private async track(event: unknown): Promise<void> {
-    await this.makeRequest("/v1/track", event);
+    await this.makeRequest('/v1/track', event);
   }
 
   private async batchTrack(events: unknown[]): Promise<void> {
     // Split into chunks based on maxBatchSize
-    const chunks = this.chunkArray(
-      events,
-      this.segmentConfig.maxBatchSize || 100,
-    );
+    const chunks = this.chunkArray(events, this.segmentConfig.maxBatchSize || 100);
 
     for (const chunk of chunks) {
       const payload = {
         batch: chunk,
       };
 
-      await this.makeRequest("/v1/batch", payload);
+      await this.makeRequest('/v1/batch', payload);
     }
   }
 
@@ -133,17 +122,15 @@ export class SegmentTransport extends AnalyticsTransport {
     const url = `${this.baseUrl}${endpoint}`;
 
     // Encode write key for basic auth
-    const auth = Buffer.from(`${this.segmentConfig.writeKey}:`).toString(
-      "base64",
-    );
+    const auth = Buffer.from(`${this.segmentConfig.writeKey}:`).toString('base64');
 
     try {
       const response = await fetch(url, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Basic ${auth}`,
-          "User-Agent": "logixia/1.0.0",
+          'User-Agent': 'logixia/1.0.0',
         },
         body: JSON.stringify(data),
       });
@@ -151,38 +138,37 @@ export class SegmentTransport extends AnalyticsTransport {
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(
-          `Segment API error: ${response.status} ${response.statusText} - ${errorText}`,
+          `Segment API error: ${response.status} ${response.statusText} - ${errorText}`
         );
       }
     } catch (error) {
-      throw new Error(
-        `Failed to send data to Segment: ${(error as Error).message}`,
-        { cause: error },
-      );
+      throw new Error(`Failed to send data to Segment: ${(error as Error).message}`, {
+        cause: error,
+      });
     }
   }
 
   private async testConnection(): Promise<void> {
     // Send a test track event
     const testEvent = {
-      type: "track",
-      event: "Logixia Test",
-      userId: "test-user",
+      type: 'track',
+      event: 'Logixia Test',
+      userId: 'test-user',
       anonymousId: this.generateAnonymousId(),
       timestamp: new Date().toISOString(),
       properties: {
         test: true,
-        source: "logixia",
+        source: 'logixia',
       },
       context: {
         library: {
-          name: "logixia",
-          version: "1.0.0",
+          name: 'logixia',
+          version: '1.0.0',
         },
       },
     };
 
-    await this.makeRequest("/v1/track", testEvent);
+    await this.makeRequest('/v1/track', testEvent);
   }
 
   private extractUserId(entry: TransportLogEntry): string | undefined {
@@ -197,15 +183,12 @@ export class SegmentTransport extends AnalyticsTransport {
 
   private generateAnonymousId(): string {
     // Generate a UUID-like anonymous ID (non-security use)
-    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
-      /[xy]/g,
-      function (c) {
-        // eslint-disable-next-line sonarjs/pseudo-random -- non-security UUID generation
-        const r = (Math.random() * 16) | 0;
-        const v = c === "x" ? r : (r & 0x3) | 0x8;
-        return v.toString(16);
-      },
-    );
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      // eslint-disable-next-line sonarjs/pseudo-random -- non-security UUID generation
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
   }
 
   private chunkArray<T>(array: T[], size: number): T[][] {
@@ -219,7 +202,7 @@ export class SegmentTransport extends AnalyticsTransport {
   // Public methods for Segment-specific functionality
   public async identify(user: AnalyticsUser): Promise<void> {
     const payload = {
-      type: "identify",
+      type: 'identify',
       userId: user.id,
       anonymousId: this.generateAnonymousId(),
       timestamp: new Date().toISOString(),
@@ -229,50 +212,44 @@ export class SegmentTransport extends AnalyticsTransport {
       },
       context: {
         library: {
-          name: "logitron",
-          version: "1.0.0",
+          name: 'logitron',
+          version: '1.0.0',
         },
       },
     };
 
-    await this.makeRequest("/v1/identify", payload);
+    await this.makeRequest('/v1/identify', payload);
   }
 
-  public async page(
-    name: string,
-    properties: Record<string, unknown> = {},
-  ): Promise<void> {
+  public async page(name: string, properties: Record<string, unknown> = {}): Promise<void> {
     const payload = {
-      type: "page",
+      type: 'page',
       name,
       anonymousId: this.generateAnonymousId(),
       timestamp: new Date().toISOString(),
       properties: {
         ...properties,
-        url: properties.url || `/${name.toLowerCase().replace(/\s+/g, "-")}`,
+        url: properties.url || `/${name.toLowerCase().replace(/\s+/g, '-')}`,
         title: properties.title || name,
       },
       context: {
         library: {
-          name: "logitron",
-          version: "1.0.0",
+          name: 'logitron',
+          version: '1.0.0',
         },
         page: {
-          url: properties.url || `/${name.toLowerCase().replace(/\s+/g, "-")}`,
+          url: properties.url || `/${name.toLowerCase().replace(/\s+/g, '-')}`,
           title: properties.title || name,
         },
       },
     };
 
-    await this.makeRequest("/v1/page", payload);
+    await this.makeRequest('/v1/page', payload);
   }
 
-  public async screen(
-    name: string,
-    properties: Record<string, unknown> = {},
-  ): Promise<void> {
+  public async screen(name: string, properties: Record<string, unknown> = {}): Promise<void> {
     const payload = {
-      type: "screen",
+      type: 'screen',
       name,
       anonymousId: this.generateAnonymousId(),
       timestamp: new Date().toISOString(),
@@ -281,8 +258,8 @@ export class SegmentTransport extends AnalyticsTransport {
       },
       context: {
         library: {
-          name: "logitron",
-          version: "1.0.0",
+          name: 'logitron',
+          version: '1.0.0',
         },
         screen: {
           name,
@@ -290,16 +267,16 @@ export class SegmentTransport extends AnalyticsTransport {
       },
     };
 
-    await this.makeRequest("/v1/screen", payload);
+    await this.makeRequest('/v1/screen', payload);
   }
 
   public async group(
     groupId: string,
     traits: Record<string, unknown> = {},
-    userId?: string,
+    userId?: string
   ): Promise<void> {
     const payload = {
-      type: "group",
+      type: 'group',
       groupId,
       userId,
       anonymousId: this.generateAnonymousId(),
@@ -307,39 +284,39 @@ export class SegmentTransport extends AnalyticsTransport {
       traits,
       context: {
         library: {
-          name: "logitron",
-          version: "1.0.0",
+          name: 'logitron',
+          version: '1.0.0',
         },
       },
     };
 
-    await this.makeRequest("/v1/group", payload);
+    await this.makeRequest('/v1/group', payload);
   }
 
   public async alias(userId: string, previousId: string): Promise<void> {
     const payload = {
-      type: "alias",
+      type: 'alias',
       userId,
       previousId,
       timestamp: new Date().toISOString(),
       context: {
         library: {
-          name: "logitron",
-          version: "1.0.0",
+          name: 'logitron',
+          version: '1.0.0',
         },
       },
     };
 
-    await this.makeRequest("/v1/alias", payload);
+    await this.makeRequest('/v1/alias', payload);
   }
 
   public async trackCustomEvent(
     eventName: string,
     properties: Record<string, unknown> = {},
-    userId?: string,
+    userId?: string
   ): Promise<void> {
     const payload = {
-      type: "track",
+      type: 'track',
       event: eventName,
       userId,
       anonymousId: this.generateAnonymousId(),
@@ -347,13 +324,13 @@ export class SegmentTransport extends AnalyticsTransport {
       properties,
       context: {
         library: {
-          name: "logitron",
-          version: "1.0.0",
+          name: 'logitron',
+          version: '1.0.0',
         },
       },
     };
 
-    await this.makeRequest("/v1/track", payload);
+    await this.makeRequest('/v1/track', payload);
   }
 
   // E-commerce tracking methods
@@ -361,11 +338,11 @@ export class SegmentTransport extends AnalyticsTransport {
     orderId: string,
     products: unknown[],
     revenue: number,
-    currency: string = "USD",
+    currency: string = 'USD'
   ): Promise<void> {
     const payload = {
-      type: "track",
-      event: "Order Completed",
+      type: 'track',
+      event: 'Order Completed',
       anonymousId: this.generateAnonymousId(),
       timestamp: new Date().toISOString(),
       properties: {
@@ -376,30 +353,30 @@ export class SegmentTransport extends AnalyticsTransport {
       },
       context: {
         library: {
-          name: "logitron",
-          version: "1.0.0",
+          name: 'logitron',
+          version: '1.0.0',
         },
       },
     };
 
-    await this.makeRequest("/v1/track", payload);
+    await this.makeRequest('/v1/track', payload);
   }
 
   public async trackProductViewed(product: unknown): Promise<void> {
     const payload = {
-      type: "track",
-      event: "Product Viewed",
+      type: 'track',
+      event: 'Product Viewed',
       anonymousId: this.generateAnonymousId(),
       timestamp: new Date().toISOString(),
       properties: product,
       context: {
         library: {
-          name: "logitron",
-          version: "1.0.0",
+          name: 'logitron',
+          version: '1.0.0',
         },
       },
     };
 
-    await this.makeRequest("/v1/track", payload);
+    await this.makeRequest('/v1/track', payload);
   }
 }

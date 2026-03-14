@@ -10,7 +10,7 @@
  * the LOGIXIA_SILENT_INTERNAL=1 environment variable.
  */
 
-const silent = process.env.LOGIXIA_SILENT_INTERNAL === "1";
+const silent = process.env.LOGIXIA_SILENT_INTERNAL === '1';
 
 /**
  * Emit an internal debug/info message to stderr.
@@ -39,7 +39,7 @@ export function internalWarn(message: string): void {
  */
 export function internalError(message: string, error?: unknown): void {
   if (!silent) {
-    let errStr = "";
+    let errStr = '';
     if (error instanceof Error) {
       errStr = ` — ${error.message}`;
     } else if (error != null) {

@@ -2,8 +2,8 @@
  * JSON formatter for Logixia
  */
 
-import type { ILogFormatter, LogEntry} from "../types";
-import { serializeError } from "../utils/error.utils";
+import type { ILogFormatter, LogEntry } from '../types';
+import { serializeError } from '../utils/error.utils';
 
 export class JsonFormatter implements ILogFormatter {
   private includeTimestamp: boolean;
@@ -21,7 +21,7 @@ export class JsonFormatter implements ILogFormatter {
       includeTraceId?: boolean;
       includeContext?: boolean;
       prettyPrint?: boolean;
-    } = {},
+    } = {}
   ) {
     this.includeTimestamp = options.includeTimestamp ?? true;
     this.includeLevel = options.includeLevel ?? true;
@@ -76,13 +76,11 @@ export class JsonFormatter implements ILogFormatter {
     // Add metadata
     formatted.meta = {
       pid: process.pid,
-      hostname: process.env.HOSTNAME || "unknown",
+      hostname: process.env.HOSTNAME || 'unknown',
       version: process.version,
     };
 
-    return this.prettyPrint
-      ? JSON.stringify(formatted, null, 2)
-      : JSON.stringify(formatted);
+    return this.prettyPrint ? JSON.stringify(formatted, null, 2) : JSON.stringify(formatted);
   }
 
   private serializePayload(payload: Record<string, unknown>): Record<string, unknown> {
@@ -94,9 +92,9 @@ export class JsonFormatter implements ILogFormatter {
           serialized[key] = serializeError(value);
         } else if (value instanceof Date) {
           serialized[key] = value.toISOString();
-        } else if (typeof value === "function") {
-          serialized[key] = "[Function]";
-        } else if (typeof value === "symbol") {
+        } else if (typeof value === 'function') {
+          serialized[key] = '[Function]';
+        } else if (typeof value === 'symbol') {
           serialized[key] = value.toString();
         } else if (value === undefined) {
           serialized[key] = null;
@@ -104,7 +102,7 @@ export class JsonFormatter implements ILogFormatter {
           serialized[key] = value;
         }
       } catch {
-        serialized[key] = "[Unserializable]";
+        serialized[key] = '[Unserializable]';
       }
     }
 
