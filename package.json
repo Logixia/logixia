@@ -80,13 +80,20 @@
     "cli:dev": "ts-node src/cli/index.ts",
     "build:watch": "tsc --watch",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run clean && npm run build",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "lint": "eslint src/**/*.ts",
+    "test:ci": "jest --coverage --ci --bail --forceExit",
+    "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
+    "lint:check": "eslint src/",
     "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run lint:check",
+    "ci": "npm run typecheck && npm run lint:check && npm run test:ci",
+    "validate": "npm run clean && npm run build && npm run typecheck && npm run lint:check && npm run test:coverage",
+    "prepublishOnly": "npm run validate",
     "dev:basic-usage": "ts-node examples/basic-usage.ts",
     "dev:express": "ts-node examples/express-example.ts",
     "dev:nestjs": "ts-node examples/nestjs-example.ts",
@@ -95,9 +102,6 @@
     "dev:fields": "ts-node examples/field-configuration.ts",
     "dev:search": "ts-node examples/search-quickstart.ts",
     "dev:intelligent-search": "ts-node examples/intelligent-search.ts",
-    "lint:check": "eslint src/",
-    "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit",
     "benchmark": "npm run build && node benchmarks/run.mjs",
     "size": "size-limit",
     "prepare": "husky install",
@@ -230,9 +234,7 @@
   "dependencies": {
     "chalk": "^5.6.2",
     "commander": "^11.1.0",
-    "fast-json-stringify": "^6.3.0",
-    "inquirer": "^9.3.8",
-    "ora": "^6.3.1"
+    "fast-json-stringify": "^6.3.0"
   },
   "lint-staged": {
     "src/**/*.{ts,js}": [
