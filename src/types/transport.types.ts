@@ -1,8 +1,39 @@
+// ── Transport retry / failover ─────────────────────────────────────────────────
+
+/**
+ * Per-transport retry & failover configuration.
+ *
+ * @example
+ * ```ts
+ * retry: { maxRetries: 3, backoff: 'exponential', delay: 500 }
+ * fallback: myLocalFileTransport
+ * ```
+ */
+export interface TransportRetryConfig {
+  /** Maximum number of retry attempts after the first failure. Default: 0 (no retry). */
+  maxRetries?: number;
+  /** Backoff strategy between retries. Default: 'exponential'. */
+  backoff?: 'fixed' | 'linear' | 'exponential';
+  /** Base delay (ms) between retries. Default: 500. */
+  delay?: number;
+  /** Maximum delay cap (ms) when using exponential backoff. Default: 30_000. */
+  maxDelay?: number;
+  /**
+   * Fallback transport to write to when all retries are exhausted.
+   * Typically a local FileTransport acting as a dead-letter queue.
+   */
+  fallback?: ITransport;
+  /** Called when all retries are exhausted (after fallback, if any). */
+  onExhausted?: (error: Error, entry: TransportLogEntry) => void;
+}
+
 export interface ITransport {
   name: string;
   level?: string | undefined;
   write(entry: TransportLogEntry): Promise<void>;
   close?(): Promise<void>;
+  /** Optional per-transport retry configuration. */
+  retry?: TransportRetryConfig;
 }
 
 export interface TransportLogEntry {

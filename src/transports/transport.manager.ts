@@ -20,6 +20,11 @@ import { GoogleAnalyticsTransport } from './google-analytics.transport';
 import { MixpanelTransport } from './mixpanel.transport';
 import { SegmentTransport } from './segment.transport';
 
+// Tiny sleep helper — avoids setTimeout wrapper object allocation on every call
+function _sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export class TransportManager extends EventEmitter {
   private transports: Map<string, ITransport> = new Map();
   private metrics: Map<string, TransportMetrics> = new Map();
@@ -200,7 +205,7 @@ export class TransportManager extends EventEmitter {
     const metrics = this.metrics.get(id)!;
 
     try {
-      await transport.write(entry);
+      await this._writeWithRetry(transport, entry);
 
       // Update metrics (reuse startTime, avoid new Date() allocation)
       const writeTime = Date.now() - startTime;
@@ -214,6 +219,76 @@ export class TransportManager extends EventEmitter {
       this.emit('error', error, id);
       throw error;
     }
+  }
+
+  /**
+   * Feature 9: Multi-transport retry + failover.
+   *
+   * Attempts `transport.write()` up to `retry.maxRetries + 1` times with the
+   * configured backoff strategy. If all attempts fail and a fallback transport
+   * is configured, routes the entry there instead.
+   */
+  private async _writeWithRetry(transport: ITransport, entry: TransportLogEntry): Promise<void> {
+    const retryCfg = transport.retry;
+
+    // Fast path: no retry config → single attempt
+    if (!retryCfg || !retryCfg.maxRetries) {
+      await transport.write(entry);
+      return;
+    }
+
+    const {
+      maxRetries,
+      backoff = 'exponential',
+      delay: baseDelay = 500,
+      maxDelay = 30_000,
+      fallback,
+      onExhausted,
+    } = retryCfg;
+
+    let lastError: Error = new Error('Unknown transport error');
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        await transport.write(entry);
+        return; // success
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+
+        if (attempt < maxRetries) {
+          // Compute next delay
+          let wait: number;
+          switch (backoff) {
+            case 'fixed':
+              wait = baseDelay;
+              break;
+            case 'linear':
+              wait = baseDelay * (attempt + 1);
+              break;
+            case 'exponential':
+            default:
+              wait = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
+          }
+
+          this.emit('transport:retry', transport.name, attempt + 1, maxRetries, wait);
+          await _sleep(wait);
+        }
+      }
+    }
+
+    // All retries exhausted — try fallback
+    if (fallback) {
+      this.emit('transport:fallback', transport.name, fallback.name);
+      try {
+        await fallback.write(entry);
+        return;
+      } catch {
+        // fallback also failed — fall through to onExhausted
+      }
+    }
+
+    onExhausted?.(lastError, entry);
+    throw lastError;
   }
 
   private shouldTransportHandle(

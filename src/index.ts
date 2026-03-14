@@ -30,6 +30,17 @@ export * from './utils/trace.utils';
 // Search module exports
 export * from './search';
 
+// Context propagation (AsyncLocalStorage)
+export type { LogContext } from './context/async-context';
+export {
+  createExpressContextMiddleware,
+  createFastifyContextHook,
+  LogixiaContext,
+} from './context/async-context';
+
+// Sampling stats (SamplingConfig is already exported via ./types)
+export type { SamplingStats } from './utils/sampling.utils';
+
 // Core exports
 export { DEFAULT_CONFIG, LogixiaLogger, LogixiaLoggerService };
 
