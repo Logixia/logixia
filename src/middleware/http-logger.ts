@@ -213,7 +213,7 @@ export function createExpressMiddleware(
 // ── Fastify plugin ─────────────────────────────────────────────────────────────
 
 export interface FastifyInstance {
-  addHook: (name: string, fn: (...args: unknown[]) => unknown) => void;
+  addHook: (name: string, fn: (req: unknown, reply: unknown, done: () => void) => void) => void;
 }
 
 /**

@@ -116,10 +116,11 @@ export function createExpressContextMiddleware(
     next: () => void
   ): void {
     const headers = (req['headers'] ?? {}) as Record<string, string | undefined>;
+    const traceId = headers[traceIdHeader];
     const base: LogContext = {
       requestId:
         (headers[requestIdHeader] as string | undefined) ?? crypto.randomUUID().slice(0, 8),
-      traceId: headers[traceIdHeader] as string | undefined,
+      ...(traceId !== undefined ? { traceId } : {}),
     };
     LogixiaContext.run({ ...base, ...(enrich ? enrich(req) : {}) }, next);
   };
@@ -145,12 +146,13 @@ export function createFastifyContextHook(
     done: () => void
   ): void {
     const headers = (request['headers'] ?? {}) as Record<string, string | undefined>;
+    const traceId = headers[traceIdHeader];
     const base: LogContext = {
       requestId:
         (headers[requestIdHeader] as string | undefined) ??
         (request['id'] as string | undefined) ??
         crypto.randomUUID().slice(0, 8),
-      traceId: headers[traceIdHeader] as string | undefined,
+      ...(traceId !== undefined ? { traceId } : {}),
     };
     LogixiaContext.run({ ...base, ...(enrich ? enrich(request) : {}) }, done);
   };

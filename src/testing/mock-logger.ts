@@ -139,8 +139,13 @@ export function createMockLogger(
     _calls.push({
       level,
       message,
-      data: extraData,
-      entry: { level, message, context, data: extraData },
+      ...(extraData !== undefined ? { data: extraData } : {}),
+      entry: {
+        level,
+        message,
+        ...(context !== undefined ? { context } : {}),
+        ...(extraData !== undefined ? { data: extraData } : {}),
+      },
     });
   }
 
@@ -215,8 +220,8 @@ export function createMockLogger(
     setTransportLevels(_id, _levels) {
       /* no-op */
     },
-    getTransportLevels(_id) {
-      return;
+    getTransportLevels(_id): string[] | undefined {
+      return undefined;
     },
     clearTransportLevelPreferences() {
       /* no-op */
@@ -230,12 +235,6 @@ export function createMockLogger(
     },
     async close() {
       /* no-op */
-    },
-    async flush() {
-      /* no-op */
-    },
-    async healthCheck() {
-      return { healthy: true, details: {} };
     },
   };
 
