@@ -16,18 +16,18 @@
       {
         "preset": "conventionalcommits",
         "releaseRules": [
-          { "type": "feat",     "release": "minor"  },
-          { "type": "fix",      "release": "patch"  },
-          { "type": "perf",     "release": "patch"  },
-          { "type": "revert",   "release": "patch"  },
-          { "type": "docs",     "release": "patch"  },
-          { "type": "style",    "release": false    },
-          { "type": "refactor", "release": "patch"  },
-          { "type": "test",     "release": false    },
-          { "type": "build",    "release": false    },
-          { "type": "ci",       "release": false    },
-          { "type": "chore",    "release": false    },
-          { "breaking": true,   "release": "major"  }
+          { "type": "feat", "release": "minor" },
+          { "type": "fix", "release": "patch" },
+          { "type": "perf", "release": "patch" },
+          { "type": "revert", "release": "patch" },
+          { "type": "docs", "release": "patch" },
+          { "type": "style", "release": false },
+          { "type": "refactor", "release": "patch" },
+          { "type": "test", "release": false },
+          { "type": "build", "release": false },
+          { "type": "ci", "release": false },
+          { "type": "chore", "release": false },
+          { "breaking": true, "release": "major" }
         ],
         "parserOpts": {
           "noteKeywords": ["BREAKING CHANGE", "BREAKING CHANGES", "BREAKING"]
@@ -40,17 +40,17 @@
         "preset": "conventionalcommits",
         "presetConfig": {
           "types": [
-            { "type": "feat",     "section": "✨ Features"            },
-            { "type": "fix",      "section": "🐛 Bug Fixes"           },
-            { "type": "perf",     "section": "⚡ Performance"         },
-            { "type": "revert",   "section": "⏪ Reverts"             },
-            { "type": "docs",     "section": "📚 Documentation"       },
-            { "type": "refactor", "section": "♻️ Code Refactoring"    },
-            { "type": "test",     "section": "🧪 Tests", "hidden": true },
-            { "type": "build",    "section": "🏗️ Build",  "hidden": true },
-            { "type": "ci",       "section": "👷 CI",     "hidden": true },
-            { "type": "chore",    "section": "🔧 Chores", "hidden": true },
-            { "type": "style",    "section": "💄 Styles", "hidden": true }
+            { "type": "feat", "section": "✨ Features" },
+            { "type": "fix", "section": "🐛 Bug Fixes" },
+            { "type": "perf", "section": "⚡ Performance" },
+            { "type": "revert", "section": "⏪ Reverts" },
+            { "type": "docs", "section": "📚 Documentation" },
+            { "type": "refactor", "section": "♻️ Code Refactoring" },
+            { "type": "test", "section": "🧪 Tests", "hidden": true },
+            { "type": "build", "section": "🏗️ Build", "hidden": true },
+            { "type": "ci", "section": "👷 CI", "hidden": true },
+            { "type": "chore", "section": "🔧 Chores", "hidden": true },
+            { "type": "style", "section": "💄 Styles", "hidden": true }
           ]
         }
       }
@@ -72,19 +72,10 @@
     [
       "@semantic-release/github",
       {
-        "assets": [
-          { "path": "release/*.tgz", "label": "npm tarball" }
-        ],
+        "assets": [{ "path": "release/*.tgz", "label": "npm tarball" }],
         "successComment": "🎉 This issue has been resolved in version ${nextRelease.version}.\nInstall it: `npm install logixia@${nextRelease.version}`",
         "labels": ["released"],
         "releasedLabels": ["released@${nextRelease.channel}"]
-      }
-    ],
-    [
-      "@semantic-release/git",
-      {
-        "assets": ["CHANGELOG.md", "package.json", "package-lock.json"],
-        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
       }
     ]
   ]
