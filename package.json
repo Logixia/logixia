@@ -67,6 +67,66 @@
         "default": "./dist/middleware.js"
       }
     },
+    "./worker": {
+      "import": {
+        "types": "./dist/transports/worker.transport.d.mts",
+        "default": "./dist/transports/worker.transport.mjs"
+      },
+      "require": {
+        "types": "./dist/transports/worker.transport.d.ts",
+        "default": "./dist/transports/worker.transport.js"
+      }
+    },
+    "./cloudwatch": {
+      "import": {
+        "types": "./dist/transports/cloudwatch.transport.d.mts",
+        "default": "./dist/transports/cloudwatch.transport.mjs"
+      },
+      "require": {
+        "types": "./dist/transports/cloudwatch.transport.d.ts",
+        "default": "./dist/transports/cloudwatch.transport.js"
+      }
+    },
+    "./gcp": {
+      "import": {
+        "types": "./dist/transports/gcp.transport.d.mts",
+        "default": "./dist/transports/gcp.transport.mjs"
+      },
+      "require": {
+        "types": "./dist/transports/gcp.transport.d.ts",
+        "default": "./dist/transports/gcp.transport.js"
+      }
+    },
+    "./azure": {
+      "import": {
+        "types": "./dist/transports/azure-monitor.transport.d.mts",
+        "default": "./dist/transports/azure-monitor.transport.mjs"
+      },
+      "require": {
+        "types": "./dist/transports/azure-monitor.transport.d.ts",
+        "default": "./dist/transports/azure-monitor.transport.js"
+      }
+    },
+    "./browser": {
+      "import": {
+        "types": "./dist/browser.d.mts",
+        "default": "./dist/browser.mjs"
+      },
+      "require": {
+        "types": "./dist/browser.d.ts",
+        "default": "./dist/browser.js"
+      }
+    },
+    "./correlation": {
+      "import": {
+        "types": "./dist/correlation.d.mts",
+        "default": "./dist/correlation.mjs"
+      },
+      "require": {
+        "types": "./dist/correlation.d.ts",
+        "default": "./dist/correlation.js"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [

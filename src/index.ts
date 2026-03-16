@@ -20,12 +20,30 @@ import { LogLevel } from './types';
 // Type exports
 export * from './core/logitron-logger.module';
 export * from './core/logitron-nestjs.service';
+export type { LogMethodOptions } from './core/nestjs-extras';
+export { InjectLogger, LogixiaExceptionFilter, LogMethod } from './core/nestjs-extras';
 export * from './formatters';
 export * from './types';
 export * from './utils/error.utils';
+export type { OtelBridgeOptions, OtelSpanContext } from './utils/otel';
+export {
+  disableOtelBridge,
+  getActiveOtelContext,
+  getOtelMetaFields,
+  initOtelBridge,
+} from './utils/otel';
 export { applyRedaction, redactObject } from './utils/redact.utils';
 export * from './utils/shutdown.utils';
 export * from './utils/trace.utils';
+export type {
+  CompiledSchema,
+  LogFieldDef,
+  LogFieldType,
+  LoggerLike,
+  LogSchema,
+  TypedLogger,
+} from './utils/typed-logger';
+export { createTypedLogger, defineLogSchema } from './utils/typed-logger';
 
 // Search module exports
 export * from './search';

@@ -44,6 +44,7 @@ import type {
 import { LogLevel } from '../types';
 import { isError, serializeError } from '../utils/error.utils';
 import { internalError, internalLog, internalWarn } from '../utils/internal-log';
+import { _getOtelPayloadIfEnabled } from '../utils/otel';
 import { applyRedaction } from '../utils/redact.utils';
 import { Sampler } from '../utils/sampling.utils';
 import { deregisterFromShutdown, flushOnExit, registerForShutdown } from '../utils/shutdown.utils';
@@ -568,8 +569,19 @@ export class LogixiaLogger<
     // Merge ALS-stored fields (requestId, userId, …) into the payload so every
     // log call inside a LogixiaContext.run() scope automatically carries them.
     const alsContext = LogixiaContext.get();
-    const mergedData =
-      alsContext && Object.keys(alsContext).length > 0 ? { ...alsContext, ...data } : data;
+    // ── Feature 14: OTel auto trace-log correlation ────────────────────────────
+    // If initOtelBridge() was called, read the active OTel span and merge its
+    // context fields (traceId, spanId, traceFlags) into the payload automatically.
+    const otelFields = _getOtelPayloadIfEnabled();
+    const hasOtel = Object.keys(otelFields).length > 0;
+    let mergedData: typeof data;
+    if (alsContext && Object.keys(alsContext).length > 0) {
+      mergedData = { ...alsContext, ...(hasOtel ? otelFields : {}), ...data };
+    } else if (hasOtel) {
+      mergedData = { ...otelFields, ...data };
+    } else {
+      mergedData = data;
+    }
 
     // ── Feature 2: Redaction ─────────────────────────────────────────────────
     // Avoid spread allocation when contextData is empty (the common case)

@@ -335,7 +335,7 @@ export class TransportManager extends EventEmitter {
 
     for (const transport of this.transports.values()) {
       if (this.isAsyncTransport(transport)) {
-        readyPromises.push(transport.isReady());
+        readyPromises.push(transport.isReady!());
       }
     }
 
@@ -407,7 +407,7 @@ export class TransportManager extends EventEmitter {
     if (!transport) return Promise.resolve(false);
 
     if (this.isAsyncTransport(transport)) {
-      return transport.isReady();
+      return transport.isReady!();
     }
 
     return Promise.resolve(true);

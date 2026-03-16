@@ -483,9 +483,9 @@ appearing, response times shifting. Export anomaly events as structured logs the
 | 14  | OTel integration (auto trace-log correlation)                    | L      | P0     | v1.3       |
 | 15  | Async buffered writes / worker thread transport                  | L      | P1     | v1.4       |
 | 16  | Cloud adapters (CloudWatch, GCP, Datadog, Azure)                 | L      | P2     | v1.4       |
-| 17  | Cross-runtime (Bun, Deno, Edge, Browser)                         | L      | P2     | v1.4       |
-| 18  | Microservices correlation ID propagation                         | M      | P2     | v1.5       |
-| 19  | Log CLI query language extensions                                | M      | P2     | v1.5       |
+| 17  | ✅ Cross-runtime (Bun, Deno, Edge, Browser)                      | L      | P2     | v1.4       |
+| 18  | ✅ Microservices correlation ID propagation                      | M      | P2     | v1.5       |
+| 19  | ✅ Log CLI query language extensions                             | M      | P2     | v1.5       |
 | 20  | Plugin / extension API                                           | L      | P3     | v2.0       |
 | 21  | Metrics extraction → Prometheus                                  | L      | P3     | v2.0       |
 | 22  | Visual TUI log explorer                                          | XL     | P3     | v2.0       |

@@ -7,6 +7,7 @@ import { Command } from 'commander';
 
 import { analyzeCommand } from './commands/analyze';
 import { exportCommand } from './commands/export';
+import { queryCommand } from './commands/query';
 import { searchCommand } from './commands/search';
 import { statsCommand } from './commands/stats';
 import { tailCommand } from './commands/tail';
@@ -29,6 +30,7 @@ program.addCommand(analyzeCommand);
 program.addCommand(tailCommand);
 program.addCommand(statsCommand);
 program.addCommand(searchCommand);
+program.addCommand(queryCommand);
 program.addCommand(exportCommand);
 
 program.on('command:*', () => {

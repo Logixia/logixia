@@ -86,6 +86,24 @@ export interface RedactConfig {
   patterns?: RegExp[];
   /** Replacement value for redacted content. Default: `"[REDACTED]"` */
   censor?: string;
+  /**
+   * Auto-detect and redact common PII and secret patterns without manual configuration.
+   *
+   * - `true` / `'conservative'` — JWT tokens, Bearer/API-key strings, common secret field names
+   *   (`password`, `token`, `secret`, `apiKey`, `authorization`, `credentials`)
+   * - `'aggressive'` — everything above **plus** email addresses, credit-card numbers,
+   *   US SSNs, phone numbers, and IP addresses
+   *
+   * Auto-detected patterns are applied **in addition to** any explicit `paths` / `patterns`.
+   *
+   * @example
+   * ```ts
+   * const logger = createLogger({ redact: { autoDetect: 'aggressive' } });
+   * await logger.info('user signed up', { email: 'alice@example.com', password: 'hunter2' });
+   * // → email: '[REDACTED]', password: '[REDACTED]'
+   * ```
+   */
+  autoDetect?: boolean | 'conservative' | 'aggressive';
 }
 
 // ── Log Sampling ───────────────────────────────────────────────────────────────
