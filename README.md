@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>The async-first logging library that ships complete.</strong><br/>
-  TypeScript-first &middot; Non-blocking by design &middot; NestJS &middot; Database &middot; Tracing &middot; OTel
+  TypeScript-first &middot; Non-blocking by design &middot; NestJS &middot; Database &middot; Cloud &middot; Tracing &middot; OTel &middot; Browser
 </p>
 
 <p align="center">
@@ -82,6 +82,10 @@ await logger.info('Server started', { port: 3000 });
   - [Analytics](#analytics)
   - [Multiple transports simultaneously](#multiple-transports-simultaneously)
   - [Custom transport](#custom-transport)
+- [Cloud adapters](#cloud-adapters)
+  - [AWS CloudWatch](#aws-cloudwatch)
+  - [Google Cloud Logging](#google-cloud-logging)
+  - [Azure Monitor](#azure-monitor)
 - [Request tracing](#request-tracing)
   - [Core trace utilities](#core-trace-utilities)
   - [Express / Fastify middleware](#express--fastify-middleware)
@@ -89,6 +93,14 @@ await logger.info('Server started', { port: 3000 });
   - [Kafka trace interceptor](#kafka-trace-interceptor)
   - [WebSocket trace interceptor](#websocket-trace-interceptor)
 - [NestJS integration](#nestjs-integration)
+  - [@LogMethod decorator](#logmethod-decorator)
+  - [LogixiaExceptionFilter](#logixiaexceptionfilter)
+- [Correlation ID propagation](#correlation-id-propagation)
+  - [Express middleware](#correlation-express-middleware)
+  - [Fastify hook](#correlation-fastify-hook)
+  - [Outbound fetch / axios](#outbound-fetch--axios)
+  - [Kafka / SQS helpers](#kafka--sqs-helpers)
+- [Browser support](#browser-support)
 - [Log redaction](#log-redaction)
 - [Timer API](#timer-api)
 - [Field management](#field-management)
@@ -112,16 +124,19 @@ logixia takes a different approach: **everything ships built-in, and nothing blo
 
 - **Async by design** — every log call is non-blocking, even to file and database transports
 - **Built-in database transports** — PostgreSQL, MySQL, MongoDB, SQLite with zero extra drivers
-- **NestJS module** — plug in with `LogixiaLoggerModule.forRoot()`, inject anywhere in the DI tree
+- **Cloud adapters** — AWS CloudWatch (EMF), Google Cloud Logging, and Azure Monitor out of the box
+- **NestJS module** — plug in with `LogixiaLoggerModule.forRoot()`, inject anywhere in the DI tree; `@LogMethod()` for auto-logging method entry/exit
 - **File rotation** — `maxSize`, `maxFiles`, gzip archive, time-based rotation — no extra packages needed
 - **Log search** — query your in-memory log store without shipping to an external service
 - **Field redaction** — mask passwords, tokens, and PII before they touch any transport; supports dot-notation paths and regex patterns
 - **Request tracing** — `AsyncLocalStorage`-based trace propagation with no manual thread-locals; includes Kafka and WebSocket interceptors
+- **Correlation ID propagation** — auto-generate and forward `X-Correlation-ID` through `fetch`, axios, Kafka, and SQS across microservice boundaries
+- **Browser support** — tree-shakeable `logixia/browser` entry point with console and remote batch transports; no Node.js built-ins
 - **OpenTelemetry** — W3C `traceparent` and `tracestate` support, zero extra dependencies
 - **Multi-transport** — write to console, file, and database concurrently with one log call
 - **TypeScript-first** — typed log entries, typed metadata, custom-level IntelliSense throughout
 - **Adaptive log level** — auto-configures based on `NODE_ENV` and CI environment
-- **Custom transports** — ship to Slack, Datadog, S3, or anywhere else via a simple interface
+- **Custom transports** — ship to Slack, PagerDuty, S3, or anywhere else via a simple interface
 
 ---
 
@@ -133,12 +148,15 @@ logixia takes a different approach: **everything ships built-in, and nothing blo
 | Async / non-blocking writes          |     yes     |     no      |            no             |   no    |
 | NestJS module (built-in)             |     yes     |     no      |            no             |   no    |
 | Database transports (built-in)       |     yes     |     no      |            no             |   no    |
+| Cloud transports (CW, GCP, Azure)    |     yes     |     no      |            no             |   no    |
 | File rotation (built-in)             |     yes     |  pino-roll  | winston-daily-rotate-file |   no    |
 | Multi-transport concurrent           |     yes     |     no      |            yes            |   no    |
 | Log search                           |     yes     |     no      |            no             |   no    |
 | Field redaction (built-in)           |     yes     | pino-redact |            no             |   no    |
 | Request tracing (AsyncLocalStorage)  |     yes     |     no      |            no             |   no    |
 | Kafka + WebSocket trace interceptors |     yes     |     no      |            no             |   no    |
+| Correlation ID propagation           |     yes     |     no      |            no             |   no    |
+| Browser / Edge / Bun / Deno support  |     yes     |   partial   |            no             |   no    |
 | OpenTelemetry / W3C headers          |     yes     |     no      |            no             |   no    |
 | Graceful shutdown / flush            |     yes     |     no      |            no             |   no    |
 | Custom log levels                    |     yes     |     yes     |            yes            |   yes   |
@@ -667,7 +685,7 @@ const logger = createLogger({
 });
 ```
 
-The `TransportLogEntry` shape is:
+The `write` method may return `void` or `Promise<void>` — both are supported. The `TransportLogEntry` shape is:
 
 ```typescript
 interface TransportLogEntry {
@@ -681,6 +699,102 @@ interface TransportLogEntry {
   environment?: string;
 }
 ```
+
+---
+
+## Cloud adapters
+
+logixia ships three production-ready cloud transports. All are batched, non-blocking, and implement the same `flush()` / `close()` lifecycle as the built-in transports. Import and pass directly to the `custom` transport array.
+
+### AWS CloudWatch
+
+Batches log events and sends them to a CloudWatch Logs stream using `PutLogEvents`. Supports **EMF** (Embedded Metric Format) so numeric fields in your log entries are automatically promoted to CloudWatch Metrics — no separate SDK needed.
+
+```typescript
+import { CloudWatchTransport } from 'logixia';
+
+const logger = createLogger({
+  appName: 'api',
+  environment: 'production',
+  transports: {
+    custom: [
+      new CloudWatchTransport({
+        region: 'us-east-1', // or set AWS_REGION env var
+        logGroupName: '/app/api',
+        logStreamName: 'api-server-1', // defaults to hostname + PID
+        // Credentials fall back to AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY env vars,
+        // or the EC2/ECS/Lambda metadata service — no hard-coding needed.
+        batchSize: 100, // default: 100
+        flushIntervalMs: 5000, // default: 5000
+        emf: true, // emit numeric fields as CloudWatch Metrics
+        level: 'warn', // forward only warn+ to CloudWatch
+      }),
+    ],
+  },
+});
+```
+
+With `emf: true`, any numeric field in your log data is published as a CloudWatch Metric under the `Logixia` namespace:
+
+```typescript
+await logger.info('Request completed', { duration: 142, statusCode: 200 });
+// → CloudWatch Metric: Logixia/duration, Logixia/statusCode
+```
+
+### Google Cloud Logging
+
+Maps logixia levels to GCP `severity` values (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`), auto-injects `logging.googleapis.com/trace` for Cloud Trace correlation, and supports Application Default Credentials (ADC) — no service account JSON required when running on GKE / Cloud Run / App Engine.
+
+```typescript
+import { GCPTransport } from 'logixia';
+
+const logger = createLogger({
+  appName: 'api',
+  environment: 'production',
+  transports: {
+    custom: [
+      new GCPTransport({
+        projectId: 'my-gcp-project', // or set GOOGLE_CLOUD_PROJECT env var
+        logName: 'projects/my-gcp-project/logs/api',
+        resource: { type: 'k8s_container', labels: { cluster_name: 'prod' } },
+        // credentials: { client_email: '...', private_key: '...' }
+        // Omit to use ADC (recommended on GCP-hosted infrastructure)
+        batchSize: 200,
+        flushIntervalMs: 5000,
+      }),
+    ],
+  },
+});
+```
+
+### Azure Monitor
+
+Sends logs to Azure Monitor via the **Logs Ingestion API** (Data Collection Rule). Uses OAuth2 client-credentials to obtain a bearer token automatically.
+
+```typescript
+import { AzureMonitorTransport } from 'logixia';
+
+const logger = createLogger({
+  appName: 'api',
+  environment: 'production',
+  transports: {
+    custom: [
+      new AzureMonitorTransport({
+        endpoint: 'https://<dce-name>.ingest.monitor.azure.com',
+        ruleId: 'dcr-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+        streamName: 'Custom-LogixiaLogs_CL',
+        tenantId: process.env.AZURE_TENANT_ID,
+        clientId: process.env.AZURE_CLIENT_ID,
+        clientSecret: process.env.AZURE_CLIENT_SECRET,
+        batchSize: 200,
+        flushIntervalMs: 5000,
+      }),
+    ],
+  },
+});
+```
+
+All three cloud transports expose `flush()` and `close()` so they participate in logixia's [graceful shutdown](#graceful-shutdown) flow automatically.
 
 ---
 
@@ -916,6 +1030,261 @@ export class OrdersService {
 ```
 
 `LogixiaLoggerService` exposes the full `LogixiaLogger` API: `info`, `warn`, `error`, `debug`, `trace`, `verbose`, `logLevel`, `time`, `timeEnd`, `timeAsync`, `setLevel`, `getLevel`, `setContext`, `child`, `close`, `getCurrentTraceId`, and more.
+
+### @LogMethod decorator
+
+Automatically logs method entry, exit, duration, and errors — no manual `try/catch` or `logger.debug` calls needed. Works on both sync and async methods. Reads the `logger` property from the class instance (the NestJS convention).
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { LogixiaLoggerService, LogMethod } from 'logixia';
+
+@Injectable()
+export class PaymentService {
+  constructor(private readonly logger: LogixiaLoggerService) {}
+
+  // Logs entry with args, exit with duration, and errors with full stack trace
+  @LogMethod({ level: 'info', logArgs: true, logResult: false })
+  async processPayment(orderId: string, amount: number): Promise<void> {
+    // your business logic — no try/catch needed for logging
+  }
+
+  // Minimal — just tracks duration at debug level
+  @LogMethod()
+  async fetchExchangeRate(currency: string): Promise<number> {
+    return 1.0;
+  }
+}
+```
+
+`@LogMethod` options:
+
+| Option      | Type                             | Default   | Description                                             |
+| ----------- | -------------------------------- | --------- | ------------------------------------------------------- |
+| `level`     | `'debug' \| 'info' \| 'verbose'` | `'debug'` | Log level for entry / exit messages                     |
+| `logArgs`   | `boolean`                        | `true`    | Include method arguments in the entry log               |
+| `logResult` | `boolean`                        | `false`   | Include the return value in the exit log                |
+| `logErrors` | `boolean`                        | `true`    | Log errors with stack trace when the method throws      |
+| `label`     | `string`                         | auto      | Override the auto-detected `ClassName.methodName` label |
+
+### LogixiaExceptionFilter
+
+A global NestJS exception filter that automatically logs unhandled exceptions — HTTP exceptions as `warn`, everything else as `error` — and returns a consistent JSON error shape. Reads the injected `LogixiaLoggerService`; works even without it.
+
+```typescript
+// main.ts
+import { NestFactory } from '@nestjs/core';
+import { LogixiaExceptionFilter } from 'logixia';
+import { AppModule } from './app.module';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  app.useGlobalFilters(new LogixiaExceptionFilter());
+  await app.listen(3000);
+}
+bootstrap();
+```
+
+With `LogixiaLoggerModule` set up, inject the service directly so it logs to your configured transports:
+
+```typescript
+import { APP_FILTER } from '@nestjs/core';
+import { LogixiaExceptionFilter, LogixiaLoggerService } from 'logixia';
+
+// In AppModule providers:
+{
+  provide: APP_FILTER,
+  useFactory: (logger: LogixiaLoggerService) => new LogixiaExceptionFilter(logger),
+  inject: [LogixiaLoggerService],
+}
+```
+
+The filter returns this shape on error:
+
+```json
+{
+  "statusCode": 500,
+  "message": "Internal server error",
+  "timestamp": "2025-03-14T10:22:01.412Z",
+  "path": "/api/orders"
+}
+```
+
+---
+
+## Correlation ID propagation
+
+`import { ... } from 'logixia/correlation'`
+
+In a microservice architecture each incoming request should carry a `correlationId` that flows through every downstream service call, message queue event, and log line — so you can reconstruct the full request trace in any log aggregator.
+
+logixia ships this as a dedicated `logixia/correlation` sub-package. It uses the same `AsyncLocalStorage` store as the main logger, so every `logger.*` call inside a correlated context automatically includes the ID.
+
+### Correlation Express middleware
+
+```typescript
+import { correlationMiddleware } from 'logixia/correlation';
+
+// Zero-config — reads X-Correlation-ID / X-Request-ID from the incoming request.
+// Generates a UUID v4 if no header is present.
+// Sets X-Correlation-ID on the response.
+app.use(correlationMiddleware());
+
+// Custom config:
+app.use(
+  correlationMiddleware({
+    header: 'X-Correlation-ID', // header to read / write. Default: 'X-Correlation-ID'
+    generateId: () => crypto.randomUUID(),
+    trustIncoming: true, // honour the header from the client. Default: true
+    setResponseHeader: true, // echo the ID back in the response. Default: true
+  })
+);
+```
+
+### Correlation Fastify hook
+
+```typescript
+import Fastify from 'fastify';
+import { correlationFastifyHook } from 'logixia/correlation';
+
+const app = Fastify();
+app.addHook('onRequest', correlationFastifyHook());
+```
+
+### Outbound fetch / axios
+
+Every outbound HTTP call made inside a correlated context automatically carries the `X-Correlation-ID` header.
+
+**fetch:**
+
+```typescript
+import { correlationFetch } from 'logixia/correlation';
+
+// Drop-in replacement for global fetch — forwards the active correlation ID automatically
+const res = await correlationFetch('https://inventory-service/api/items', {
+  method: 'GET',
+  headers: { Authorization: `Bearer ${token}` },
+});
+```
+
+**axios:**
+
+```typescript
+import axios from 'axios';
+import { createCorrelationAxiosInterceptor } from 'logixia/correlation';
+
+const client = axios.create({ baseURL: 'https://inventory-service' });
+createCorrelationAxiosInterceptor(client); // attaches X-Correlation-ID to every request
+```
+
+### Kafka / SQS helpers
+
+```typescript
+import {
+  buildKafkaCorrelationHeaders, // → { 'X-Correlation-ID': '...', 'X-Request-ID': '...' }
+  extractMessageCorrelationId, // read correlationId from a Kafka/SQS message body
+  childFromRequest, // create a child logger pre-seeded with request context
+  withCorrelationId, // run a callback inside an explicit correlation context
+  getCurrentCorrelationId, // read the active correlation ID (or undefined)
+  generateCorrelationId, // generate a new UUID v4 correlation ID
+} from 'logixia/correlation';
+
+// Kafka producer — attach correlation headers to every message
+const producer = kafka.producer();
+await producer.send({
+  topic: 'orders',
+  messages: [{ value: JSON.stringify(order), headers: buildKafkaCorrelationHeaders() }],
+});
+
+// Kafka consumer — restore context for the handler
+const correlationId = extractMessageCorrelationId(message.value);
+withCorrelationId(correlationId, async () => {
+  await orderService.process(message.value);
+  // all logger.* calls inside carry correlationId automatically
+});
+
+// Create a child logger pre-loaded with request identifiers
+const reqLogger = childFromRequest(logger, req);
+await reqLogger.info('Order created', { orderId: 'ord_123' });
+// → log includes correlationId, requestId, originService
+```
+
+**Standalone context (no HTTP framework):**
+
+```typescript
+import { withCorrelationId, generateCorrelationId } from 'logixia/correlation';
+
+const id = generateCorrelationId(); // UUID v4
+
+withCorrelationId(id, async () => {
+  await processJob(job);
+  // all nested logger calls carry id
+});
+```
+
+---
+
+## Browser support
+
+`import { ... } from 'logixia/browser'`
+
+The `logixia/browser` entry point is a fully tree-shakeable, Node.js-free logger for browsers, Cloudflare Workers, Deno, Bun, and any other non-Node runtime. It has zero imports from `node:fs`, `node:async_hooks`, `node:worker_threads`, or any other Node.js built-in.
+
+```typescript
+import { createBrowserLogger } from 'logixia/browser';
+
+const logger = createBrowserLogger({
+  appName: 'my-app',
+  minLevel: 'info',
+  pretty: true, // colorized dev-friendly output via console.group
+});
+
+logger.info('App loaded', { route: '/home' });
+logger.warn('Feature flag missing', { flag: 'new-checkout' });
+logger.error('API call failed', { url: '/api/orders', status: 500 });
+```
+
+**Browser console transport** — uses the native `console` API and maps levels to their correct methods (`console.error`, `console.warn`, `console.info`, `console.debug`):
+
+```typescript
+import { BrowserLogger, BrowserConsoleTransport } from 'logixia/browser';
+
+const logger = new BrowserLogger({
+  appName: 'my-app',
+  transports: [new BrowserConsoleTransport({ pretty: true })],
+});
+```
+
+**Remote batch transport** — buffers log entries and ships them to a remote endpoint in batches. Zero `XMLHttpRequest` or Node.js `http` — uses the global `fetch` API:
+
+```typescript
+import { BrowserLogger, BrowserRemoteTransport } from 'logixia/browser';
+
+const logger = new BrowserLogger({
+  appName: 'my-app',
+  transports: [
+    new BrowserRemoteTransport({
+      endpoint: 'https://logs.my-company.com/ingest',
+      batchSize: 20, // flush when 20 entries accumulate
+      flushIntervalMs: 5000, // or every 5 seconds, whichever comes first
+      headers: { Authorization: `Bearer ${TOKEN}` },
+      minLevel: 'warn', // only ship warn+ to the remote endpoint
+    }),
+  ],
+});
+```
+
+The following utilities from the main package are also re-exported from `logixia/browser` (safe for non-Node runtimes):
+
+```typescript
+import {
+  createTypedLogger, // typed schema-enforced logger factory
+  defineLogSchema, // define a compile-time log schema
+  createOtelBridge, // OpenTelemetry bridge
+  isOtelActive,
+  withOtelSpan,
+} from 'logixia/browser';
+```
 
 ---
 
@@ -1233,7 +1602,26 @@ import {
   registerForShutdown, // (logger) => void
   deregisterFromShutdown, // (logger) => void
   resetShutdownHandlers, // () => void — useful in tests
+  // NestJS extras
+  InjectLogger, // @InjectLogger() parameter decorator
+  LogMethod, // @LogMethod() method decorator
+  LogixiaExceptionFilter, // global exception filter
 } from 'logixia';
+
+// Cloud transports (import directly):
+import { CloudWatchTransport } from 'logixia';
+import { GCPTransport } from 'logixia';
+import { AzureMonitorTransport } from 'logixia';
+
+// Correlation ID sub-package:
+import { correlationMiddleware, correlationFetch, withCorrelationId } from 'logixia/correlation';
+
+// Browser / Edge sub-package:
+import {
+  createBrowserLogger,
+  BrowserConsoleTransport,
+  BrowserRemoteTransport,
+} from 'logixia/browser';
 ```
 
 ---
@@ -1294,6 +1682,61 @@ npx logixia analyze ./logs/app.log
 ```bash
 npx logixia export ./logs/app.log --format csv --output ./logs/app.csv
 ```
+
+**`query`** — run SQL-like queries over NDJSON / JSON log files directly in your terminal:
+
+```bash
+# Basic filter
+npx logixia query ./logs/app.log --sql "SELECT * FROM logs WHERE level='error'"
+
+# Multiple conditions
+npx logixia query ./logs/app.log --sql "WHERE level='error' AND duration > 500"
+
+# Select specific fields
+npx logixia query ./logs/app.log --sql "SELECT level, message, duration FROM logs WHERE level='warn'"
+
+# Time-range shortcuts
+npx logixia query ./logs/app.log --since "last 2 hours"
+npx logixia query ./logs/app.log --since "last 30 minutes" --until "last 5 minutes"
+npx logixia query ./logs/app.log --since today
+npx logixia query ./logs/app.log --since yesterday
+
+# Aggregations
+npx logixia query ./logs/app.log --sql "COUNT BY level"
+npx logixia query ./logs/app.log --sql "GROUP BY statusCode"
+npx logixia query ./logs/app.log --sql "AVG(duration) BY endpoint"
+npx logixia query ./logs/app.log --sql "SUM(duration) BY service"
+
+# Sorting and limiting
+npx logixia query ./logs/app.log --sql "WHERE level='error' ORDER BY timestamp DESC LIMIT 20"
+npx logixia query ./logs/app.log --order-by duration --limit 10
+
+# Output formats
+npx logixia query ./logs/app.log --sql "COUNT BY level" --format table
+npx logixia query ./logs/app.log --sql "WHERE level='error'" --format json
+
+# Live tail with a SQL filter — streams new entries as they are written
+npx logixia query ./logs/app.log --follow --sql "WHERE level='error'"
+npx logixia query ./logs/app.log --follow --since "last 1 hour" --sql "WHERE duration > 1000"
+```
+
+Supported SQL features:
+
+| Clause / keyword             | Example                                  |
+| ---------------------------- | ---------------------------------------- |
+| `SELECT fields`              | `SELECT level, message, duration`        |
+| `WHERE` conditions           | `WHERE level='error' AND duration > 500` |
+| Comparison ops               | `=  !=  >  >=  <  <=`                    |
+| `LIKE` / `NOT LIKE`          | `WHERE message LIKE '%timeout%'`         |
+| `IN` / `NOT IN`              | `WHERE level IN ('error', 'warn')`       |
+| `COUNT BY field`             | `COUNT BY statusCode`                    |
+| `GROUP BY field`             | `GROUP BY endpoint`                      |
+| `AVG(f) BY g`                | `AVG(duration) BY endpoint`              |
+| `SUM / MIN / MAX(f) BY g`    | `MAX(duration) BY service`               |
+| `ORDER BY field [ASC\|DESC]` | `ORDER BY timestamp DESC`                |
+| `LIMIT n`                    | `LIMIT 50`                               |
+
+`--since` / `--until` accept: `"last N minutes"`, `"last N hours"`, `"last N days"`, `"today"`, `"yesterday"`, or any ISO 8601 date string.
 
 ---
 
