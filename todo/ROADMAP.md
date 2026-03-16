@@ -488,7 +488,7 @@ appearing, response times shifting. Export anomaly events as structured logs the
 | 19  | ✅ Log CLI query language extensions                             | M      | P2     | v1.5       |
 | 20  | ✅ Plugin / extension API                                        | L      | P3     | v2.0       |
 | 21  | ✅ Metrics extraction → Prometheus                               | L      | P3     | v2.0       |
-| 22  | Visual TUI log explorer                                          | XL     | P3     | v2.0       |
+| 22  | ✅ Visual TUI log explorer                                       | XL     | P3     | v2.0       |
 
 **Effort:** S = 1-2 days, M = 3-5 days, L = 1-2 weeks, XL = 2-4 weeks
 

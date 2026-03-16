@@ -6,6 +6,7 @@ import chalk from 'chalk';
 import { Command } from 'commander';
 
 import { analyzeCommand } from './commands/analyze';
+import { exploreCommand } from './commands/explore';
 import { exportCommand } from './commands/export';
 import { queryCommand } from './commands/query';
 import { searchCommand } from './commands/search';
@@ -32,6 +33,7 @@ program.addCommand(statsCommand);
 program.addCommand(searchCommand);
 program.addCommand(queryCommand);
 program.addCommand(exportCommand);
+program.addCommand(exploreCommand);
 
 program.on('command:*', () => {
   console.error(

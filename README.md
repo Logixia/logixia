@@ -121,6 +121,7 @@ await logger.info('Server started', { port: 3000 });
   - [Metric configuration reference](#metric-configuration-reference)
 - [Logger instance API](#logger-instance-api)
 - [CLI tool](#cli-tool)
+  - [explore — Visual TUI log explorer](#explore--visual-tui-log-explorer)
 - [Configuration reference](#configuration-reference)
 - [Contributing](#contributing)
 - [License](#license)
@@ -150,6 +151,7 @@ logixia takes a different approach: **everything ships built-in, and nothing blo
 - **Custom transports** — ship to Slack, PagerDuty, S3, or anywhere else via a simple interface
 - **Plugin / extension API** — lifecycle hooks (`onInit`, `onLog`, `onError`, `onShutdown`); plugins can mutate or cancel log entries; register globally or per-logger
 - **Prometheus metrics** — turn log events into counters, histograms, and gauges with zero code; expose `GET /metrics` in Prometheus text format; works with any HTTP framework
+- **Visual TUI explorer** — `logixia explore` opens a full-screen terminal log browser with real-time search, level filtering, syntax-highlighted JSON detail panel, stack trace rendering, and one-key export to JSON / CSV / NDJSON
 
 ---
 
@@ -176,6 +178,7 @@ logixia takes a different approach: **everything ships built-in, and nothing blo
 | Adaptive log level (NODE_ENV)        |     yes     |     no      |            no             |   no    |
 | Plugin / extension API               |     yes     |     no      |            no             |   no    |
 | Prometheus metrics extraction        |     yes     |     no      |            no             |   no    |
+| Visual TUI log explorer              |     yes     |     no      |            no             |   no    |
 | Actively maintained                  |     yes     |     yes     |            yes            |   no    |
 
 ---
@@ -2037,6 +2040,72 @@ Supported SQL features:
 | `LIMIT n`                    | `LIMIT 50`                               |
 
 `--since` / `--until` accept: `"last N minutes"`, `"last N hours"`, `"last N days"`, `"today"`, `"yesterday"`, or any ISO 8601 date string.
+
+### explore — Visual TUI log explorer
+
+`logixia explore` opens a full-screen interactive terminal UI built on raw ANSI + chalk — no extra runtime dependencies required.
+
+```bash
+# Open a log file in the TUI
+npx logixia explore ./logs/app.log
+
+# Start with only error and warn entries visible
+npx logixia explore ./logs/app.log --levels error,warn
+
+# Pre-populate the search field
+npx logixia explore ./logs/app.log --search "payment"
+
+# Follow mode: append new entries as the file grows
+npx logixia explore ./logs/app.log --follow
+```
+
+**Layout:**
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│ LOGIXIA EXPLORE  app.log  [42/127]  /payment                               │
+│  E  W  I  D  T  V                                    /: search             │
+│  TIME           LVL  MESSAGE                                               │
+│ 08:00:01.042   ERR  Request failed   status=500 user=abc                   │
+│▶08:00:02.117   INF  Request completed  status=200 user=def    ← selected   │
+│ 08:00:03.890   WRN  Slow query detected  duration=1240                     │
+│──────────────────────────────────────────────────────────────── ▼ DETAIL ─│
+│  {                                                                         │
+│    "timestamp": "...",                                                     │
+│    "level": "info",                                                        │
+│    "message": "Request completed",                                         │
+│    "status": 200,                                                          │
+│    "user": "def"                                                           │
+│  }                                                                         │
+│  j/k move  /search  x export  E/W/I/D/T/V filter  J/K detail↕  q quit    │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Keyboard shortcuts:**
+
+| Key             | Action                                                                         |
+| --------------- | ------------------------------------------------------------------------------ |
+| `j` / `↓`       | Move selection down                                                            |
+| `k` / `↑`       | Move selection up                                                              |
+| `g` / `Home`    | Jump to first entry                                                            |
+| `G` / `End`     | Jump to last entry                                                             |
+| `PgUp` / `PgDn` | Page up / page down                                                            |
+| `J` / `K`       | Scroll detail panel down / up                                                  |
+| `/`             | Enter search mode (type query → `Enter` to confirm, `Esc` to clear)            |
+| `E W I D T V`   | Toggle error / warn / info / debug / trace / verbose filter                    |
+| `f`             | Toggle real-time follow mode                                                   |
+| `x`             | Export filtered entries (enter a path ending in `.json`, `.csv`, or `.ndjson`) |
+| `q` / `Ctrl+C`  | Quit and return to terminal                                                    |
+
+**Detail panel** shows syntax-highlighted JSON of the selected entry. For error entries with a `stack` field, the full stack trace is rendered below the JSON with frame locations highlighted.
+
+**Export** supports three formats determined by the file extension you type:
+
+- `.json` — pretty-printed JSON array
+- `.csv` — comma-separated with auto-detected column headers
+- `.ndjson` / `.jsonl` — newline-delimited JSON (one entry per line)
+
+The explorer works in any TTY-capable terminal (macOS Terminal, iTerm2, Windows Terminal, VS Code integrated terminal) and degrades gracefully in non-TTY environments (useful when piping to other commands).
 
 ---
 

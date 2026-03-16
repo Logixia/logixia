@@ -16,6 +16,8 @@ module.exports = {
   coverageReporters: ['text', 'lcov', 'html'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    // Chalk v5 is pure-ESM; map it to a CJS passthrough mock for Jest.
+    '^chalk$': '<rootDir>/src/__mocks__/chalk.js',
   },
   setupFilesAfterEnv: [],
   testTimeout: 10000,
