@@ -59,6 +59,20 @@ export {
 // Sampling stats (SamplingConfig is already exported via ./types)
 export type { SamplingStats } from './utils/sampling.utils';
 
+// Plugin API (Feature 20)
+export type { LogixiaPlugin } from './plugin';
+export { globalPluginRegistry, PluginRegistry, usePlugin } from './plugin';
+
+// Metrics extraction → Prometheus (Feature 21)
+export type {
+  CounterConfig,
+  GaugeConfig,
+  HistogramConfig,
+  MetricConfig,
+  MetricsMap,
+} from './metrics';
+export { createMetricsPlugin, MetricsPlugin } from './metrics';
+
 // Core exports
 export { DEFAULT_CONFIG, LogixiaLogger, LogixiaLoggerService };
 

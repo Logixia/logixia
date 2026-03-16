@@ -29,6 +29,8 @@ const _fastStringifyEntry = buildFastStringify({
 });
 
 import { LogixiaContext } from '../context/async-context';
+import type { LogixiaPlugin } from '../plugin';
+import { globalPluginRegistry, PluginRegistry } from '../plugin';
 import { TransportManager } from '../transports/transport.manager';
 import type {
   ContextData,
@@ -140,6 +142,8 @@ export class LogixiaLogger<
   private _hasRedact = false;
   /** Sampling engine — only created when sampling config is present. */
   private _sampler?: Sampler;
+  /** Per-instance plugin registry — also inherits from the global registry at creation time. */
+  private readonly _pluginRegistry = new PluginRegistry();
 
   constructor(config: TConfig, context?: string) {
     const defaultConfig: LoggerConfig = {
@@ -211,6 +215,13 @@ export class LogixiaLogger<
     this.setupGracefulShutdown();
 
     this.createCustomLevelMethods();
+
+    // ── Feature 20: Seed with any plugins already in the global registry ─────
+    // Plugins registered via usePlugin() before this logger was created are
+    // automatically included in this instance's registry.
+    for (const p of (globalPluginRegistry as unknown as { _plugins: LogixiaPlugin[] })._plugins) {
+      this._pluginRegistry.register(p);
+    }
 
     // ── Build hot-path caches after all config is finalised ──────────────────
     this._buildPerfCaches();
@@ -520,6 +531,33 @@ export class LogixiaLogger<
     return childLogger;
   }
 
+  // ── Feature 20: Plugin API ────────────────────────────────────────────────────
+
+  /**
+   * Register a plugin on this logger instance.
+   *
+   * @example
+   * ```ts
+   * logger.use({
+   *   name: 'audit',
+   *   onLog(entry) { auditQueue.push(entry); return entry; },
+   * });
+   * ```
+   */
+  use(plugin: LogixiaPlugin): this {
+    this._pluginRegistry.register(plugin);
+    return this;
+  }
+
+  /**
+   * Remove a previously registered plugin by name.
+   * No-op if the plugin is not registered on this instance.
+   */
+  unuse(pluginName: string): this {
+    this._pluginRegistry.unregister(pluginName);
+    return this;
+  }
+
   // ── Flush / health / close ───────────────────────────────────────────────────
 
   async flush(): Promise<void> {
@@ -548,6 +586,7 @@ export class LogixiaLogger<
     }
 
     this._sampler?.destroy();
+    await this._pluginRegistry.runOnShutdown();
     deregisterFromShutdown(this);
   }
 
@@ -609,8 +648,17 @@ export class LogixiaLogger<
     if (payload !== undefined) entry.payload = payload;
     if (traceId !== undefined) entry.traceId = traceId;
 
-    const formattedLog = this.formatLog(entry);
-    await this.output(formattedLog, level, entry);
+    // ── Feature 20: Plugin onLog hooks ────────────────────────────────────────
+    // Plugins run post-redaction, pre-transport. Any plugin may mutate or cancel
+    // the entry by returning null. We only run the pipeline when plugins are registered.
+    let finalEntry: LogEntry | null = entry;
+    if (this._pluginRegistry.size > 0) {
+      finalEntry = await this._pluginRegistry.runOnLog(entry);
+      if (finalEntry === null) return; // entry cancelled by a plugin
+    }
+
+    const formattedLog = this.formatLog(finalEntry);
+    await this.output(formattedLog, level, finalEntry);
   }
 
   // ── Feature 3: Namespace-aware shouldLog ─────────────────────────────────────

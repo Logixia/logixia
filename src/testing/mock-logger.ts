@@ -236,6 +236,14 @@ export function createMockLogger(
     async close() {
       /* no-op */
     },
+
+    // Plugin API stubs — mock logger does not run plugins
+    use(_plugin) {
+      return this;
+    },
+    unuse(_pluginName) {
+      return this;
+    },
   };
 
   const instance: MockLoggerInstance = {

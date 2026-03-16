@@ -263,6 +263,12 @@ export interface IBaseLogger {
 
   child(context: string, data?: Record<string, unknown>): ILogger;
   close(): Promise<void>;
+
+  // Plugin API (Feature 20)
+  // Typed as unknown to avoid a circular import between types/index.ts and plugin.ts.
+  // The concrete LogixiaLogger class constrains this to LogixiaPlugin.
+  use(plugin: { name: string }): this;
+  unuse(pluginName: string): this;
 }
 
 // Type for custom level methods based on config

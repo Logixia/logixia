@@ -108,6 +108,17 @@ await logger.info('Server started', { port: 3000 });
 - [Log search](#log-search)
 - [OpenTelemetry](#opentelemetry)
 - [Graceful shutdown](#graceful-shutdown)
+- [Plugin / extension API](#plugin--extension-api)
+  - [Writing a plugin](#writing-a-plugin)
+  - [Registering plugins globally](#registering-plugins-globally)
+  - [Per-logger plugins](#per-logger-plugins)
+  - [Cancelling a log entry](#cancelling-a-log-entry)
+- [Metrics → Prometheus](#metrics--prometheus)
+  - [Quick start (counters)](#quick-start-counters)
+  - [Histograms](#histograms)
+  - [Gauges](#gauges)
+  - [Exposing the /metrics endpoint](#exposing-the-metrics-endpoint)
+  - [Metric configuration reference](#metric-configuration-reference)
 - [Logger instance API](#logger-instance-api)
 - [CLI tool](#cli-tool)
 - [Configuration reference](#configuration-reference)
@@ -137,6 +148,8 @@ logixia takes a different approach: **everything ships built-in, and nothing blo
 - **TypeScript-first** — typed log entries, typed metadata, custom-level IntelliSense throughout
 - **Adaptive log level** — auto-configures based on `NODE_ENV` and CI environment
 - **Custom transports** — ship to Slack, PagerDuty, S3, or anywhere else via a simple interface
+- **Plugin / extension API** — lifecycle hooks (`onInit`, `onLog`, `onError`, `onShutdown`); plugins can mutate or cancel log entries; register globally or per-logger
+- **Prometheus metrics** — turn log events into counters, histograms, and gauges with zero code; expose `GET /metrics` in Prometheus text format; works with any HTTP framework
 
 ---
 
@@ -161,6 +174,8 @@ logixia takes a different approach: **everything ships built-in, and nothing blo
 | Graceful shutdown / flush            |     yes     |     no      |            no             |   no    |
 | Custom log levels                    |     yes     |     yes     |            yes            |   yes   |
 | Adaptive log level (NODE_ENV)        |     yes     |     no      |            no             |   no    |
+| Plugin / extension API               |     yes     |     no      |            no             |   no    |
+| Prometheus metrics extraction        |     yes     |     no      |            no             |   no    |
 | Actively maintained                  |     yes     |     yes     |            yes            |   no    |
 
 ---
@@ -1538,6 +1553,273 @@ const { healthy, details } = await logger.healthCheck();
 
 ---
 
+## Plugin / extension API
+
+logixia's plugin system lets you hook into every stage of the log lifecycle without touching core logger code. Plugins are plain objects that implement one or more lifecycle methods.
+
+```typescript
+import type { LogixiaPlugin, LogEntry } from 'logixia';
+```
+
+### Writing a plugin
+
+```typescript
+const myPlugin: LogixiaPlugin = {
+  name: 'my-plugin',
+
+  // Called once when the logger is constructed (global plugins)
+  // or when .use() is called (per-logger plugins).
+  onInit() {
+    console.log('Plugin initialised');
+  },
+
+  // Called for every log entry before it is formatted and written.
+  // Return the (optionally mutated) entry to let it through,
+  // or return null to silently drop it.
+  onLog(entry: LogEntry): LogEntry | null {
+    // Example: enrich every entry with a deployment tag
+    return { ...entry, data: { ...entry.data, deployId: process.env.DEPLOY_ID } };
+  },
+
+  // Called whenever logger.error() receives an Error object.
+  onError(error: Error, entry?: LogEntry) {
+    // Example: forward to a Sentry-compatible sink
+    externalErrorTracker.capture(error, { extra: entry?.data });
+  },
+
+  // Called during logger.close() — await-able for graceful teardown.
+  async onShutdown() {
+    await flushBufferedEvents();
+  },
+};
+```
+
+### Registering plugins globally
+
+Plugins registered on `globalPluginRegistry` are automatically seeded into every logger created after the call.
+
+```typescript
+import { usePlugin } from 'logixia';
+
+usePlugin(myPlugin);
+
+// All loggers created from this point forward will run myPlugin.
+const logger = createLogger({
+  /* ... */
+});
+```
+
+### Per-logger plugins
+
+Register or remove plugins on a specific logger instance at any time:
+
+```typescript
+const logger = createLogger({ context: 'PaymentService' });
+
+// Register
+logger.use(myPlugin);
+
+// Deregister by name
+logger.unuse('my-plugin');
+```
+
+`use()` is chainable:
+
+```typescript
+createLogger({ context: 'api' }).use(metricsPlugin).use(auditPlugin).use(samplerPlugin);
+```
+
+### Cancelling a log entry
+
+Returning `null` from `onLog` drops the entry before it reaches any transport — useful for sampling, deduplication, or environment-based suppression:
+
+```typescript
+const devOnlyPlugin: LogixiaPlugin = {
+  name: 'dev-only',
+  onLog(entry) {
+    // Suppress debug/trace entries in production
+    if (process.env.NODE_ENV === 'production' && entry.level <= 20) {
+      return null; // drop it
+    }
+    return entry;
+  },
+};
+```
+
+Multiple `onLog` hooks run in registration order. If any hook returns `null` the pipeline stops and no further hooks are called.
+
+---
+
+## Metrics → Prometheus
+
+`MetricsPlugin` converts log events into Prometheus-compatible counters, histograms, and gauges — no separate instrumentation library required. The `/metrics` endpoint serves the standard Prometheus text exposition format.
+
+```typescript
+import { createMetricsPlugin } from 'logixia';
+```
+
+### Quick start (counters)
+
+```typescript
+import { createLogger, createMetricsPlugin } from 'logixia';
+import http from 'node:http';
+
+const metrics = createMetricsPlugin({
+  http_requests_total: {
+    type: 'counter',
+    help: 'Total HTTP requests processed',
+    // Which log fields become Prometheus labels
+    labels: ['method', 'status', 'route'],
+  },
+  auth_failures_total: {
+    type: 'counter',
+    help: 'Authentication failures',
+    labels: ['reason'],
+  },
+});
+
+const logger = createLogger({ context: 'api' }).use(metrics);
+
+// Every log entry automatically increments the matching counter
+await logger.info('request handled', { method: 'GET', status: 200, route: '/users' });
+await logger.warn('auth failed', { reason: 'bad-token' });
+
+// Expose /metrics
+http.createServer(metrics.httpHandler()).listen(9100);
+```
+
+The `/metrics` response looks like:
+
+```
+# HELP logixia_http_requests_total Total HTTP requests processed
+# TYPE logixia_http_requests_total counter
+logixia_http_requests_total{method="GET",status="200",route="/users"} 1
+
+# HELP logixia_auth_failures_total Authentication failures
+# TYPE logixia_auth_failures_total counter
+logixia_auth_failures_total{reason="bad-token"} 1
+```
+
+### Histograms
+
+Histograms record the distribution of a numeric field extracted from log entries. Typical use: request latency in milliseconds.
+
+```typescript
+const metrics = createMetricsPlugin({
+  http_request_duration_ms: {
+    type: 'histogram',
+    help: 'HTTP request latency in milliseconds',
+    // The log field whose numeric value is recorded as the observation
+    valueField: 'durationMs',
+    labels: ['route', 'method'],
+    // Custom bucket boundaries (defaults: [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000])
+    buckets: [10, 50, 100, 200, 500, 1000, 5000],
+  },
+});
+
+await logger.info('request complete', { route: '/api/orders', method: 'POST', durationMs: 142 });
+```
+
+Prometheus output includes `_bucket`, `_sum`, and `_count` lines, compatible with `histogram_quantile()`:
+
+```
+# HELP logixia_http_request_duration_ms HTTP request latency in milliseconds
+# TYPE logixia_http_request_duration_ms histogram
+logixia_http_request_duration_ms_bucket{le="10",route="/api/orders",method="POST"} 0
+logixia_http_request_duration_ms_bucket{le="50",route="/api/orders",method="POST"} 0
+logixia_http_request_duration_ms_bucket{le="100",route="/api/orders",method="POST"} 0
+logixia_http_request_duration_ms_bucket{le="200",route="/api/orders",method="POST"} 1
+...
+logixia_http_request_duration_ms_bucket{le="+Inf",route="/api/orders",method="POST"} 1
+logixia_http_request_duration_ms_sum{route="/api/orders",method="POST"} 142
+logixia_http_request_duration_ms_count{route="/api/orders",method="POST"} 1
+```
+
+### Gauges
+
+Gauges track the current value of a numeric field — useful for queue depths, active connections, cache sizes:
+
+```typescript
+const metrics = createMetricsPlugin({
+  queue_depth: {
+    type: 'gauge',
+    help: 'Current number of items in the processing queue',
+    valueField: 'depth',
+    labels: ['queue'],
+  },
+});
+
+await logger.info('queue snapshot', { queue: 'email', depth: 47 });
+```
+
+### Exposing the /metrics endpoint
+
+**Plain Node.js `http` module:**
+
+```typescript
+import http from 'node:http';
+
+http.createServer(metrics.httpHandler()).listen(9100);
+// GET http://localhost:9100/ → Prometheus text format
+```
+
+**Express:**
+
+```typescript
+import express from 'express';
+
+const app = express();
+app.get('/metrics', metrics.expressHandler());
+app.listen(3000);
+```
+
+**Manual render (any framework):**
+
+```typescript
+// Returns the full Prometheus text string
+const text = metrics.render();
+res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+res.end(text);
+```
+
+**Reset all counters** (e.g., between tests):
+
+```typescript
+metrics.reset();
+```
+
+### Metric configuration reference
+
+```typescript
+interface CounterConfig {
+  type: 'counter';
+  help?: string; // # HELP line in Prometheus output
+  labels?: string[]; // Log entry fields to use as label keys
+}
+
+interface HistogramConfig {
+  type: 'histogram';
+  help?: string;
+  valueField: string; // The log field holding the numeric observation
+  labels?: string[];
+  buckets?: number[]; // Upper-inclusive bucket boundaries (ms or any unit)
+}
+
+interface GaugeConfig {
+  type: 'gauge';
+  help?: string;
+  valueField: string; // The log field whose value sets the gauge
+  labels?: string[];
+}
+
+// Map of Prometheus metric name → config
+type MetricsMap = Record<string, CounterConfig | HistogramConfig | GaugeConfig>;
+```
+
+All metric names are automatically prefixed with `logixia_` in the output. If a histogram or gauge entry is missing the `valueField`, the entry is still counted but no numeric observation is recorded.
+
+---
+
 ## Logger instance API
 
 Complete reference for every method available on a logger instance returned by `createLogger` or `LogixiaLoggerService`:
@@ -1579,6 +1861,10 @@ logger.setTransportLevels(transportId: string, levels: string[]): void
 logger.getTransportLevels(transportId: string): string[] | undefined
 logger.clearTransportLevelPreferences(): void
 
+// Plugin API
+logger.use(plugin: LogixiaPlugin): this         // register a plugin; chainable
+logger.unuse(pluginName: string): this          // remove a plugin by name; chainable
+
 // Lifecycle
 await logger.flush(): Promise<void>
 await logger.close(): Promise<void>
@@ -1612,6 +1898,20 @@ import {
 import { CloudWatchTransport } from 'logixia';
 import { GCPTransport } from 'logixia';
 import { AzureMonitorTransport } from 'logixia';
+
+// Plugin API:
+import type { LogixiaPlugin } from 'logixia';
+import { globalPluginRegistry, PluginRegistry, usePlugin } from 'logixia';
+
+// Metrics → Prometheus:
+import type {
+  CounterConfig,
+  GaugeConfig,
+  HistogramConfig,
+  MetricConfig,
+  MetricsMap,
+} from 'logixia';
+import { createMetricsPlugin, MetricsPlugin } from 'logixia';
 
 // Correlation ID sub-package:
 import { correlationMiddleware, correlationFetch, withCorrelationId } from 'logixia/correlation';

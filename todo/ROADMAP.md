@@ -477,17 +477,17 @@ appearing, response times shifting. Export anomaly events as structured logs the
 | 8   | ✅ Log sampling / rate limiting                                  | M      | P0     | v1.2       |
 | 9   | ✅ Multi-transport retry + failover                              | M      | P1     | v1.2       |
 | 10  | ✅ Testing utilities (`createMockLogger`)                        | S      | P2     | v1.2       |
-| 11  | NestJS deep integration (DI, decorators, lifecycle)              | L      | P1     | v1.3       |
-| 12  | Auto-redaction (PII detection regex)                             | M      | P0     | v1.3       |
-| 13  | TypeScript typed log fields (generics + schema)                  | M      | P2     | v1.3       |
-| 14  | OTel integration (auto trace-log correlation)                    | L      | P0     | v1.3       |
-| 15  | Async buffered writes / worker thread transport                  | L      | P1     | v1.4       |
-| 16  | Cloud adapters (CloudWatch, GCP, Datadog, Azure)                 | L      | P2     | v1.4       |
+| 11  | ✅ NestJS deep integration (DI, decorators, lifecycle)           | L      | P1     | v1.3       |
+| 12  | ✅ Auto-redaction (PII detection regex)                          | M      | P0     | v1.3       |
+| 13  | ✅ TypeScript typed log fields (generics + schema)               | M      | P2     | v1.3       |
+| 14  | ✅ OTel integration (auto trace-log correlation)                 | L      | P0     | v1.3       |
+| 15  | ✅ Async buffered writes / worker thread transport               | L      | P1     | v1.4       |
+| 16  | ✅ Cloud adapters (CloudWatch, GCP, Datadog, Azure)              | L      | P2     | v1.4       |
 | 17  | ✅ Cross-runtime (Bun, Deno, Edge, Browser)                      | L      | P2     | v1.4       |
 | 18  | ✅ Microservices correlation ID propagation                      | M      | P2     | v1.5       |
 | 19  | ✅ Log CLI query language extensions                             | M      | P2     | v1.5       |
-| 20  | Plugin / extension API                                           | L      | P3     | v2.0       |
-| 21  | Metrics extraction → Prometheus                                  | L      | P3     | v2.0       |
+| 20  | ✅ Plugin / extension API                                        | L      | P3     | v2.0       |
+| 21  | ✅ Metrics extraction → Prometheus                               | L      | P3     | v2.0       |
 | 22  | Visual TUI log explorer                                          | XL     | P3     | v2.0       |
 
 **Effort:** S = 1-2 days, M = 3-5 days, L = 1-2 weeks, XL = 2-4 weeks
