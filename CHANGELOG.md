@@ -3,6 +3,19 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.4.0](https://github.com/Logixia/logixia/compare/v1.3.1...v1.4.0) (2026-03-16)
+
+### ✨ Features
+
+* add CLI explore command for TUI log browsing ([5fa1475](https://github.com/Logixia/logixia/commit/5fa1475cf920b3fa1c70faf0057f4a8cb1444053))
+* add cloud transports, correlation tracking, and browser support ([1566e5a](https://github.com/Logixia/logixia/commit/1566e5a0c9b4e2124fb9cab08c3935b2420cc5c8))
+* implement plugin system and Prometheus metrics support ([084e6c3](https://github.com/Logixia/logixia/commit/084e6c3481a9db629b370c69da131bc9fb222d2c))
+
+### 📚 Documentation
+
+* update README with CLI subcommands overview and explore options ([1859d94](https://github.com/Logixia/logixia/commit/1859d941b05b777b329fc14f69cf1b534422842e))
+* update README with cloud transports, correlation tracking, and CLI query details ([9640fa3](https://github.com/Logixia/logixia/commit/9640fa3bc64f7769e41eb878d2ea5674a8045060))
+
 ## [1.3.1](https://github.com/Logixia/logixia/compare/v1.3.0...v1.3.1) (2026-03-14)
 
 ### 📚 Documentation
