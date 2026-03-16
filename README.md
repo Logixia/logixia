@@ -41,7 +41,7 @@ npm install winston winston-daily-rotate-file
 npm install logixia
 ```
 
-logixia ships **console + file rotation + database + request tracing + NestJS module + field redaction + log search + OpenTelemetry** in one package — non-blocking on every transport, zero extra installs.
+logixia ships **console + file rotation + database + request tracing + NestJS module + field redaction + log search + OpenTelemetry + plugin API + Prometheus metrics + visual TUI explorer** in one package — non-blocking on every transport, zero extra installs.
 
 ```typescript
 import { createLogger } from 'logixia';
@@ -1937,6 +1937,18 @@ logixia ships a CLI for working with log files directly. After installing, the `
 npx logixia --help
 ```
 
+Seven subcommands are available:
+
+| Command   | One-line summary                                             |
+| --------- | ------------------------------------------------------------ |
+| `tail`    | Stream a log file in real-time with level highlighting       |
+| `search`  | Full-text or field-specific search with table / JSON output  |
+| `stats`   | Level counts and time distribution summary                   |
+| `analyze` | Pattern recognition and anomaly detection                    |
+| `export`  | Convert between NDJSON, JSON, and CSV                        |
+| `query`   | SQL-like queries with aggregations, sorting, and live follow |
+| `explore` | Full-screen interactive TUI browser with search and export   |
+
 **`tail`** — stream a log file in real-time, with optional filtering and level highlighting:
 
 ```bash
@@ -2058,6 +2070,14 @@ npx logixia explore ./logs/app.log --search "payment"
 # Follow mode: append new entries as the file grows
 npx logixia explore ./logs/app.log --follow
 ```
+
+**Options:**
+
+| Flag               | Default | Description                                                           |
+| ------------------ | ------- | --------------------------------------------------------------------- |
+| `--follow`         | off     | Tail the file; append new entries as they are written                 |
+| `--levels <list>`  | all     | Comma-separated levels to show: `error,warn,info,debug,trace,verbose` |
+| `--search <query>` | —       | Pre-populate the search field on open                                 |
 
 **Layout:**
 
