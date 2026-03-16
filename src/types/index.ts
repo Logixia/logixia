@@ -3,6 +3,7 @@
  */
 
 import type { HttpRequest, HttpResponse } from './http.types';
+import type { TransportConfig } from './transport.types';
 
 // Log levels const object for better flexibility
 export const LogLevel = {
@@ -202,6 +203,8 @@ export interface LoggerConfig<TLevels extends Record<string, number> = Record<st
    * implement sampling logic in application code.
    */
   sampling?: SamplingConfig;
+  /** Transport configuration — console, file, database, analytics, etc. */
+  transports?: TransportConfig;
   [key: string]: unknown;
 }
 

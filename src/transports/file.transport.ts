@@ -17,6 +17,15 @@ const unlink = promisify(fs.unlink);
 const readdir = promisify(fs.readdir);
 const stat = promisify(fs.stat);
 
+/**
+ * Appends log entries to a local file with automatic rotation.
+ *
+ * Supports batched writes, size-based and date-based rotation, and optional
+ * gzip compression of rotated files.
+ *
+ * @example
+ * transports: { file: { filename: 'app.log', dirname: './logs', maxSize: '50MB' } }
+ */
 export class FileTransport implements ITransport, IBatchTransport {
   public readonly name = 'file';
   public readonly level?: string | undefined;
@@ -29,6 +38,8 @@ export class FileTransport implements ITransport, IBatchTransport {
   private batchTimer?: NodeJS.Timeout | undefined;
   private lastRotation: Date = new Date();
   private currentFilePath: string;
+  /** Guards against concurrent rotation — two simultaneous writes both seeing shouldRotateNow(). */
+  private isRotating = false;
 
   constructor(config: FileTransportConfig) {
     this.config = {
@@ -46,8 +57,13 @@ export class FileTransport implements ITransport, IBatchTransport {
 
   async write(entry: TransportLogEntry): Promise<void> {
     try {
-      if (this.shouldRotateNow()) {
-        await this.rotate();
+      if (this.shouldRotateNow() && !this.isRotating) {
+        this.isRotating = true;
+        try {
+          await this.rotate();
+        } finally {
+          this.isRotating = false;
+        }
       }
 
       if (this.config.batchSize && this.config.batchSize > 1) {

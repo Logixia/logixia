@@ -3,6 +3,12 @@ import { internalError } from '../utils/internal-log';
 import type { AnalyticsEvent, AnalyticsUser } from './analytics.transport';
 import { AnalyticsTransport } from './analytics.transport';
 
+/**
+ * Sends log entries as Mixpanel events via the Track and Engage HTTP APIs.
+ *
+ * @example
+ * transports: { mixpanel: { token: process.env.MIXPANEL_TOKEN } }
+ */
 export class MixpanelTransport extends AnalyticsTransport {
   private mixpanelConfig: MixpanelTransportConfig;
   private baseUrl: string = 'https://api.mixpanel.com';

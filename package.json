@@ -155,6 +155,7 @@
     "url": "https://github.com/webcoderspeed"
   },
   "license": "MIT",
+  "sideEffects": false,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Logixia/logixia.git"

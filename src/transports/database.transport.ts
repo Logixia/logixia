@@ -6,6 +6,30 @@ import type {
 } from '../types/transport.types';
 import { internalError } from '../utils/internal-log';
 
+/**
+ * Validates that a SQL identifier (table/index name) contains only safe characters.
+ * Prevents SQL injection via user-supplied table names.
+ */
+function validateSqlIdentifier(name: string, label = 'table'): void {
+  if (!/^[a-zA-Z_]\w*$/.test(name)) {
+    throw new Error(
+      `Invalid ${label} name "${name}". Only letters, digits, and underscores are allowed, and the name must start with a letter or underscore.`
+    );
+  }
+}
+
+/**
+ * Persists log entries to a database in batches.
+ *
+ * Supports MongoDB, PostgreSQL, MySQL, and SQLite. Entries are buffered and
+ * flushed on a configurable interval or batch size threshold to minimize
+ * round-trips.
+ *
+ * @example
+ * transports: {
+ *   database: { type: 'postgresql', host: 'localhost', database: 'appdb', table: 'logs' }
+ * }
+ */
 export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
   public readonly name = 'database';
   public readonly batchSize: number;
@@ -13,6 +37,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
 
   private batch: TransportLogEntry[] = [];
   private flushTimer?: NodeJS.Timeout;
+  private isFlushing = false;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic database driver connection object
   private connection: any;
   private isConnected = false;
@@ -21,6 +46,10 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
   constructor(private config: DatabaseTransportConfig) {
     this.batchSize = config.batchSize || 100;
     this.flushInterval = config.flushInterval || 5000; // 5 seconds
+    // Validate table name early so misconfiguration fails at construction, not at first write
+    if (config.table) {
+      validateSqlIdentifier(config.table, 'table');
+    }
     this.setupFlushTimer();
   }
 
@@ -42,7 +71,11 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
 
   async flush(): Promise<void> {
     if (this.batch.length === 0) return;
+    // Guard: skip if a flush is already in flight — entries will be picked up
+    // by the next flush cycle triggered by the timer or the next write.
+    if (this.isFlushing) return;
 
+    this.isFlushing = true;
     const entriesToFlush = [...this.batch];
     this.batch = [];
 
@@ -65,9 +98,11 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       }
     } catch (error) {
       internalError('Database flush error', error);
-      // Re-add failed entries to batch for retry
+      // Restore failed entries to the front of the batch for retry
       this.batch.unshift(...entriesToFlush);
       throw error;
+    } finally {
+      this.isFlushing = false;
     }
   }
 

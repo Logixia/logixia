@@ -3,6 +3,14 @@ import { internalError } from '../utils/internal-log';
 import type { AnalyticsMetric } from './analytics.transport';
 import { AnalyticsTransport } from './analytics.transport';
 
+/**
+ * Sends log entries and metrics to Datadog via the Logs and Metrics HTTP APIs.
+ *
+ * The API key is transmitted via the `DD-API-KEY` request header — never in the URL.
+ *
+ * @example
+ * transports: { datadog: { apiKey: process.env.DD_API_KEY, service: 'api', env: 'production' } }
+ */
 export class DataDogTransport extends AnalyticsTransport {
   private datadogConfig: DataDogTransportConfig;
   private baseUrl: string;
@@ -96,7 +104,9 @@ export class DataDogTransport extends AnalyticsTransport {
       logs: logs,
     };
 
-    await this.makeLogsRequest('/v1/input/' + this.datadogConfig.apiKey, payload);
+    // API key is sent via DD-API-KEY header inside makeLogsRequest — never put it in the URL
+    // so it cannot be leaked through error messages, access logs, or network traces.
+    await this.makeLogsRequest('/v1/input', payload);
   }
 
   private async sendMetric(entry: TransportLogEntry): Promise<void> {

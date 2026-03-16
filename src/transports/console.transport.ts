@@ -4,6 +4,14 @@ import type {
   TransportLogEntry,
 } from '../types/transport.types';
 
+/**
+ * Writes log entries to stdout (info/debug/verbose) and stderr (error/warn).
+ *
+ * Supports pretty-printed colorized output and compact JSON mode.
+ *
+ * @example
+ * transports: { console: { format: 'json' } }
+ */
 export class ConsoleTransport implements ITransport {
   public readonly name = 'console';
 

@@ -3,6 +3,12 @@ import { internalError } from '../utils/internal-log';
 import type { AnalyticsUser } from './analytics.transport';
 import { AnalyticsTransport } from './analytics.transport';
 
+/**
+ * Sends log entries as Segment track/identify events via the HTTP Tracking API.
+ *
+ * @example
+ * transports: { segment: { writeKey: process.env.SEGMENT_WRITE_KEY } }
+ */
 export class SegmentTransport extends AnalyticsTransport {
   private segmentConfig: SegmentTransportConfig;
   private baseUrl: string;

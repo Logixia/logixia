@@ -59,12 +59,19 @@ function namespacePatternToRegex(pattern: string): RegExp {
   return new RegExp(`^${escaped}$`);
 }
 
+/** Max compiled patterns to keep in memory. Oldest entry is evicted when full. */
+const _NS_CACHE_MAX = 1000;
 const _nsPatternCache = new Map<string, RegExp>();
 
 function matchesNamespacePattern(ns: string, pattern: string): boolean {
   let re = _nsPatternCache.get(pattern);
   if (!re) {
     re = namespacePatternToRegex(pattern);
+    // Evict the oldest entry when the cache hits its limit
+    if (_nsPatternCache.size >= _NS_CACHE_MAX) {
+      const firstKey = _nsPatternCache.keys().next().value;
+      if (firstKey !== undefined) _nsPatternCache.delete(firstKey);
+    }
     _nsPatternCache.set(pattern, re);
   }
   return re.test(ns);
@@ -181,12 +188,8 @@ export class LogixiaLogger<
 
     this.context = context ?? '';
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- transports is on extended config shapes
-    if ((this.config as any).transports) {
-      this.transportManager = new TransportManager(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (this.config as any).transports
-      );
+    if (this.config.transports) {
+      this.transportManager = new TransportManager(this.config.transports);
     }
 
     // ── Feature 8: Log sampling ───────────────────────────────────────────────

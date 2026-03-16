@@ -195,10 +195,19 @@ const logger = createLogger({
   environment: 'production',
 });
 
+// ✅ Structured data — machine-readable, searchable, alertable
 await logger.info('Server started', { port: 3000 });
-await logger.warn('High memory usage', { used: '87%' });
-await logger.error('Request failed', new Error('Connection timeout'));
+await logger.warn('High memory usage', { used: '87%', threshold: '80%' });
+await logger.error('Request failed', { orderId: 'ord_123', retryable: true });
+
+// ✅ Pass an Error object directly — logixia serializes the full cause chain
+await logger.error(new Error('Connection timeout'));
+
+// ❌ Avoid string interpolation — you lose structured fields
+// await logger.info(`Server started on port ${port}`);
 ```
+
+No `try/catch` needed — logixia swallows transport errors internally so a flaky DB or disk-full condition never crashes your app.
 
 Without a `transports` key, logs go to stdout/stderr. Add a `transports` key to write to file, database, or anywhere else — all transports run concurrently.
 

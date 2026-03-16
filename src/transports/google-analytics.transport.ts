@@ -2,6 +2,14 @@ import type { GoogleAnalyticsTransportConfig, TransportLogEntry } from '../types
 import { internalError, internalLog } from '../utils/internal-log';
 import { AnalyticsTransport } from './analytics.transport';
 
+/**
+ * Sends log entries as Google Analytics 4 Measurement Protocol events.
+ *
+ * @example
+ * transports: {
+ *   googleAnalytics: { measurementId: 'G-XXXXXXX', apiSecret: process.env.GA_API_SECRET }
+ * }
+ */
 export class GoogleAnalyticsTransport extends AnalyticsTransport {
   private gaConfig: GoogleAnalyticsTransportConfig;
   private baseUrl: string = 'https://www.google-analytics.com/mp/collect';
