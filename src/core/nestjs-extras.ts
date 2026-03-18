@@ -33,8 +33,10 @@
  */
 
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
-import { Catch, HttpException, Inject, Optional } from '@nestjs/common';
+import { Catch, Inject, Optional } from '@nestjs/common';
 
+import { ErrorResponseBuilder } from '../exceptions/builder.js';
+import { isLogixiaException } from '../exceptions/exception.js';
 import { LOGIXIA_LOGGER_PREFIX } from './logitron-logger.module';
 import type { LogixiaLoggerService } from './logitron-nestjs.service';
 
@@ -185,8 +187,23 @@ export function LogMethod(options: LogMethodOptions = {}): MethodDecorator {
 // ── LogixiaExceptionFilter ───────────────────────────────────────────────────
 
 /**
- * Global NestJS exception filter that logs every unhandled exception with full
- * request context (method, URL, status) before delegating the response.
+ * Global NestJS exception filter that converts any exception into the standard
+ * `LogixiaErrorResponse` wire format and logs it with full request context.
+ *
+ * Handles three exception types in priority order:
+ *  1. `LogixiaException`     — typed fields used directly
+ *  2. NestJS `HttpException` — status + message extracted
+ *  3. Unknown / plain Error  — falls back to 500 `server_error`
+ *
+ * **Debug stripping in production:**
+ * The `debug` block is automatically stripped when `NODE_ENV === 'production'`.
+ *
+ * **Trace ID headers:**
+ * `X-Trace-ID` and `X-Request-ID` are echoed back on every error response so
+ * clients can correlate with server logs.
+ *
+ * **Retry-After header:**
+ * Automatically added for `429` responses (`Retry-After: 60`).
  *
  * Register in `main.ts`:
  * ```ts
@@ -204,44 +221,68 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
-    const response = ctx.getResponse<{
-      status(code: number): { json(body: unknown): void };
-    }>();
+
     const request = ctx.getRequest<{
       method?: string;
       url?: string;
+      id?: string;
+      startTime?: number;
+      headers?: Record<string, string | string[] | undefined>;
     }>();
 
-    const isHttp = exception instanceof HttpException;
-    const status = isHttp ? exception.getStatus() : 500;
-
-    let message: string;
-    if (isHttp) {
-      message = exception.message;
-    } else if (exception instanceof Error) {
-      message = exception.message;
-    } else {
-      message = 'Internal server error';
+    interface MinimalResponse {
+      status(code: number): MinimalResponse;
+      json(body: unknown): void;
+      setHeader(name: string, value: string): void;
     }
+    const response = ctx.getResponse<MinimalResponse>();
 
-    const contextStr = `method=${String(request.method ?? '')} url=${String(request.url ?? '')} status=${status}`;
+    // Prefer x-trace-id (set by RequestIdMiddleware) → request.id → auto-generate
+    const requestId =
+      (request.headers?.['x-trace-id'] as string | undefined) ?? request.id ?? undefined;
 
+    const { response: errorResponse, httpStatus } = ErrorResponseBuilder.build({
+      exception,
+      requestId,
+      path: request.url ?? '/',
+      startTime: request.startTime,
+    });
+
+    // ── Logging ──────────────────────────────────────────────────────────────
     if (this.logger) {
-      if (status >= 500) {
+      const contextStr = [
+        `method=${String(request.method ?? '')}`,
+        `url=${String(request.url ?? '')}`,
+        `status=${httpStatus}`,
+        `request_id=${errorResponse.meta.request_id}`,
+      ].join(' ');
+
+      if (httpStatus >= 500) {
         const err = exception instanceof Error ? exception : new Error(String(exception));
-        // NestJS LoggerService error signature: (message, trace?, context?)
-        // fire-and-forget — cannot await in a synchronous catch filter
+        // fire-and-forget — cannot await inside a synchronous ExceptionFilter.catch
         this.logger.error(err, undefined, contextStr);
+      } else if (isLogixiaException(exception)) {
+        this.logger.warn(
+          `[${errorResponse.error.code}] ${errorResponse.error.message}`,
+          contextStr
+        );
       } else {
-        this.logger.warn(`[${status}] ${message}`, contextStr);
+        this.logger.warn(`[${httpStatus}] ${errorResponse.error.message}`, contextStr);
       }
     }
 
-    response.status(status).json({
-      statusCode: status,
-      message,
-      timestamp: new Date().toISOString(),
-      path: request.url,
-    });
+    // ── Strip debug in production ─────────────────────────────────────────
+    if (process.env['NODE_ENV'] === 'production') {
+      delete errorResponse.debug;
+    }
+
+    // ── Response headers ──────────────────────────────────────────────────
+    response.setHeader('X-Trace-ID', errorResponse.meta.request_id);
+    response.setHeader('X-Request-ID', errorResponse.meta.request_id);
+    if (httpStatus === 429) {
+      response.setHeader('Retry-After', '60');
+    }
+
+    response.status(httpStatus).json(errorResponse);
   }
 }

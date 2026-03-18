@@ -63,6 +63,20 @@ export type { SamplingStats } from './utils/sampling.utils';
 export type { LogixiaPlugin } from './plugin';
 export { globalPluginRegistry, PluginRegistry, usePlugin } from './plugin';
 
+// Exception system — typed LogixiaException + unified error response format
+export type {
+  BuildParams,
+  ErrorDetail,
+  LogixiaErrorResponse,
+  LogixiaExceptionOptions,
+} from './exceptions';
+export {
+  ErrorResponseBuilder,
+  generateRequestId,
+  isLogixiaException,
+  LogixiaException,
+} from './exceptions';
+
 // Metrics extraction → Prometheus (Feature 21)
 export type {
   CounterConfig,
