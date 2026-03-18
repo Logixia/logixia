@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.5.0](https://github.com/Logixia/logixia/compare/v1.4.0...v1.5.0) (2026-03-18)
+
+### ✨ Features
+
+* add typed LogixiaException system and enhance NestJS compat ([5ce1938](https://github.com/Logixia/logixia/commit/5ce1938f6bcba1e575bf743ffe89b04ffaf853fe))
+
 ## [1.4.0](https://github.com/Logixia/logixia/compare/v1.3.1...v1.4.0) (2026-03-16)
 
 ### ✨ Features
