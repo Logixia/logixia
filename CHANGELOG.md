@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.6.6](https://github.com/Logixia/logixia/compare/v1.6.5...v1.6.6) (2026-03-24)
+
+### 🐛 Bug Fixes
+
+* **trace-middleware:** add @Optional() to TraceMiddleware constructor ([3778a79](https://github.com/Logixia/logixia/commit/3778a79b334368b698d12b7e2c2449db6abf2992))
+
 ## [1.6.5](https://github.com/Logixia/logixia/compare/v1.6.4...v1.6.5) (2026-03-24)
 
 ### 🐛 Bug Fixes
