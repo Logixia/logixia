@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.6.5](https://github.com/Logixia/logixia/compare/v1.6.4...v1.6.5) (2026-03-24)
+
+### 🐛 Bug Fixes
+
+* **context:** update JSDoc for randomShortId function ([1174278](https://github.com/Logixia/logixia/commit/1174278bd106b9c752a81133aa797d761bdff5d8))
+
 ## [1.6.4](https://github.com/Logixia/logixia/compare/v1.6.3...v1.6.4) (2026-03-24)
 
 ### 🐛 Bug Fixes
