@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.6.3](https://github.com/Logixia/logixia/compare/v1.6.2...v1.6.3) (2026-03-24)
+
+### 🐛 Bug Fixes
+
+* pass levelOptions.colors to ConsoleTransport so custom levels are colored ([6138fe6](https://github.com/Logixia/logixia/commit/6138fe652fdb3ce2fc20e01c150fae02450b9458))
+
 ## [1.6.2](https://github.com/Logixia/logixia/compare/v1.6.1...v1.6.2) (2026-03-24)
 
 ### 🐛 Bug Fixes
