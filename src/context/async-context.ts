@@ -27,7 +27,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 
-/** Short request-scoped ID — uses Node's built-in crypto, never the global. */
+/** Generates an 8-character random ID using Node's crypto module. */
 function randomShortId(): string {
   return randomUUID().slice(0, 8);
 }
