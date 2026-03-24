@@ -3,7 +3,7 @@
  */
 
 import type { NestMiddleware } from '@nestjs/common';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
 
 import type { TraceIdConfig } from '../types';
@@ -44,7 +44,7 @@ const DEFAULT_TRACE_HEADERS = [
 
 @Injectable()
 export class TraceMiddleware implements NestMiddleware {
-  constructor(private readonly config?: TraceIdConfig) {
+  constructor(@Optional() private readonly config?: TraceIdConfig) {
     this.config = {
       enabled: true,
       generator: generateTraceId,
