@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.6.7](https://github.com/Logixia/logixia/compare/v1.6.6...v1.6.7) (2026-03-24)
+
+### 🐛 Bug Fixes
+
+* **nestjs-extras:** widen @LogMethod level type to accept custom log levels ([9c4ca61](https://github.com/Logixia/logixia/commit/9c4ca611ddcf03cfe129ffb14dea515c3d8c2069))
+
 ## [1.6.6](https://github.com/Logixia/logixia/compare/v1.6.5...v1.6.6) (2026-03-24)
 
 ### 🐛 Bug Fixes
