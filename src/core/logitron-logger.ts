@@ -194,7 +194,17 @@ export class LogixiaLogger<
     this.context = context ?? '';
 
     if (this.config.transports) {
-      this.transportManager = new TransportManager(this.config.transports);
+      // Inject levelOptions.colors into the console transport config so
+      // ConsoleTransport can colorize custom levels (e.g. kafka, mongo)
+      // using the same colors the user configured on the logger.
+      const transportsWithColors = { ...this.config.transports };
+      const userColors = this.config.levelOptions?.colors as Record<string, string> | undefined;
+      if (userColors && transportsWithColors.console) {
+        const consoleBase =
+          typeof transportsWithColors.console === 'object' ? transportsWithColors.console : {};
+        transportsWithColors.console = { ...consoleBase, levelColors: userColors };
+      }
+      this.transportManager = new TransportManager(transportsWithColors);
     }
 
     // ── Feature 8: Log sampling ───────────────────────────────────────────────

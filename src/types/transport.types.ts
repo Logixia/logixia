@@ -70,6 +70,12 @@ export interface ConsoleTransportConfig {
   colorize?: boolean;
   timestamp?: boolean;
   format?: 'json' | 'text';
+  /**
+   * Custom level → color name map injected from `levelOptions.colors`.
+   * Allows the ConsoleTransport to colorize custom levels (e.g. kafka, mongo)
+   * using the same colors the user configured on the logger.
+   */
+  levelColors?: Record<string, string>;
 }
 
 export interface AnalyticsTransportConfig {

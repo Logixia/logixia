@@ -17,6 +17,7 @@ export class ConsoleTransport implements ITransport {
 
   // Pre-built ANSI color map — avoids object recreation inside formatEntry()
   private static readonly COLORS: ReadonlyMap<string, string> = new Map([
+    ['black', '\x1b[30m'],
     ['red', '\x1b[31m'],
     ['green', '\x1b[32m'],
     ['yellow', '\x1b[33m'],
@@ -25,6 +26,14 @@ export class ConsoleTransport implements ITransport {
     ['cyan', '\x1b[36m'],
     ['white', '\x1b[37m'],
     ['gray', '\x1b[90m'],
+    ['grey', '\x1b[90m'],
+    ['brightred', '\x1b[91m'],
+    ['brightgreen', '\x1b[92m'],
+    ['brightyellow', '\x1b[93m'],
+    ['brightblue', '\x1b[94m'],
+    ['brightmagenta', '\x1b[95m'],
+    ['brightcyan', '\x1b[96m'],
+    ['brightwhite', '\x1b[97m'],
     ['reset', '\x1b[0m'],
   ]);
 
@@ -96,7 +105,15 @@ export class ConsoleTransport implements ITransport {
   }
 
   private getLevelColor(level: string): string {
-    const colors: Record<string, string> = {
+    const lower = level.toLowerCase();
+
+    // User-configured colors take priority (covers custom levels like kafka, mongo, etc.)
+    if (this.config.levelColors?.[lower]) {
+      return this.config.levelColors[lower]!;
+    }
+
+    // Built-in defaults
+    const defaults: Record<string, string> = {
       error: 'red',
       warn: 'yellow',
       warning: 'yellow',
@@ -106,7 +123,7 @@ export class ConsoleTransport implements ITransport {
       verbose: 'cyan',
     };
 
-    return colors[level.toLowerCase()] || 'white';
+    return defaults[lower] || 'gray';
   }
 
   private colorize(text: string, color: string): string {
