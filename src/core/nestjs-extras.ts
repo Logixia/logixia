@@ -37,6 +37,7 @@ import { Catch, Inject, Optional } from '@nestjs/common';
 
 import { ErrorResponseBuilder } from '../exceptions/builder';
 import { isLogixiaException } from '../exceptions/exception';
+import type { LogLevelString } from '../types';
 import { LOGIXIA_LOGGER_PREFIX } from './logitron-logger.module';
 import type { LogixiaLoggerService } from './logitron-nestjs.service';
 
@@ -62,7 +63,7 @@ export interface LogMethodOptions {
    * Log level to use for entry / exit messages.
    * @default 'debug'
    */
-  level?: 'debug' | 'info' | 'verbose';
+  level?: LogLevelString;
   /**
    * Whether to log the arguments passed to the method.
    * Disable for high-throughput hot paths.
