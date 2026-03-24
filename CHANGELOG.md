@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.6.1](https://github.com/Logixia/logixia/compare/v1.6.0...v1.6.1) (2026-03-24)
+
+### 🐛 Bug Fixes
+
+* add missing bright/grey color variants to ANSI color map ([21de116](https://github.com/Logixia/logixia/commit/21de11662ef687be983c3b06c9e7f4e270d7bb7d))
+
 ## [1.6.0](https://github.com/Logixia/logixia/compare/v1.5.0...v1.6.0) (2026-03-24)
 
 ### ✨ Features
