@@ -949,18 +949,18 @@ import { KafkaTraceInterceptor } from 'logixia';
 import { UseInterceptors, Controller } from '@nestjs/common';
 import { MessagePattern } from '@nestjs/microservices';
 
+@UseInterceptors(new KafkaTraceInterceptor())
 @Controller()
-@UseInterceptors(KafkaTraceInterceptor)
 export class OrdersConsumer {
-  @MessagePattern('order.created')
-  async handle(data: OrderCreatedEvent) {
-    // getCurrentTraceId() works here — extracted from the Kafka message
+  @EventPattern('order.created')
+  async handle(@Payload() data: OrderCreatedEvent) {
+    // getCurrentTraceId() works here — extracted from the Kafka message body/headers
     await logger.info('Processing order event', { orderId: data.orderId });
   }
 }
 ```
 
-`KafkaTraceInterceptor` and `WebSocketTraceInterceptor` are automatically provided when you use `LogixiaLoggerModule.forRoot()`. You can also inject them directly.
+> **Note:** Pass `new KafkaTraceInterceptor()` (an instance), not the class reference. The interceptor's constructor takes an optional config and is not a NestJS DI provider.
 
 ### WebSocket trace interceptor
 
@@ -970,22 +970,35 @@ Propagates trace IDs through WebSocket event handlers. Reads `traceId` from the 
 import { WebSocketTraceInterceptor } from 'logixia';
 import { UseInterceptors, WebSocketGateway, SubscribeMessage } from '@nestjs/websockets';
 
-@WebSocketGateway()
-@UseInterceptors(WebSocketTraceInterceptor)
+@UseInterceptors(new WebSocketTraceInterceptor())
+@WebSocketGateway({ namespace: '/events', cors: { origin: '*' } })
 export class EventsGateway {
-  @SubscribeMessage('message')
-  async handleMessage(client: Socket, data: MessagePayload) {
-    // trace ID propagated from the WebSocket event context
-    await logger.info('WS message received', { event: 'message' });
+  @SubscribeMessage('ping')
+  async handlePing(@MessageBody() data: { traceId?: string }) {
+    // trace ID propagated from the WS message body / handshake headers
+    await logger.info('WS ping received', { traceId: getCurrentTraceId() });
   }
 }
 ```
+
+> **Note:** Pass `new WebSocketTraceInterceptor()` (an instance), not the class reference. `UseInterceptors` must be imported from `@nestjs/common`, not `@nestjs/websockets`.
+
+````
 
 ---
 
 ## NestJS integration
 
 Drop-in module with zero boilerplate. Registers `TraceMiddleware` for all routes, provides `LogixiaLoggerService`, `KafkaTraceInterceptor`, and `WebSocketTraceInterceptor` via the global DI container.
+
+> **Full working example** — see [`examples/nestjs-app/`](./examples/nestjs-app/) for a complete NestJS app with Docker Compose (Postgres, MongoDB, Kafka, Kafdrop) that exercises every feature: `LogixiaLoggerModule`, `TraceMiddleware`, `LogixiaExceptionFilter`, `HttpLoggingInterceptor`, `WebSocketTraceInterceptor`, `KafkaTraceInterceptor`, `@LogMethod`, `child()` loggers, `timeAsync`, real Kafka producer + consumer.
+>
+> ```bash
+> cd examples/nestjs-app
+> cp .env.example .env
+> docker compose up -d
+> curl http://localhost:3000/health
+> ```
 
 ```typescript
 // app.module.ts
@@ -1006,7 +1019,7 @@ import { LogixiaLoggerModule } from 'logixia';
   ],
 })
 export class AppModule {}
-```
+````
 
 **Async configuration** (for credentials from a config service):
 
@@ -1184,15 +1197,37 @@ import { LogixiaExceptionFilter, LogixiaLoggerService } from 'logixia';
 }
 ```
 
-The filter returns this shape on error:
+The filter returns a consistent structured shape on every error:
 
 ```json
 {
-  "statusCode": 500,
-  "message": "Internal server error",
-  "timestamp": "2025-03-14T10:22:01.412Z",
-  "path": "/api/orders"
+  "success": false,
+  "error": {
+    "type": "validation_error",
+    "code": "ORD-001",
+    "message": "Order amount must be greater than zero.",
+    "param": "amount"
+  },
+  "meta": {
+    "request_id": "req_8579ef8ff7a64c3cbc752fd1cb9852df",
+    "timestamp": "2026-03-24T16:30:19.217Z",
+    "path": "/orders/boom",
+    "status": 400
+  },
+  "debug": {
+    "stack": "LogixiaException: Order amount must be greater than zero.\n    at ..."
+  }
 }
+```
+
+And every log line carries `method`, `url`, `status`, `request_id` as structured fields — not a plain string:
+
+```
+WARN  [NestApplication] (traceId) [ORD-001] Order amount must be greater than zero.
+      { method: "GET", url: "/orders/boom", status: 400, request_id: "req_..." }
+
+ERROR [NestApplication] (traceId) DB connection timed out after 5000ms
+      { method: "GET", url: "/orders/crash", status: 500, request_id: "req_...", error: { ... } }
 ```
 
 ---
