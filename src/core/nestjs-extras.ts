@@ -35,8 +35,8 @@
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import { Catch, Inject, Optional } from '@nestjs/common';
 
-import { ErrorResponseBuilder } from '../exceptions/builder.js';
-import { isLogixiaException } from '../exceptions/exception.js';
+import { ErrorResponseBuilder } from '../exceptions/builder';
+import { isLogixiaException } from '../exceptions/exception';
 import { LOGIXIA_LOGGER_PREFIX } from './logitron-logger.module';
 import type { LogixiaLoggerService } from './logitron-nestjs.service';
 
@@ -130,19 +130,17 @@ export function LogMethod(options: LogMethodOptions = {}): MethodDecorator {
       if (logger) {
         // Use logLevel (extended method) rather than the NestJS interface debug/info
         // which only accepts (message: unknown, context?: string)
-        const logFn =
-          (
-            logger as unknown as Record<
-              string,
-              (msg: string, data?: Record<string, unknown>) => Promise<void>
-            >
-          )[level] ?? logger.debug.bind(logger);
-        if (typeof logFn === 'function') {
-          await (logFn as (msg: string, data?: Record<string, unknown>) => Promise<void>)(
-            `→ ${label}`,
-            entry
-          ).catch(() => void 0);
-        }
+        const logFnRaw = (
+          logger as unknown as Record<
+            string,
+            (msg: string, data?: Record<string, unknown>) => Promise<void>
+          >
+        )[level];
+        const logFn = (typeof logFnRaw === 'function' ? logFnRaw : logger.debug).bind(logger);
+        await (logFn as (msg: string, data?: Record<string, unknown>) => Promise<void>)(
+          `→ ${label}`,
+          entry
+        ).catch(() => void 0);
       }
 
       try {
@@ -155,19 +153,17 @@ export function LogMethod(options: LogMethodOptions = {}): MethodDecorator {
         if (logResult) exit['result'] = result;
 
         if (logger) {
-          const logFn =
-            (
-              logger as unknown as Record<
-                string,
-                (msg: string, data?: Record<string, unknown>) => Promise<void>
-              >
-            )[level] ?? logger.debug.bind(logger);
-          if (typeof logFn === 'function') {
-            await (logFn as (msg: string, data?: Record<string, unknown>) => Promise<void>)(
-              `← ${label}`,
-              exit
-            ).catch(() => void 0);
-          }
+          const logFnRaw = (
+            logger as unknown as Record<
+              string,
+              (msg: string, data?: Record<string, unknown>) => Promise<void>
+            >
+          )[level];
+          const logFn = (typeof logFnRaw === 'function' ? logFnRaw : logger.debug).bind(logger);
+          await (logFn as (msg: string, data?: Record<string, unknown>) => Promise<void>)(
+            `← ${label}`,
+            exit
+          ).catch(() => void 0);
         }
 
         return result;
@@ -250,24 +246,24 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
 
     // ── Logging ──────────────────────────────────────────────────────────────
     if (this.logger) {
-      const contextStr = [
-        `method=${String(request.method ?? '')}`,
-        `url=${String(request.url ?? '')}`,
-        `status=${httpStatus}`,
-        `request_id=${errorResponse.meta.request_id}`,
-      ].join(' ');
+      const requestMeta: Record<string, unknown> = {
+        method: request.method ?? '',
+        url: request.url ?? '',
+        status: httpStatus,
+        request_id: errorResponse.meta.request_id,
+      };
 
       if (httpStatus >= 500) {
         const err = exception instanceof Error ? exception : new Error(String(exception));
         // fire-and-forget — cannot await inside a synchronous ExceptionFilter.catch
-        this.logger.error(err, undefined, contextStr);
+        this.logger.error(err, requestMeta);
       } else if (isLogixiaException(exception)) {
         this.logger.warn(
           `[${errorResponse.error.code}] ${errorResponse.error.message}`,
-          contextStr
+          requestMeta
         );
       } else {
-        this.logger.warn(`[${httpStatus}] ${errorResponse.error.message}`, contextStr);
+        this.logger.warn(`[${httpStatus}] ${errorResponse.error.message}`, requestMeta);
       }
     }
 
