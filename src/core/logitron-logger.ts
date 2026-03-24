@@ -357,9 +357,15 @@ export class LogixiaLogger<
       }
     }
 
-    // 5. Pre-computed "[appName] " string
-    this._formattedAppName =
-      this._fieldCache.get('appName') !== false ? `[${this.config.appName ?? 'App'}] ` : '';
+    // 5. Pre-computed "[appName] " string (gray when colorize is on)
+    const appNameRaw = `[${this.config.appName ?? 'App'}]`;
+    if (this._fieldCache.get('appName') !== false) {
+      this._formattedAppName = colorize
+        ? `${this._colorMap.get('gray')!}${appNameRaw}${this._colorMap.get('reset')!} `
+        : `${appNameRaw} `;
+    } else {
+      this._formattedAppName = '';
+    }
 
     // 6. Redact flag — if no redact config, skip applyRedaction entirely
     this._hasRedact = !!(
@@ -743,10 +749,16 @@ export class LogixiaLogger<
 
     let formatted = '';
 
+    const doColorize = this.config.format?.colorize ?? true;
+    const gray = doColorize ? this._colorMap.get('gray')! : '';
+    const cyan = doColorize ? this._colorMap.get('cyan')! : '';
+    const yellow = doColorize ? this._colorMap.get('yellow')! : '';
+    const reset = doColorize ? this._colorMap.get('reset')! : '';
+
     // Use _fieldCache instead of calling isFieldEnabled() per field
     if (this.config.format?.timestamp !== false && this._fieldCache.get('timestamp') !== false) {
       // entry.timestamp is already an ISO string — no need to re-parse it
-      formatted += `[${entry.timestamp}] `;
+      formatted += `${gray}[${entry.timestamp}]${reset} `;
     }
 
     // Use pre-computed level string (avoids colorize() call + template literal allocation)
@@ -758,9 +770,9 @@ export class LogixiaLogger<
     formatted += this._formattedAppName;
 
     if (entry.traceId && this._fieldCache.get('traceId') !== false)
-      formatted += `[${entry.traceId}] `;
+      formatted += `${cyan}[${entry.traceId}]${reset} `;
     if (entry.context && this._fieldCache.get('context') !== false)
-      formatted += `[${entry.context}] `;
+      formatted += `${yellow}[${entry.context}]${reset} `;
     if (this._fieldCache.get('message') !== false) formatted += entry.message;
 
     if (entry.payload !== undefined && this._fieldCache.get('payload') !== false) {

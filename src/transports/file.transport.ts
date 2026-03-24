@@ -206,10 +206,20 @@ export class FileTransport implements ITransport, IBatchTransport {
     }
   }
 
+  private resolveDir(): string {
+    // If dirname is provided, use it; otherwise fall back to the directory part of filename
+    if (this.config.dirname) {
+      return this.config.dirname;
+    }
+    const fromFilename = path.dirname(this.config.filename);
+    // path.dirname returns '.' for bare filenames like 'app.log' — use CWD in that case
+    return fromFilename === '.' ? process.cwd() : fromFilename;
+  }
+
   private generateFilePath(): string {
     const now = new Date();
     const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const dir = path.dirname(this.config.filename);
+    const dir = this.resolveDir();
     const ext = path.extname(this.config.filename);
     const base = path.basename(this.config.filename, ext);
 
@@ -217,11 +227,11 @@ export class FileTransport implements ITransport, IBatchTransport {
       return path.join(dir, `${base}-${timestamp}${ext}`);
     }
 
-    return this.config.filename;
+    return path.join(dir, `${base}${ext}`);
   }
 
   private async ensureDirectoryExists(): Promise<void> {
-    const dir = path.dirname(this.currentFilePath);
+    const dir = this.resolveDir();
     try {
       await mkdir(dir, { recursive: true });
     } catch {
@@ -239,7 +249,7 @@ export class FileTransport implements ITransport, IBatchTransport {
     if (!this.config.rotation?.maxFiles) return;
 
     try {
-      const dir = path.dirname(this.config.filename);
+      const dir = this.resolveDir();
       const files = await readdir(dir);
       const base = path.basename(this.config.filename, path.extname(this.config.filename));
 
