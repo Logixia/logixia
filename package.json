@@ -1,6 +1,6 @@
 {
   "name": "logixia",
-  "version": "1.6.3",
+  "version": "1.6.4",
   "description": "TypeScript logger with custom log levels, multi-transport (console, file, DB, analytics), NestJS module, built-in search, request tracing, and zero-dep OpenTelemetry support",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -226,7 +226,7 @@
   },
   "homepage": "https://logixia.github.io/logixia/",
   "peerDependencies": {
-    "@nestjs/common": "^10.0.0",
+    "@nestjs/common": "^10.0.0 || ^11.0.0",
     "express": "^5.2.1",
     "reflect-metadata": "^0.1.13"
   },
@@ -243,7 +243,7 @@
     "@commitlint/config-conventional": "^20.4.4",
     "@commitlint/types": "^20.4.4",
     "@eslint/js": "^10.0.1",
-    "@nestjs/common": "^10.0.0",
+    "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.1.17",
     "@nestjs/microservices": "^11.1.17",
     "@nestjs/platform-express": "^11.1.17",
