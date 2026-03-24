@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.6.0](https://github.com/Logixia/logixia/compare/v1.5.0...v1.6.0) (2026-03-24)
+
+### ✨ Features
+
+* custom level proxy methods, auto-palette colors, and IntelliSense ([245bf13](https://github.com/Logixia/logixia/commit/245bf13d265390eaee4b5696268e9b17bbe26874))
+
 ## [1.5.0](https://github.com/Logixia/logixia/compare/v1.4.0...v1.5.0) (2026-03-18)
 
 ### ✨ Features
