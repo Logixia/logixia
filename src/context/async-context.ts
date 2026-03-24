@@ -25,6 +25,12 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { randomUUID } from 'node:crypto';
+
+/** Short request-scoped ID — uses Node's built-in crypto, never the global. */
+function randomShortId(): string {
+  return randomUUID().slice(0, 8);
+}
 
 export interface LogContext {
   requestId?: string;
@@ -118,8 +124,7 @@ export function createExpressContextMiddleware(
     const headers = (req['headers'] ?? {}) as Record<string, string | undefined>;
     const traceId = headers[traceIdHeader];
     const base: LogContext = {
-      requestId:
-        (headers[requestIdHeader] as string | undefined) ?? crypto.randomUUID().slice(0, 8),
+      requestId: (headers[requestIdHeader] as string | undefined) ?? randomShortId(),
       ...(traceId !== undefined ? { traceId } : {}),
     };
     LogixiaContext.run({ ...base, ...(enrich ? enrich(req) : {}) }, next);
@@ -151,7 +156,7 @@ export function createFastifyContextHook(
       requestId:
         (headers[requestIdHeader] as string | undefined) ??
         (request['id'] as string | undefined) ??
-        crypto.randomUUID().slice(0, 8),
+        randomShortId(),
       ...(traceId !== undefined ? { traceId } : {}),
     };
     LogixiaContext.run({ ...base, ...(enrich ? enrich(request) : {}) }, done);
