@@ -1,312 +1,301 @@
 /**
- * NestJS Integration Example for Logitron Logger
- * 
- * Note: To run this example, you need to install NestJS packages:
- * npm install @nestjs/common @nestjs/core @nestjs/platform-express reflect-metadata
+ * NestJS Integration Example — Logixia Logger
+ *
+ * Demonstrates:
+ *  1. LogixiaLoggerService with correct LoggerConfig shape
+ *  2. Custom level proxy methods  → service.kafka() / service.payment()
+ *  3. Auto-palette colors         → unlisted levels get a visible color automatically
+ *  4. LogixiaLoggerModule.forRoot() wiring (shown as comments — requires NestJS runtime)
+ *  5. child() loggers, context, setLevel, logLevel() escape hatch
+ *  6. TraceId — automatic per-request correlation ID in every log line
+ *
+ * Run:
+ *   npx ts-node examples/nestjs-example.ts
  */
 
-import 'reflect-metadata';
-import { Injectable, Controller, Get, Module } from '@nestjs/common';
-import { LogixiaLoggerModule, LogixiaLoggerService } from '../src/core/logitron-logger.module';
-import { LogixiaLogger } from '../src/core/logitron-logger';
-import { LoggerConfig } from '../src/types';
+import { LogixiaLoggerService } from '../src/core/logitron-nestjs.service';
+import { LogixiaContext } from '../src/context/async-context';
+import { LogLevel } from '../src/types';
 
-// Simplified NestJS-like demonstration
-class DemoUserService {
-  private logger: LogixiaLogger;
+// ─────────────────────────────────────────────────────────────────────────────
+// 1.  How you wire it up in a real NestJS app
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// app.module.ts
+// ─────────────
+// @Module({
+//   imports: [
+//     LogixiaLoggerModule.forRoot({
+//       appName:     'thread-gate',
+//       environment: 'production',
+//       traceId:     true,
+//       format:      { timestamp: true, colorize: true, json: false },
+//       levelOptions: {
+//         level: 'info',
+//         levels: {
+//           error: 0, warn: 1, info: 2, debug: 3, verbose: 4,
+//           kafka:   2,   // same priority as info
+//           mysql:   2,
+//           payment: 1,   // same priority as warn — always surface these
+//         },
+//         colors: {
+//           error: 'red', warn: 'yellow', info: 'blue', debug: 'green', verbose: 'cyan',
+//           kafka: 'magenta', mysql: 'cyan', payment: 'brightYellow',
+//         },
+//       },
+//     }),
+//   ],
+// })
+// export class AppModule {}
+//
+// main.ts
+// ───────
+// const logger = app.get(LogixiaLoggerService);
+// app.useLogger(logger);           ← replaces NestJS built-in console logger
+//
+// any.service.ts
+// ──────────────
+// constructor(private readonly logger: LogixiaLoggerService) {}
+//
+// (this.logger).kafka('Producer connected');          // proxy method
+// (this.logger).payment('Charge captured', { txnId });
+// this.logger.logLevel('kafka', 'msg', data);                // typed escape-hatch
 
-  constructor() {
-    // Initialize Logixia logger for this service
-    this.logger = new LogixiaLogger({
-      level: 'debug',
-      service: 'UserService',
-      environment: 'development',
-      fields: {
-        timestamp: true,
-        level: true,
-        context: true,
-        traceId: true,
-        message: true
+// ─────────────────────────────────────────────────────────────────────────────
+// 2.  Standalone runnable demo
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function run() {
+  console.log('\n════════════════════════════════════════');
+  console.log(' Logixia — NestJS Service Demo');
+  console.log('════════════════════════════════════════\n');
+
+  // ── 2a. Standard NestJS log levels ───────────────────────────────────────
+  console.log('── Standard levels ─────────────────────\n');
+
+  const basic = LogixiaLoggerService.create({
+    appName: 'DemoApp',
+    environment: 'development',
+    traceId: false,
+    format: { timestamp: true, colorize: true, json: false },
+    levelOptions: {
+      level: LogLevel.DEBUG,
+      levels: {
+        [LogLevel.ERROR]:   0,
+        [LogLevel.WARN]:    1,
+        [LogLevel.INFO]:    2,
+        [LogLevel.DEBUG]:   3,
+        [LogLevel.VERBOSE]: 4,
       },
-      formatters: ['text'],
-      outputs: ['console'],
-      levelOptions: {
-        level: 'debug',
-        levels: {
-          error: 0,
-          warn: 1,
-          info: 2,
-          debug: 3,
-          verbose: 4
-        },
-        colors: {
-          error: 'red',
-          warn: 'yellow',
-          info: 'green',
-          debug: 'blue',
-          verbose: 'cyan'
-        }
-      }
-    });
+      colors: {
+        [LogLevel.ERROR]:   'red',
+        [LogLevel.WARN]:    'yellow',
+        [LogLevel.INFO]:    'blue',
+        [LogLevel.DEBUG]:   'green',
+        [LogLevel.VERBOSE]: 'cyan',
+      },
+    },
+  });
+
+  // NestJS compat overloads (void, string context) — used by NestJS framework internals
+  basic.log('Application bootstrapped', 'Bootstrap');
+  basic.warn('Config missing, falling back to defaults', 'ConfigService');
+  basic.error('Redis connection refused', new Error('ECONNREFUSED').stack, 'CacheModule');
+
+  // Native async overloads (Promise<void>, structured data) — use in your own code
+  await basic.info('HTTP server listening', { port: 3000, env: 'development' });
+  await basic.debug('Route registered', { method: 'GET', path: '/api/users' });
+
+  // ── 2b. Custom level proxy methods ───────────────────────────────────────
+  console.log('\n── Custom level proxy methods ──────────\n');
+
+  /**
+   * Every key you add to `levelOptions.levels` becomes a method on the service.
+   *
+   *   service.kafka(msg, data)    → logLevel('kafka',   msg, data)
+   *   service.mysql(msg, data)    → logLevel('mysql',   msg, data)
+   *   service.payment(msg, data)  → logLevel('payment', msg, data)
+   *
+   * This is the fix for "this.logger.payment() doesn't work" — no casting needed
+   * on your side; Logixia registers these automatically at construction time.
+   */
+  const appLogger = LogixiaLoggerService.create({
+    appName: 'thread-gate',
+    environment: 'development',
+    traceId: true,
+    format: { timestamp: true, colorize: true, json: false },
+    levelOptions: {
+      level: 'verbose',
+      levels: {
+        [LogLevel.ERROR]:   0,
+        [LogLevel.WARN]:    1,
+        [LogLevel.INFO]:    2,
+        [LogLevel.DEBUG]:   3,
+        [LogLevel.VERBOSE]: 4,
+        // ── domain-specific levels ────────────────────────────────────────
+        kafka:   2,   // surfaces at INFO threshold
+        mysql:   2,
+        payment: 1,   // surfaces at WARN threshold — treat as high priority
+      },
+      colors: {
+        [LogLevel.ERROR]:   'red',
+        [LogLevel.WARN]:    'yellow',
+        [LogLevel.INFO]:    'blue',
+        [LogLevel.DEBUG]:   'green',
+        [LogLevel.VERBOSE]: 'cyan',
+        // IntelliSense now suggests 'kafka' | 'mysql' | 'payment' as valid keys here
+        kafka:   'magenta',
+        mysql:   'cyan',
+        payment: 'brightYellow',
+      },
+    },
+  });
+
+  appLogger.kafka('Kafka producer connected', {
+    broker:   'localhost:9092',
+    clientId: 'thread-gate',
+    topic:    'user.events',
+  });
+
+  appLogger.mysql('Query executed', {
+    query:    'SELECT * FROM users WHERE active = true',
+    duration: '14ms',
+    rows:     42,
+  });
+
+  appLogger.payment('Charge succeeded', {
+    txnId:    'txn_3Pv9Xk',
+    amount:   99.99,
+    currency: 'USD',
+    userId:   'usr_abc123',
+  });
+
+  // logLevel() — typed escape-hatch, works with any level string
+  await appLogger.logLevel('kafka', 'Consumer group rebalanced', {
+    groupId:    'thread-gate-group',
+    partitions: [0, 1, 2],
+  });
+
+  // ── 2c. Auto-palette — no colors defined ─────────────────────────────────
+  console.log('\n── Auto-palette (colors omitted) ───────\n');
+
+  /**
+   * If you don't set a color for a custom level, Logixia picks one from the
+   * palette:  magenta → cyan → yellow → green → blue  (cycling).
+   *
+   * This is the fix for "KAFKA / MYSQL appear uncolored":
+   * before this fix they silently fell back to 'white' (invisible on dark terminals).
+   */
+  const autoLogger = LogixiaLoggerService.create({
+    appName: 'NotifService',
+    traceId: false,
+    format:  { timestamp: false, colorize: true, json: false },
+    levelOptions: {
+      level: 'webhook',
+      levels: {
+        [LogLevel.ERROR]: 0,
+        [LogLevel.WARN]:  1,
+        [LogLevel.INFO]:  2,
+        sms:     3,   // auto → magenta
+        push:    4,   // auto → cyan
+        webhook: 5,   // auto → yellow
+      },
+      colors: {
+        [LogLevel.ERROR]: 'red',
+        [LogLevel.WARN]:  'yellow',
+        [LogLevel.INFO]:  'blue',
+        // sms / push / webhook intentionally omitted → auto-palette kicks in
+      },
+    },
+  });
+
+  await (autoLogger).sms('OTP dispatched', { phone: '+91-XXXXXX9999' });
+  await (autoLogger).push('Push notification delivered', { deviceId: 'dev_abc' });
+  await (autoLogger).webhook('Webhook fired', { url: 'https://hooks.example.com/pay', status: 200 });
+
+  // ── 2d. Child loggers ─────────────────────────────────────────────────────
+  console.log('\n── Child loggers ───────────────────────\n');
+
+  appLogger.setContext('PaymentService');
+  await appLogger.info('Processing payment request');
+
+  // child() returns a new service scoped to "OrderService"
+  const orderLogger = appLogger.child('OrderService', { region: 'ap-south-1' });
+  await orderLogger.info('Order created', { orderId: 'ord_789' });
+
+  // child() returns the base service type — use logLevel() for custom levels on children
+  await orderLogger.logLevel('payment', 'Order charge captured', {
+    orderId: 'ord_789',
+    amount:  49.99,
+  });
+
+  // ── 2e. Timing helpers ────────────────────────────────────────────────────
+  console.log('\n── Timing ──────────────────────────────\n');
+
+  appLogger.time('db:findAll');
+  await new Promise<void>((r) => setTimeout(r, 60));
+  await appLogger.timeEnd('db:findAll');
+
+  const users = await appLogger.timeAsync('api:fetchProfiles', async () => {
+    await new Promise<void>((r) => setTimeout(r, 30));
+    return [{ id: 'u_1', name: 'Sanjeev' }, { id: 'u_2', name: 'Priya' }];
+  });
+  await appLogger.info('Profiles loaded', { count: users.length });
+
+  // ── 2f. Level management ─────────────────────────────────────────────────
+  console.log('\n── Level management ────────────────────\n');
+
+  appLogger.debug('Visible at current threshold (verbose)');
+  appLogger.setLevel(LogLevel.WARN);
+  appLogger.debug('Suppressed — debug(3) < warn(1)');
+  appLogger.warn('Visible at WARN threshold');
+  appLogger.setLevel('verbose'); // restore
+
+  // ── 2g. TraceId — correlation ID propagated into every log line ──────────
+  console.log('\n── TraceId ─────────────────────────────\n');
+
+  /**
+   * With `traceId: true` (or a TraceIdConfig object) every log entry carries
+   * a stable correlation ID so you can grep all lines for a single request.
+   *
+   * Two ways to use it:
+   *
+   * 1. LogixiaContext.run(traceId, fn)
+   *    All logs inside `fn` automatically carry `traceId` — the preferred way
+   *    inside a NestJS request lifecycle (TraceMiddleware does this for you).
+   *
+   * 2. logger.getCurrentTraceId()
+   *    Read the active trace ID from AsyncLocalStorage at any point.
+   */
+  await LogixiaContext.run({ traceId: 'req_demo_abc123' }, async () => {
+    // Every log inside this callback carries traceId: 'req_demo_abc123'
+    await appLogger.info('Request received', { method: 'POST', path: '/api/orders' });
+    await appLogger.kafka('Message published', { topic: 'order.created', key: 'ord_789' });
+    await appLogger.payment('Charge initiated', { amount: 49.99, currency: 'USD' });
+
+    const traceId = appLogger.getCurrentTraceId();
+    console.log('  Active traceId:', traceId); // req_demo_abc123
+  });
+
+  // Outside the context — logger falls back to its own stable per-instance ID
+  await appLogger.info('After context — own fallback traceId active');
+
+  // ── 2h. Error logging ─────────────────────────────────────────────────────
+  console.log('\n── Error logging ───────────────────────\n');
+
+  try {
+    throw new Error('DB connection timed out after 5000ms');
+  } catch (err) {
+    await appLogger.error(err as Error, { service: 'UserRepository', retries: 3 });
   }
 
-  async findAll() {
-    this.logger.info('Fetching all users');
-    
-    // Simulate database operation with timing
-    this.logger.time('db-query');
-    
-    // Simulate async operation
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    const users = [
-      { id: '1', name: 'John Doe', email: 'john@example.com' },
-      { id: '2', name: 'Jane Smith', email: 'jane@example.com' }
-    ];
-    
-    this.logger.timeEnd('db-query');
-    this.logger.info('Users fetched successfully', { count: users.length });
-    
-    return { users };
-  }
+  await appLogger.close();
+  await autoLogger.close();
+  await basic.close();
 
-  async findOne(id: string) {
-    const childLogger = this.logger.child(`user-${id}`);
-    childLogger.info('Fetching user by ID');
-    
-    try {
-      // Simulate database lookup
-      await new Promise(resolve => setTimeout(resolve, 50));
-      
-      if (id === '999') {
-        throw new Error('User not found');
-      }
-      
-      const user = { id, name: 'John Doe', email: 'john@example.com' };
-      childLogger.info('User found', { user });
-      
-      return user;
-    } catch (error) {
-      childLogger.error('Failed to fetch user', { error });
-      throw error;
-    }
-  }
-
-  async create(userData: any) {
-    const childLogger = this.logger.child('user-create');
-    childLogger.info('Creating new user', { userData });
-    
-    try {
-      // Simulate user creation
-      await new Promise(resolve => setTimeout(resolve, 150));
-      
-      const newUser = {
-        id: Math.random().toString(36).substr(2, 9),
-        ...userData,
-        createdAt: new Date().toISOString()
-      };
-      
-      childLogger.info('User created successfully', { userId: newUser.id });
-      return newUser;
-    } catch (error) {
-      childLogger.error('Failed to create user', { error });
-      throw error;
-    }
-  }
+  console.log('\n════════════════════════════════════════');
+  console.log(' Demo complete');
+  console.log('════════════════════════════════════════\n');
 }
 
-// NestJS controller using proper decorators
-@Controller('users')
-class DemoUserController {
-  private userService: DemoUserService;
-  private logger: LogixiaLogger;
-
-  constructor() {
-    this.userService = new DemoUserService();
-    this.logger = new LogixiaLogger({
-       level: 'info',
-       service: 'UserController',
-       environment: 'development',
-       fields: {
-         timestamp: true,
-         level: true,
-         context: true,
-         traceId: true,
-         message: true,
-       },
-       formatters: ['text'],
-       outputs: ['console'],
-       levelOptions: {
-         level: 'info',
-         levels: {
-           error: 0,
-           warn: 1,
-           info: 2,
-           debug: 3,
-           verbose: 4
-         },
-         colors: {
-           error: 'red',
-           warn: 'yellow',
-           info: 'green',
-           debug: 'blue',
-           verbose: 'cyan'
-         }
-       }
-     });
-  }
-
-  async getUsers() {
-    this.logger.info('GET /users endpoint called');
-    return await this.userService.findAll();
-  }
-
-  async getUser(id: string) {
-    this.logger.info('GET /users/:id endpoint called', { userId: id });
-    return await this.userService.findOne(id);
-  }
-
-  async createUser(userData: any) {
-    this.logger.info('POST /users endpoint called');
-    return await this.userService.create(userData);
-  }
-}
-
-// NestJS Application Module using LogitronLoggerModule
-@Module({
-  imports: [
-    LogixiaLoggerModule.forRoot({
-      level: 'debug',
-      service: 'NestJS-Demo',
-      environment: 'development',
-      traceId: true,
-      formatters: ['text'],
-      outputs: ['console']
-    })
-  ],
-  providers: [DemoUserService],
-  controllers: [DemoUserController]
-})
-class AppModule {}
-
-// Simulate NestJS application setup
-class DemoNestJSApp {
-  private loggerService: LogixiaLoggerService;
-  private userController: DemoUserController;
-
-  constructor() {
-    // Initialize the Logixia NestJS service
-    this.loggerService = new LogixiaLoggerService({
-       level: 'debug',
-       service: 'NestJSApp',
-       environment: 'development',
-       fields: {
-         timestamp: true,
-         level: true,
-         context: true,
-         traceId: true,
-         message: true
-       },
-       formatters: ['text'],
-       outputs: ['console'],
-       levelOptions: {
-         level: 'debug',
-         levels: {
-           error: 0,
-           warn: 1,
-           info: 2,
-           debug: 3,
-           verbose: 4
-         },
-         colors: {
-           error: 'red',
-           warn: 'yellow',
-           info: 'green',
-           debug: 'blue',
-           verbose: 'cyan'
-         }
-       }
-     });
-
-    this.userController = new DemoUserController();
-  }
-
-  async bootstrap() {
-    const logger = this.loggerService.getLogger();
-    
-    logger.info('Starting NestJS application...');
-    
-    // Simulate middleware setup
-    logger.debug('Setting up trace middleware');
-    
-    // Simulate route registration
-    logger.debug('Registering routes', {
-      routes: [
-        'GET /users',
-        'GET /users/:id',
-        'POST /users'
-      ]
-    });
-    
-    logger.info('NestJS application started successfully', {
-      port: 3000,
-      environment: 'development'
-    });
-    
-    return this;
-  }
-
-  async simulateRequests() {
-    const logger = this.loggerService.getLogger();
-    
-    logger.info('Simulating HTTP requests...');
-    
-    try {
-      // Simulate GET /users
-      logger.info('Processing request: GET /users');
-      await this.userController.getUsers();
-      
-      // Simulate GET /users/1
-      logger.info('Processing request: GET /users/1');
-      await this.userController.getUser('1');
-      
-      // Simulate POST /users
-      logger.info('Processing request: POST /users');
-      await this.userController.createUser({
-        name: 'New User',
-        email: 'newuser@example.com'
-      });
-      
-      // Simulate error case
-      logger.info('Processing request: GET /users/999 (error case)');
-      try {
-        await this.userController.getUser('999');
-      } catch (error) {
-        logger.warn('Request resulted in error (expected)', { error: error instanceof Error ? error.message : String(error) });
-      }
-      
-    } catch (error) {
-      logger.error('Unexpected error during request simulation', { error });
-    }
-  }
-}
-
-// Demo execution
-async function runNestJSDemo() {
-  console.log('\n=== NestJS + Logitron Integration Demo ===\n');
-  
-  const app = new DemoNestJSApp();
-  
-  // Bootstrap the application
-  await app.bootstrap();
-  
-  // Simulate some requests
-  await app.simulateRequests();
-  
-  console.log('\n=== Demo completed ===\n');
-}
-
-// Run the demo
-runNestJSDemo().catch(console.error);
-
-export { DemoNestJSApp, DemoUserController, DemoUserService };
+run().catch(console.error);

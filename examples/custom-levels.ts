@@ -1,165 +1,197 @@
-import { LogixiaLogger, createLogger, LogLevel } from '../src';
-
 /**
- * Custom levels example for Logixia
- * 
- * This example demonstrates how to:
- * 1. Define custom log levels like 'analytics', 'audit', 'security'
- * 2. Set custom colors for each level
- * 3. Use both predefined and custom levels
+ * Custom Levels Example — Logixia Logger
+ *
+ * Demonstrates:
+ *  1. Defining domain-specific log levels (analytics, payment, kafka, etc.)
+ *  2. Explicit colors per level — IntelliSense now narrows keys to your level names
+ *  3. Auto-palette — levels with no explicit color get a visible color automatically
+ *     (magenta → cyan → yellow → green → blue, cycling)
+ *  4. Proxy methods on LogixiaLoggerService — service.payment() just works
+ *
+ * Run:
+ *   npx ts-node examples/custom-levels.ts
  */
 
-// Example 1: Analytics Logger with Custom Levels
-const analyticsLogger = createLogger({
-  appName: 'AnalyticsApp',
-  levelOptions: {
-    level: 'analytics', // Set custom level as default
-    levels: {
-      // Predefined levels
-      [LogLevel.ERROR]: 0,
-      [LogLevel.WARN]: 1,
-      [LogLevel.INFO]: 2,
-      [LogLevel.DEBUG]: 3,
-      [LogLevel.TRACE]: 4,
-      [LogLevel.VERBOSE]: 5,
-      // Custom levels
-      'analytics': 1,  // Same priority as warn
-      'audit': 0,      // Same priority as error
-      'security': 0,   // Highest priority
-      'performance': 3, // Same as debug,
-      'nice': 1,
-    },
-    colors: {
-      // Predefined colors
-      [LogLevel.ERROR]: 'red',
-      [LogLevel.WARN]: 'yellow',
-      [LogLevel.INFO]: 'blue',
-      [LogLevel.DEBUG]: 'green',
-      [LogLevel.TRACE]: 'gray',
-      [LogLevel.VERBOSE]: 'cyan',
-      // Custom colors
-      'analytics': 'magenta',
-      'audit': 'brightRed',
-      'security': 'brightMagenta',
-      'performance': 'brightGreen',
-      'nice': 'cyan',
-    },
-  }
-});
+import { createLogger, LogixiaLogger } from '../src/core/logitron-logger';
+import { LogixiaLoggerService }         from '../src/core/logitron-nestjs.service';
+import { LogLevel }                     from '../src/types';
 
-// Example 2: E-commerce Logger with Business-Specific Levels
+// ─────────────────────────────────────────────────────────────────────────────
+// 1.  E-commerce logger — explicit colors for every level
+// ─────────────────────────────────────────────────────────────────────────────
+
 const ecommerceLogger = createLogger({
   appName: 'EcommerceApp',
+  format:  { timestamp: false, colorize: true, json: false },
+  traceId: false,
   levelOptions: {
-    level: 'info',
+    level: 'marketing', // show everything down to marketing
     levels: {
-      // Standard levels
       [LogLevel.ERROR]: 0,
-      [LogLevel.WARN]: 1,
-      [LogLevel.INFO]: 2,
+      [LogLevel.WARN]:  1,
+      [LogLevel.INFO]:  2,
       [LogLevel.DEBUG]: 3,
-      // Business-specific levels
-      'order': 2,      // Order processing logs
-      'payment': 1,    // Payment processing (higher priority)
-      'inventory': 2,  // Inventory management
-      'customer': 3,   // Customer interactions
-      'marketing': 4,  // Marketing events
+      order:     2,   // order processing — same priority as info
+      payment:   1,   // payment — same priority as warn (always visible)
+      inventory: 2,
+      customer:  3,
+      marketing: 4,
+    },
+    colors: {
+      // IntelliSense now suggests all of your level names as valid keys,
+      // plus the built-in levels (error | warn | info | debug | trace | verbose).
+      [LogLevel.ERROR]: 'red',
+      [LogLevel.WARN]:  'yellow',
+      [LogLevel.INFO]:  'blue',
+      [LogLevel.DEBUG]: 'green',
+      order:     'brightBlue',
+      payment:   'brightYellow',
+      inventory: 'cyan',
+      customer:  'brightGreen',
+      marketing: 'brightCyan',
+    },
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2.  Infrastructure logger — auto-palette for unlisted levels
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Don't want to pick colors manually? Just omit them.
+ * Logixia assigns a distinctive color from the palette for each unlisted level:
+ *   first unlisted  → magenta
+ *   second unlisted → cyan
+ *   third unlisted  → yellow
+ *   ... and so on, cycling through ['magenta','cyan','yellow','green','blue']
+ *
+ * This is the fix for "KAFKA / MYSQL appear uncolored" — they used to silently
+ * fall back to white which is invisible on dark terminals.
+ */
+const infraLogger = createLogger({
+  appName: 'InfraApp',
+  format:  { timestamp: false, colorize: true, json: false },
+  traceId: false,
+  levelOptions: {
+    level: 'maintenance',
+    levels: {
+      [LogLevel.ERROR]: 0,
+      [LogLevel.WARN]:  1,
+      [LogLevel.INFO]:  2,
+      [LogLevel.DEBUG]: 3,
+      kafka:       2,   // auto → magenta
+      mysql:       2,   // auto → cyan
+      deployment:  1,   // auto → yellow
+      monitoring:  2,   // auto → green
+      maintenance: 4,   // auto → blue
     },
     colors: {
       [LogLevel.ERROR]: 'red',
-      [LogLevel.WARN]: 'yellow',
-      [LogLevel.INFO]: 'blue',
+      [LogLevel.WARN]:  'yellow',
+      [LogLevel.INFO]:  'blue',
       [LogLevel.DEBUG]: 'green',
-      'order': 'brightBlue',
-      'payment': 'brightYellow',
-      'inventory': 'cyan',
-      'customer': 'brightGreen',
-      'marketing': 'brightCyan',
-    }
-  }
+      // kafka / mysql / deployment / monitoring / maintenance → auto-palette
+    },
+  },
 });
 
-// Example 3: DevOps Logger with Infrastructure Levels
-const devopsLogger = createLogger({
-  appName: 'DevOpsApp',
+// ─────────────────────────────────────────────────────────────────────────────
+// 3.  NestJS service — proxy methods for custom levels
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * LogixiaLoggerService creates a proxy method for every key in levelOptions.levels
+ * that doesn't already have a built-in implementation.
+ *
+ *   service.kafka(msg, data)    // ← just works, no casting
+ *   service.payment(msg, data)  // ← just works
+ *
+ * Under the hood each proxy calls: this.logger.logLevel(levelName, msg, data)
+ */
+const nestService = LogixiaLoggerService.create({
+  appName: 'NestApp',
+  traceId: false,
+  format:  { timestamp: false, colorize: true, json: false },
   levelOptions: {
-    level: 'info',
+    level: 'payment',
     levels: {
       [LogLevel.ERROR]: 0,
-      [LogLevel.WARN]: 1,
-      [LogLevel.INFO]: 2,
+      [LogLevel.WARN]:  1,
+      [LogLevel.INFO]:  2,
       [LogLevel.DEBUG]: 3,
-      // Infrastructure levels
-      'deployment': 1,
-      'monitoring': 2,
-      'scaling': 2,
-      'backup': 3,
-      'maintenance': 4,
+      kafka:   2,
+      payment: 1,
     },
     colors: {
       [LogLevel.ERROR]: 'red',
-      [LogLevel.WARN]: 'yellow',
-      [LogLevel.INFO]: 'blue',
+      [LogLevel.WARN]:  'yellow',
+      [LogLevel.INFO]:  'blue',
       [LogLevel.DEBUG]: 'green',
-      'deployment': 'brightRed',
-      'monitoring': 'brightBlue',
-      'scaling': 'brightGreen',
-      'backup': 'cyan',
-      'maintenance': 'gray',
-    }
-  }
+      kafka:   'magenta',
+      payment: 'brightYellow',
+    },
+  },
 });
 
-function demonstrateCustomLevels() {
-  console.log('=== Custom Log Levels Demo ===\n');
+// ─────────────────────────────────────────────────────────────────────────────
+// 4.  Run all demos
+// ─────────────────────────────────────────────────────────────────────────────
 
-  // Analytics Logger Demo
-  console.log('1. Analytics Logger:');
-  analyticsLogger.info('Application started');
-  analyticsLogger.analytics('This will show because analytics level = 1, warn level = 1');
-  analyticsLogger.info('This will NOT show because info level = 2 > analytics level = 1');
-  analyticsLogger.nice('This will show because nice level = 4, warn level = 1');
+async function runDemo() {
+  console.log('\n════════════════════════════════════════');
+  console.log(' Custom Levels Demo');
+  console.log('════════════════════════════════════════\n');
 
-  
-  console.log('\n2. E-commerce Logger:');
-  ecommerceLogger.error('Payment processing failed');
-  ecommerceLogger.inventory('Low inventory warning');
-  ecommerceLogger.info('This will NOT show because info level = 2 > payment level = 1');
-  
-  console.log('\n3. DevOps Logger:');
-  devopsLogger.error('Server down');
-  devopsLogger.warn('High CPU usage');
-  devopsLogger.deployment('Deployment completed');
-  devopsLogger.debug('This will NOT show because debug level = 3 > monitoring level = 2');
+  // ── E-commerce ─────────────────────────────────────────────────────────────
+  console.log('── E-commerce logger (explicit colors) ─\n');
 
-  console.log('\n4. Runtime Level Changes:');
-  console.log('Changing analytics logger to debug level...');
-  analyticsLogger.setLevel('debug');
-  analyticsLogger.info('Now info messages will show');
-  analyticsLogger.debug('And debug messages too');
-  
-  console.log('\n=== Custom Levels Demo Complete ===');
+  await ecommerceLogger.error('Payment gateway unreachable');
+  await ecommerceLogger.payment('Charge captured', { txnId: 'txn_abc', amount: 99.99 });
+  await ecommerceLogger.order('Order confirmed', { orderId: 'ord_001', items: 3 });
+  await ecommerceLogger.inventory('Stock updated', { sku: 'SKU-9001', qty: 500 });
+  await ecommerceLogger.customer('Profile viewed', { userId: 'usr_42' });
+  await ecommerceLogger.marketing('Campaign clicked', { campaign: 'summer-sale' });
+
+  // ── Infrastructure (auto-palette) ──────────────────────────────────────────
+  console.log('\n── Infra logger (auto-palette colors) ──\n');
+
+  await infraLogger.kafka('Producer connected', { broker: 'localhost:9092' });
+  await infraLogger.mysql('Query executed', { query: 'SELECT 1', ms: 2 });
+  await infraLogger.deployment('Release v2.1.0 complete', { pods: 3 });
+  await infraLogger.monitoring('Health check passed', { latency: '12ms' });
+  await infraLogger.maintenance('Nightly vacuum scheduled');
+
+  // ── NestJS service proxy methods ───────────────────────────────────────────
+  console.log('\n── NestJS service proxy methods ─────────\n');
+
+  await nestService.kafka('Consumer group rebalanced', {
+    groupId:    'app-group',
+    partitions: [0, 1, 2],
+  });
+  await nestService.payment('Subscription renewed', {
+    userId:    'usr_99',
+    plan:      'pro',
+    amount:    29.99,
+    currency:  'USD',
+  });
+
+  // logLevel() — typed escape hatch, equivalent to the proxy
+  await nestService.logLevel('kafka', 'Offset committed', { offset: 1024 });
+
+  // ── Dynamic level change ───────────────────────────────────────────────────
+  console.log('\n── Dynamic level change ─────────────────\n');
+
+  console.log('Level before:', ecommerceLogger.getLevel());
+  ecommerceLogger.setLevel(LogLevel.WARN);
+  await ecommerceLogger.order('Suppressed — order(2) > warn(1)');
+  await ecommerceLogger.warn('Still visible at warn');
+  ecommerceLogger.setLevel('marketing'); // restore
+
+  console.log('\n════════════════════════════════════════');
+  console.log(' Demo complete');
+  console.log('════════════════════════════════════════\n');
 }
 
-// Helper function to show available levels
-function showAvailableLevels() {
-  console.log('\n=== Available Log Levels ===');
-  console.log('Predefined levels:', Object.values(LogLevel));
-  console.log('\nCustom levels can be defined in levelOptions.levels');
-  console.log('Examples: analytics, audit, security, order, payment, deployment, etc.');
-  console.log('\nEach level gets a numeric priority (lower = higher priority)');
-  console.log('And can have a custom color from the LogColor type');
-}
+runDemo().catch(console.error);
 
-if (require.main === module) {
-  demonstrateCustomLevels();
-  showAvailableLevels();
-}
-
-export {
-  analyticsLogger,
-  ecommerceLogger,
-  devopsLogger,
-  demonstrateCustomLevels,
-  showAvailableLevels
-};
+export { ecommerceLogger, infraLogger, nestService };

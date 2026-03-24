@@ -194,7 +194,7 @@ export interface LoggerConfig<TLevels extends Record<string, number> = Record<st
     | {
         level?: keyof TLevels | LogLevelString;
         levels?: TLevels;
-        colors?: Record<string, LogColor>;
+        colors?: Partial<Record<keyof TLevels | LogLevel, LogColor>>;
       }
     | undefined;
   fields?: Partial<Record<LogFieldKey, string | boolean>>;

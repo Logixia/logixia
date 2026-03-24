@@ -290,23 +290,54 @@ You can also define **custom levels** for your domain:
 ```typescript
 const logger = createLogger({
   appName: 'payments',
-  environment: 'production',
   levelOptions: {
-    level: 'info',
+    level: 'payment', // show everything down to 'payment'
     levels: {
-      // extend the built-in set with your own
-      audit: { priority: 35, color: 'blue' },
-      security: { priority: 45, color: 'red' },
+      error: 0,
+      warn: 1,
+      info: 2,
+      debug: 3,
+      // domain-specific levels — lower number = higher priority
+      payment: 1, // same priority as warn
+      audit: 2, // same priority as info
+      kafka: 2,
+    },
+    colors: {
+      error: 'red',
+      warn: 'yellow',
+      info: 'blue',
+      debug: 'green',
+      // IntelliSense now suggests 'payment' | 'audit' | 'kafka' as valid keys:
+      payment: 'brightYellow',
+      audit: 'magenta',
+      // kafka omitted → auto-palette assigns a visible color (cyan in this case)
     },
   },
 });
 
 // Custom level methods are available immediately, fully typed
-await logger.audit('Payment processed', { orderId: 'ord_123', amount: 99.99 });
-await logger.security('Suspicious login attempt', { ip: '1.2.3.4', userId: 'usr_456' });
+await logger.payment('Charge captured', { orderId: 'ord_123', amount: 99.99 });
+await logger.audit('Refund approved', { orderId: 'ord_123', by: 'admin' });
+await logger.kafka('Message published', { topic: 'order.created' });
 
-// Or use logLevel() for dynamic dispatch
-await logger.logLevel('audit', 'Refund issued', { orderId: 'ord_123' });
+// logLevel() is the typed escape hatch — equivalent to the proxy methods above
+await logger.logLevel('payment', 'Subscription renewed', { userId: 'usr_456' });
+```
+
+**Auto-palette colors** — if you omit a color for a custom level, logixia assigns one automatically from the palette `magenta → cyan → yellow → green → blue` (cycling). No more "uncolored" custom levels blending into terminal noise.
+
+**NestJS service IntelliSense** — `LogixiaLoggerService.create<T>(config)` carries the level names into the return type, so the IDE autocompletes `service.kafka(...)`, `service.payment(...)` etc. with the correct signature:
+
+```typescript
+const svc = LogixiaLoggerService.create({
+  levelOptions: {
+    levels: { error: 0, warn: 1, info: 2, kafka: 3, payment: 4 },
+    colors: { error: 'red', kafka: 'magenta' }, // ← IDE suggests 'kafka' | 'payment' here
+  },
+});
+
+svc.kafka('Producer connected'); // ✅ fully typed, no 'as any'
+svc.payment('Charge captured', { txnId }); // ✅
 ```
 
 ### Structured logging
@@ -1048,6 +1079,42 @@ export class OrdersService {
 ```
 
 `LogixiaLoggerService` exposes the full `LogixiaLogger` API: `info`, `warn`, `error`, `debug`, `trace`, `verbose`, `logLevel`, `time`, `timeEnd`, `timeAsync`, `setLevel`, `getLevel`, `setContext`, `child`, `close`, `getCurrentTraceId`, and more.
+
+**Custom level proxy methods** — every key you add to `levelOptions.levels` automatically becomes a method on the service instance. Use `LogixiaLoggerService.create<T>(config)` (instead of `new`) to get full IntelliSense for those methods:
+
+```typescript
+const logger = LogixiaLoggerService.create({
+  levelOptions: {
+    levels: { error: 0, warn: 1, info: 2, kafka: 2, mysql: 2, payment: 1 },
+    colors: {
+      error: 'red',
+      warn: 'yellow',
+      info: 'blue',
+      kafka: 'magenta',
+      payment: 'brightYellow',
+    },
+  },
+});
+
+// Methods are created at construction time — no casting required
+await logger.kafka('Consumer rebalanced', { groupId: 'app-group' });
+await logger.mysql('Slow query detected', { query, ms: 1240 });
+await logger.payment('Charge captured', { txnId, amount: 99.99 });
+```
+
+**TraceId** — with `traceId: true`, every log line carries a correlation ID automatically. Use `LogixiaContext.run()` to scope a trace to a block (the `TraceMiddleware` does this per-request automatically):
+
+```typescript
+import { LogixiaContext } from 'logixia';
+
+await LogixiaContext.run({ traceId: req.headers['x-request-id'] }, async () => {
+  await logger.info('Request received'); // traceId: "abc-123" in every line
+  await logger.kafka('Event published'); // same traceId
+});
+
+// Read the active traceId at any point
+const traceId = logger.getCurrentTraceId();
+```
 
 ### @LogMethod decorator
 

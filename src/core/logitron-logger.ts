@@ -320,10 +320,26 @@ export class LogixiaLogger<
     //    Eliminates a colorize() call + template literal allocation on every log call.
     const colorize = this.config.format?.colorize ?? true;
     this._formattedLevels = new Map();
+
+    // Palette cycled for custom levels that have no explicit color configured.
+    // Skips 'white' because it looks identical to the terminal default (appears "uncolored").
+    const _AUTO_PALETTE: readonly string[] = ['magenta', 'cyan', 'yellow', 'green', 'blue'];
+    const _BUILTIN_LEVELS = new Set(['error', 'warn', 'info', 'debug', 'trace', 'verbose']);
+    let _paletteIdx = 0;
+
     for (const [lvl] of this._levelValues) {
       const upper = lvl.toUpperCase();
       if (colorize && this._fieldCache.get('level') !== false) {
-        const colorName = (this.config.levelOptions?.colors?.[lvl] ?? 'white') as string;
+        let colorName = this.config.levelOptions?.colors?.[lvl] as string | undefined;
+        if (!colorName) {
+          if (_BUILTIN_LEVELS.has(lvl)) {
+            colorName = 'white'; // built-in fallback (shouldn't happen with default config)
+          } else {
+            // Custom level — auto-assign a distinctive color from the palette
+            colorName = _AUTO_PALETTE[_paletteIdx % _AUTO_PALETTE.length]!;
+            _paletteIdx++;
+          }
+        }
         const code = this._colorMap.get(colorName.toLowerCase()) ?? this._colorMap.get('white')!;
         const reset = this._colorMap.get('reset')!;
         this._formattedLevels.set(lvl, `[${code}${upper}${reset}] `);

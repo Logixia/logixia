@@ -23,14 +23,64 @@ import { Injectable, Scope } from '@nestjs/common';
 
 import type { LoggerConfig, LogLevelString } from '../types';
 import { LogLevel } from '../types';
+
+// ── Custom-level IntelliSense helpers ─────────────────────────────────────────
+
+/**
+ * Level names that already have proper typed implementations on LogixiaLoggerService.
+ * These are excluded from the auto-generated method type so we don't produce
+ * duplicate / conflicting signatures.
+ */
+type _ServiceBuiltinLevels =
+  | 'error'
+  | 'warn'
+  | 'info'
+  | 'debug'
+  | 'verbose'
+  | 'trace'
+  | 'log'
+  | 'logLevel';
+
+/**
+ * Mapped type that adds one method per *custom* level (i.e. every key in TLevels
+ * that is not already a built-in method on LogixiaLoggerService).
+ *
+ * @example
+ * ServiceCustomLevelMethods<{ kafka: 3; mysql: 4; payment: 5 }>
+ * // → { kafka(msg, data?): Promise<void>; mysql(...): …; payment(...): … }
+ */
+type ServiceCustomLevelMethods<TLevels extends Record<string, number>> = {
+  readonly [K in keyof TLevels as K extends _ServiceBuiltinLevels ? never : K & string]: (
+    message: string,
+    data?: Record<string, unknown>
+  ) => Promise<void>;
+};
+
+/**
+ * The return type of `LogixiaLoggerService.create<T>(config)`.
+ *
+ * When `T` carries `levelOptions.levels`, this type intersects
+ * `LogixiaLoggerService` with a method for every *custom* level so the IDE
+ * suggests `service.kafka(...)`, `service.payment(...)`, etc.
+ */
+export type LogixiaServiceWithLevels<T extends LoggerConfig<Record<string, number>>> =
+  T['levelOptions'] extends { levels: infer L }
+    ? L extends Record<string, number>
+      ? LogixiaLoggerService & ServiceCustomLevelMethods<L>
+      : LogixiaLoggerService
+    : LogixiaLoggerService;
 import { internalError } from '../utils/internal-log';
 import { getCurrentTraceId } from '../utils/trace.utils';
 import { LogixiaLogger } from './logitron-logger';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class LogixiaLoggerService implements LoggerService {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- index signature required for dynamic custom-level methods
+  [K: string]: any;
+
   private logger: LogixiaLogger;
   private context?: string;
+  private _mergedConfig: LoggerConfig;
 
   constructor(config?: LoggerConfig) {
     const defaultConfig: LoggerConfig = {
@@ -71,7 +121,28 @@ export class LogixiaLoggerService implements LoggerService {
       },
     };
 
-    this.logger = new LogixiaLogger({ ...defaultConfig, ...config });
+    this._mergedConfig = { ...defaultConfig, ...config };
+    this.logger = new LogixiaLogger(this._mergedConfig);
+    this._createCustomLevelMethods();
+  }
+
+  // Dynamically adds a proxy method for every custom level defined in levelOptions.levels
+  // so that `service.payment('msg')` works the same as `service.logLevel('payment', 'msg')`.
+  private _createCustomLevelMethods(): void {
+    const levels = this._mergedConfig.levelOptions?.levels;
+    if (!levels) return;
+    for (const levelName of Object.keys(levels)) {
+      const lower = levelName.toLowerCase();
+      // Skip levels that already have a built-in implementation on this class
+      if (typeof this[lower] !== 'undefined') continue;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (this as any)[lower] = async (
+        message: string,
+        data?: Record<string, unknown>
+      ): Promise<void> => {
+        return this.logger.logLevel(lower, message, data);
+      };
+    }
   }
 
   // ── log / info ──────────────────────────────────────────────────────────────
@@ -292,8 +363,10 @@ export class LogixiaLoggerService implements LoggerService {
     return this.logger.close();
   }
 
-  static create(config?: LoggerConfig): LogixiaLoggerService {
-    return new LogixiaLoggerService(config);
+  static create<T extends LoggerConfig<Record<string, number>>>(
+    config?: T
+  ): LogixiaServiceWithLevels<T> {
+    return new LogixiaLoggerService(config) as unknown as LogixiaServiceWithLevels<T>;
   }
 
   getLogger(): LogixiaLogger {
