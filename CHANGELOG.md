@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.6.2](https://github.com/Logixia/logixia/compare/v1.6.1...v1.6.2) (2026-03-24)
+
+### 🐛 Bug Fixes
+
+* colorize timestamp/appName/traceId/context fields and fix file dirname ([f7e4fe4](https://github.com/Logixia/logixia/commit/f7e4fe461b83e6e14bec99854ea3045cc264ebb8))
+
 ## [1.6.1](https://github.com/Logixia/logixia/compare/v1.6.0...v1.6.1) (2026-03-24)
 
 ### 🐛 Bug Fixes
