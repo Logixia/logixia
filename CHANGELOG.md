@@ -3,6 +3,21 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.6.4](https://github.com/Logixia/logixia/compare/v1.6.3...v1.6.4) (2026-03-24)
+
+### 🐛 Bug Fixes
+
+* align @nestjs/common version — peerDep ^10||^11, devDep ^11 ([261663d](https://github.com/Logixia/logixia/commit/261663d421618c1e53fbbecf638afc82f99e0be1))
+* **context:** use node:crypto randomUUID instead of global crypto ([5bdbd3d](https://github.com/Logixia/logixia/commit/5bdbd3d0146e1c837fdcd0944a34facf9fdde314))
+* correct PostgreSQL INSERT placeholders and add NestJS example app ([312bbfa](https://github.com/Logixia/logixia/commit/312bbfa5e84025407b41eca3b7a82b5bf07053fe))
+* **peer-deps:** broaden peerDependencies to support NestJS 11 and reflect-metadata 0.2.x ([657dfaa](https://github.com/Logixia/logixia/commit/657dfaa0b017131d2bc4f1441e41d97ba2d3f5d4))
+* refactor LogMethod binding and pass structured meta to ExceptionFilter ([1ef8da2](https://github.com/Logixia/logixia/commit/1ef8da2ac4995a8c687a5dda233b966007b14e32))
+
+### 📚 Documentation
+
+* **examples:** add transports-deep-dive.ts with verified real output ([d4df576](https://github.com/Logixia/logixia/commit/d4df576baa77496c706010438ed3b8aac8d7422b))
+* update README with real error shape, interceptor usage, and example app ([df6925c](https://github.com/Logixia/logixia/commit/df6925c798b699f43f81adc35668431bec01ab0f))
+
 ## [1.6.3](https://github.com/Logixia/logixia/compare/v1.6.2...v1.6.3) (2026-03-24)
 
 ### 🐛 Bug Fixes
