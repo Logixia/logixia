@@ -1,0 +1,176 @@
+version: '3.9'
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Logixia NestJS Example — full-stack compose
+#
+#  Services:
+#   postgres   — log persistence (DatabaseTransport → postgresql)
+#   mongodb    — log persistence (DatabaseTransport → mongodb)
+#   zookeeper  — required by Kafka
+#   kafka      — real Kafka broker (KafkaTraceInterceptor integration)
+#   kafdrop    — Kafka UI at http://localhost:9000
+#   app        — the NestJS example app
+#
+#  Quick start:
+#   docker compose up -d
+#   docker compose logs -f app
+# ─────────────────────────────────────────────────────────────────────────────
+
+networks:
+  logixia:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  mongo_data:
+  kafka_data:
+  app_logs:          # mounted into the app container for FileTransport
+
+# ── Services ──────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: logixia_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER:-logixia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-logixia_pass}
+      POSTGRES_DB:       ${POSTGRES_DB:-logixia_logs}
+    ports:
+      - "${POSTGRES_PORT:-5434}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - logixia
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-logixia}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── MongoDB ──────────────────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7
+    container_name: logixia_mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-logixia}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-logixia_pass}
+      MONGO_INITDB_DATABASE:      ${MONGO_DB:-logixia_logs}
+    ports:
+      - "${MONGO_PORT:-27019}:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - logixia
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── Zookeeper (Kafka dependency) ─────────────────────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: logixia_zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME:   2000
+    networks:
+      - logixia
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── Kafka ────────────────────────────────────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: logixia_kafka
+    restart: unless-stopped
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID:                        1
+      KAFKA_ZOOKEEPER_CONNECT:                zookeeper:2181
+      # Two listeners: internal (Docker network) + external (host)
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP:   INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS:             INTERNAL://kafka:29092,EXTERNAL://localhost:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME:       INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE:        "true"
+      KAFKA_LOG_RETENTION_HOURS:              24
+    ports:
+      - "${KAFKA_PORT:-9093}:9092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - logixia
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:29092"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+
+  # ── Kafdrop (Kafka UI) ───────────────────────────────────────────────────────
+  kafdrop:
+    image: obsidiandynamics/kafdrop:latest
+    container_name: logixia_kafdrop
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERCONNECT: kafka:29092
+      JVM_OPTS:            "-Xms32M -Xmx64M"
+    ports:
+      - "${KAFDROP_PORT:-9000}:9000"
+    networks:
+      - logixia
+
+  # ── NestJS App ───────────────────────────────────────────────────────────────
+  app:
+    build:
+      context:    ../..
+      dockerfile: examples/nestjs-app/Dockerfile
+    container_name: logixia_app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      NODE_ENV:          ${NODE_ENV:-development}
+      PORT:              ${PORT:-3000}
+      # PostgreSQL transport
+      POSTGRES_HOST:     postgres
+      POSTGRES_PORT:     5432
+      POSTGRES_USER:     ${POSTGRES_USER:-logixia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-logixia_pass}
+      POSTGRES_DB:       ${POSTGRES_DB:-logixia_logs}
+      # MongoDB transport
+      MONGO_HOST:        mongodb
+      MONGO_PORT:        27017
+      MONGO_USER:        ${MONGO_USER:-logixia}
+      MONGO_PASSWORD:    ${MONGO_PASSWORD:-logixia_pass}
+      MONGO_DB:          ${MONGO_DB:-logixia_logs}
+      # Kafka
+      KAFKA_BROKERS:     kafka:29092
+      KAFKA_ENABLED:     "true"
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - app_logs:/app/logs       # FileTransport writes here
+    networks:
+      - logixia
