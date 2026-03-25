@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.7.0](https://github.com/Logixia/logixia/compare/v1.6.8...v1.7.0) (2026-03-25)
+
+### ✨ Features
+
+* **trace:** export TRACE_CONTEXT_KEY constant and logger.traceContextKey getter ([4043c96](https://github.com/Logixia/logixia/commit/4043c962cdad0d4a8771ff60e2499ffd6e17c654))
+
 ## [1.6.8](https://github.com/Logixia/logixia/compare/v1.6.7...v1.6.8) (2026-03-25)
 
 ### 🐛 Bug Fixes
