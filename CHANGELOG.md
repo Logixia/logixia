@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.8.2](https://github.com/Logixia/logixia/compare/v1.8.1...v1.8.2) (2026-03-25)
+
+### ♻️ Code Refactoring
+
+* **trace:** remove requestId — use traceId as the single correlation ID ([9fc5cbf](https://github.com/Logixia/logixia/commit/9fc5cbf66357d0b5f76fa392830ee7a6dffb137d))
+
 ## [1.8.1](https://github.com/Logixia/logixia/compare/v1.8.0...v1.8.1) (2026-03-25)
 
 ### 🐛 Bug Fixes
