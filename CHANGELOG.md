@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.8.1](https://github.com/Logixia/logixia/compare/v1.8.0...v1.8.1) (2026-03-25)
+
+### 🐛 Bug Fixes
+
+* **exception-filter:** use global logger fallback in LogixiaExceptionFilter ([0e20c19](https://github.com/Logixia/logixia/commit/0e20c19f7e88e0f7cd348010446e0d4dd886bc79))
+
 ## [1.8.0](https://github.com/Logixia/logixia/compare/v1.7.2...v1.8.0) (2026-03-25)
 
 ### ✨ Features
