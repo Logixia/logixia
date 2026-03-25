@@ -1,20 +1,17 @@
-import { ErrorResponseBuilder, generateRequestId } from '../builder';
+import { ErrorResponseBuilder, generateTraceId } from '../builder';
 import { LogixiaException } from '../exception';
 
-// ── generateRequestId ─────────────────────────────────────────────────────────
+// ── generateTraceId ───────────────────────────────────────────────────────────
 
-describe('generateRequestId', () => {
-  it('starts with req_', () => {
-    expect(generateRequestId()).toMatch(/^req_/);
-  });
-
-  it('contains 32 hex characters after the prefix', () => {
-    // randomUUID = 36 chars; remove 4 dashes = 32 hex chars
-    expect(generateRequestId()).toMatch(/^req_[0-9a-f]{32}$/);
+describe('generateTraceId', () => {
+  it('returns a UUID v4 string', () => {
+    expect(generateTraceId()).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
   });
 
   it('generates unique IDs', () => {
-    const ids = new Set(Array.from({ length: 20 }, () => generateRequestId()));
+    const ids = new Set(Array.from({ length: 20 }, () => generateTraceId()));
     expect(ids.size).toBe(20);
   });
 });
@@ -77,20 +74,22 @@ describe('ErrorResponseBuilder.build — LogixiaException', () => {
     expect(() => new Date(response.meta.timestamp).toISOString()).not.toThrow();
   });
 
-  it('uses the provided requestId', () => {
+  it('uses the provided traceId', () => {
     const ex = new LogixiaException(baseOpts);
     const { response } = ErrorResponseBuilder.build({
       exception: ex,
       path: '/p',
-      requestId: 'req_custom123',
+      traceId: 'custom-trace-123',
     });
-    expect(response.meta.request_id).toBe('req_custom123');
+    expect(response.meta.trace_id).toBe('custom-trace-123');
   });
 
-  it('auto-generates a requestId when not provided', () => {
+  it('auto-generates a traceId when not provided', () => {
     const ex = new LogixiaException(baseOpts);
     const { response } = ErrorResponseBuilder.build({ exception: ex, path: '/p' });
-    expect(response.meta.request_id).toMatch(/^req_[0-9a-f]{32}$/);
+    expect(response.meta.trace_id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
   });
 
   it('includes param when set', () => {

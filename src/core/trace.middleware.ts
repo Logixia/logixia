@@ -15,7 +15,6 @@ declare global {
   namespace Express {
     interface Request {
       traceId?: string;
-      requestId?: string;
     }
   }
 }
@@ -59,13 +58,10 @@ export class TraceMiddleware implements NestMiddleware {
     }
 
     req.traceId = traceId;
-    req.requestId = req.requestId || this.ctx.generate();
 
     res.setHeader('X-Trace-Id', traceId);
-    res.setHeader('X-Request-Id', req.requestId);
 
     this.ctx.run(traceId, () => next(), {
-      requestId: req.requestId,
       method: req.method,
       url: req.url,
       userAgent: req.get('User-Agent'),
@@ -115,13 +111,10 @@ export function traceMiddleware(config?: TraceIdConfig) {
     }
 
     req.traceId = traceId;
-    req.requestId = req.requestId || ctx.generate();
 
     res.setHeader('X-Trace-Id', traceId);
-    res.setHeader('X-Request-Id', req.requestId);
 
     ctx.run(traceId, () => next(), {
-      requestId: req.requestId,
       method: req.method,
       url: req.url,
       userAgent: req.get('User-Agent'),

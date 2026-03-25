@@ -3,7 +3,7 @@
  *
  * Fixes every documented Morgan bug:
  *  - statusCode always captured correctly, even for requests > 20 s
- *  - Logs request START (with requestId) and response FINISH (with duration)
+ *  - Logs request START (with traceId) and response FINISH (with duration)
  *  - Captures errors before and after response
  *  - Auto-redacts Authorization / Cookie / Set-Cookie headers
  *  - Slow-request warnings
@@ -52,10 +52,10 @@ export interface HttpLoggerOptions {
    */
   extraFields?: (req: IncomingRequest) => Record<string, unknown>;
   /**
-   * Request ID header. Default: 'x-request-id'.
+   * Trace ID header. Default: 'x-trace-id'.
    * If the header is absent, a short random ID is generated.
    */
-  requestIdHeader?: string;
+  traceIdHeader?: string;
   /**
    * Headers to redact from logged output.
    * Default: ['authorization', 'cookie', 'set-cookie', 'x-api-key'].
@@ -112,7 +112,7 @@ function shortId(): string {
 
 function buildBaseFields(
   req: IncomingRequest,
-  requestId: string,
+  traceId: string,
   options: HttpLoggerOptions
 ): Record<string, unknown> {
   const redactSet = options.redactHeaders
@@ -120,7 +120,7 @@ function buildBaseFields(
     : DEFAULT_REDACT_HEADERS;
 
   const fields: Record<string, unknown> = {
-    requestId,
+    traceId,
     method: req.method?.toUpperCase() ?? 'UNKNOWN',
     url: req.url ?? '/',
     ip: req.ip ?? req.socket?.remoteAddress ?? 'unknown',
@@ -147,7 +147,7 @@ export function createExpressMiddleware(
     skip,
     logBody,
     bodyMaxBytes,
-    requestIdHeader = 'x-request-id',
+    traceIdHeader = 'x-trace-id',
     requestLevel = 'debug',
     responseLevel = 'info',
     errorLevel = 'error',
@@ -164,9 +164,9 @@ export function createExpressMiddleware(
       return;
     }
 
-    const requestId = (req.headers?.[requestIdHeader] as string | undefined) ?? shortId();
+    const traceId = (req.headers?.[traceIdHeader] as string | undefined) ?? shortId();
     const startMs = Date.now();
-    const baseFields = buildBaseFields(req, requestId, options);
+    const baseFields = buildBaseFields(req, traceId, options);
 
     // Log request start
     if (requestLevel !== 'silent') {
@@ -227,7 +227,7 @@ export interface FastifyInstance {
 export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOptions = {}) {
   const {
     skip,
-    requestIdHeader = 'x-request-id',
+    traceIdHeader = 'x-trace-id',
     requestLevel = 'debug',
     responseLevel = 'info',
     errorLevel = 'error',
@@ -246,15 +246,15 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
         return;
       }
 
-      const requestId = (req.headers?.[requestIdHeader] as string | undefined) ?? shortId();
+      const traceId = (req.headers?.[traceIdHeader] as string | undefined) ?? shortId();
       req._logixiaStart = Date.now();
-      req._logixiaId = requestId;
+      req._logixiaId = traceId;
 
       if (requestLevel !== 'silent') {
         void logger.logLevel(
           requestLevel,
           'request started',
-          buildBaseFields(req, requestId, options)
+          buildBaseFields(req, traceId, options)
         );
       }
       hookDone();
@@ -265,18 +265,18 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
       const rep = reply as { statusCode?: number };
       const duration = Date.now() - (req._logixiaStart ?? Date.now());
       const status = rep.statusCode ?? 0;
-      const requestId = req._logixiaId ?? shortId();
+      const traceId = req._logixiaId ?? shortId();
       const level = status >= 500 ? errorLevel : responseLevel;
 
       void logger.logLevel(level, 'request completed', {
-        ...buildBaseFields(req, requestId, options),
+        ...buildBaseFields(req, traceId, options),
         statusCode: status,
         duration,
       });
 
       if (duration > slowRequestThresholdMs) {
         void logger.warn('slow request detected', {
-          requestId,
+          traceId,
           url: req.url,
           method: req.method,
           duration,

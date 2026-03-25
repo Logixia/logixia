@@ -42,7 +42,7 @@ export interface RequestTiming {
 }
 
 export interface RequestMetrics {
-  requestId: string;
+  traceId: string;
   method: string;
   url: string;
   statusCode?: number;

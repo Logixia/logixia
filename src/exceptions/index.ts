@@ -30,7 +30,7 @@
  *
  * const { response, httpStatus } = ErrorResponseBuilder.build<AppCode, AppType>({
  *   exception,
- *   requestId: request.headers['x-trace-id'] as string | undefined,
+ *   traceId:   request.headers['x-trace-id'] as string | undefined,
  *   path:      request.url,
  *   service:   process.env.SERVICE_NAME,
  *   startTime: request.startTime,
@@ -42,7 +42,7 @@
  */
 
 export type { BuildParams } from './builder.js';
-export { ErrorResponseBuilder, generateRequestId } from './builder.js';
+export { ErrorResponseBuilder, generateRequestId, generateTraceId } from './builder.js';
 export type { LogixiaExceptionOptions } from './exception.js';
 export { isLogixiaException, LogixiaException } from './exception.js';
 export type { ErrorDetail, LogixiaErrorResponse } from './types.js';

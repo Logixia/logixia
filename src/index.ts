@@ -73,6 +73,7 @@ export type {
 export {
   ErrorResponseBuilder,
   generateRequestId,
+  generateTraceId,
   isLogixiaException,
   LogixiaException,
 } from './exceptions';

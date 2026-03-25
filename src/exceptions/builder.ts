@@ -25,10 +25,10 @@ export interface BuildParams {
   /** The caught exception — any type. */
   exception: unknown;
   /**
-   * Request / correlation ID to embed in `meta.request_id`.
-   * If omitted a UUID-based ID is auto-generated: `req_<uuid without dashes>`.
+   * Trace ID to embed in `meta.trace_id`.
+   * If omitted a UUID-based ID is auto-generated.
    */
-  requestId?: string | undefined;
+  traceId?: string | undefined;
   /** Request path. e.g. `'/api/v1/auth/login'` */
   path: string;
   /**
@@ -46,14 +46,17 @@ export interface BuildParams {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
- * Generates a `req_` prefixed request ID using Node's built-in `crypto.randomUUID`.
+ * Generates a trace ID using Node's built-in `crypto.randomUUID`.
  * No extra dependencies required.
  *
- * @example `'req_550e8400e29b41d4a716446655440000'`
+ * @example `'550e8400-e29b-41d4-a716-446655440000'`
  */
-export function generateRequestId(): string {
-  return `req_${randomUUID().replaceAll('-', '')}`;
+export function generateTraceId(): string {
+  return randomUUID();
 }
+
+/** @deprecated Use `generateTraceId` instead. */
+export const generateRequestId = generateTraceId;
 
 /**
  * Maps an HTTP status code to a human-friendly error type string.
@@ -132,22 +135,22 @@ export class ErrorResponseBuilder {
    * ```ts
    * const { response, httpStatus } = ErrorResponseBuilder.build<AppCode, AppType>({
    *   exception,
-   *   requestId: request.headers['x-trace-id'] as string | undefined,
-   *   path:      request.url,
-   *   service:   process.env.SERVICE_NAME,
+   *   traceId: request.headers['x-trace-id'] as string | undefined,
+   *   path:    request.url,
+   *   service: process.env.SERVICE_NAME,
    *   startTime: request.startTime,
    * });
    *
    * if (process.env.NODE_ENV === 'production') delete response.debug;
-   * response.setHeader('X-Trace-ID', response.meta.request_id);
+   * response.setHeader('X-Trace-ID', response.meta.trace_id);
    * response.status(httpStatus).json(response);
    * ```
    */
   static build<TCode extends string = string, TType extends string = string>(
     params: BuildParams
   ): { response: LogixiaErrorResponse<TCode, TType>; httpStatus: number } {
-    const { exception, path, service, startTime, requestId: rawRequestId } = params;
-    const requestId = rawRequestId ?? generateRequestId();
+    const { exception, path, service, startTime, traceId: rawTraceId } = params;
+    const traceId = rawTraceId ?? generateTraceId();
     const timestamp = new Date().toISOString();
     const durationMs = startTime !== undefined ? Date.now() - startTime : undefined;
 
@@ -170,7 +173,7 @@ export class ErrorResponseBuilder {
         success: false,
         error: errorBlock,
         meta: {
-          request_id: requestId,
+          trace_id: traceId,
           timestamp,
           path,
           status: exception.httpStatus,
@@ -204,7 +207,7 @@ export class ErrorResponseBuilder {
       const response: LogixiaErrorResponse<TCode, TType> = {
         success: false,
         error: { type, code, message },
-        meta: { request_id: requestId, timestamp, path, status },
+        meta: { trace_id: traceId, timestamp, path, status },
         ...(debug !== undefined ? { debug } : {}),
       };
 
@@ -222,7 +225,7 @@ export class ErrorResponseBuilder {
         code: 'INTERNAL_SERVER_ERROR' as TCode,
         message: 'An unexpected error occurred.',
       },
-      meta: { request_id: requestId, timestamp, path, status: 500 },
+      meta: { trace_id: traceId, timestamp, path, status: 500 },
       ...(debug !== undefined ? { debug } : {}),
     };
 

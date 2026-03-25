@@ -230,11 +230,6 @@ export function createTraceMiddleware(config: TraceIdConfig) {
     (req as Record<string, unknown>).traceId = traceId;
     (res as { setHeader: (k: string, v: string) => void }).setHeader('X-Trace-Id', traceId);
 
-    runWithTraceId(traceId, () => next(), {
-      requestId:
-        ((req as Record<string, unknown>)['id'] as string) ||
-        ((req as Record<string, unknown>)['requestId'] as string) ||
-        generateTraceId(),
-    });
+    runWithTraceId(traceId, () => next());
   };
 }

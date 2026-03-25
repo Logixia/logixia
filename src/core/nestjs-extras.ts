@@ -255,13 +255,13 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
     }
     const response = ctx.getResponse<MinimalResponse>();
 
-    // Prefer x-trace-id (set by RequestIdMiddleware) → request.id → auto-generate
-    const requestId =
+    // Prefer x-trace-id (set by TraceMiddleware) → request.id → auto-generate
+    const traceId =
       (request.headers?.['x-trace-id'] as string | undefined) ?? request.id ?? undefined;
 
     const { response: errorResponse, httpStatus } = ErrorResponseBuilder.build({
       exception,
-      requestId,
+      traceId,
       path: request.url ?? '/',
       startTime: request.startTime,
     });
@@ -272,7 +272,7 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
         method: request.method ?? '',
         url: request.url ?? '',
         status: httpStatus,
-        request_id: errorResponse.meta.request_id,
+        trace_id: errorResponse.meta.trace_id,
       };
 
       if (httpStatus >= 500) {
@@ -295,8 +295,7 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
     }
 
     // ── Response headers ──────────────────────────────────────────────────
-    response.setHeader('X-Trace-ID', errorResponse.meta.request_id);
-    response.setHeader('X-Request-ID', errorResponse.meta.request_id);
+    response.setHeader('X-Trace-ID', errorResponse.meta.trace_id);
     if (httpStatus === 429) {
       response.setHeader('Retry-After', '60');
     }

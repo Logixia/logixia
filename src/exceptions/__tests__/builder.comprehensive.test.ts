@@ -1,42 +1,33 @@
 /**
- * Comprehensive tests for ErrorResponseBuilder and generateRequestId
+ * Comprehensive tests for ErrorResponseBuilder and generateTraceId
  *
  * Covers:
- *  - generateRequestId: format validation
+ *  - generateTraceId: format validation
  *  - ErrorResponseBuilder.build with LogixiaException
  *  - ErrorResponseBuilder.build with NestJS HttpException (duck-typed)
  *  - ErrorResponseBuilder.build with plain Error
  *  - ErrorResponseBuilder.build with non-Error thrown values
  *  - debug block population: stack, cause, service, duration_ms
- *  - meta block: request_id, timestamp, path, status
+ *  - meta block: trace_id, timestamp, path, status
  *  - httpStatusToType mapping
- *  - requestId auto-generation vs explicit
+ *  - traceId auto-generation vs explicit
  */
 
-import { ErrorResponseBuilder, generateRequestId } from '../builder';
+import { ErrorResponseBuilder, generateTraceId } from '../builder';
 import { LogixiaException } from '../exception';
 
-// ── generateRequestId ────────────────────────────────────────────────────────
+// ── generateTraceId ──────────────────────────────────────────────────────────
 
-describe('generateRequestId', () => {
-  it('returns a string starting with "req_"', () => {
-    expect(generateRequestId().startsWith('req_')).toBe(true);
-  });
-
-  it('returns a string of length 36 (req_ + 32 hex chars)', () => {
-    // 'req_' = 4 chars, UUID without dashes = 32 hex chars
-    expect(generateRequestId().length).toBe(36);
+describe('generateTraceId', () => {
+  it('returns a UUID v4 string', () => {
+    expect(generateTraceId()).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
   });
 
   it('generates unique IDs', () => {
-    const ids = new Set(Array.from({ length: 100 }, () => generateRequestId()));
+    const ids = new Set(Array.from({ length: 100 }, () => generateTraceId()));
     expect(ids.size).toBe(100);
-  });
-
-  it('only contains lowercase hex chars after "req_"', () => {
-    const id = generateRequestId();
-    const hex = id.slice(4);
-    expect(hex).toMatch(/^[0-9a-f]{32}$/);
   });
 });
 
@@ -115,21 +106,23 @@ describe('ErrorResponseBuilder.build — LogixiaException', () => {
     expect(new Date(response.meta.timestamp).toISOString()).toBe(response.meta.timestamp);
   });
 
-  it('uses provided requestId', () => {
+  it('uses provided traceId', () => {
     const { response } = ErrorResponseBuilder.build({
       exception: baseException,
       path: '/api',
-      requestId: 'trace-123',
+      traceId: 'trace-123',
     });
-    expect(response.meta.request_id).toBe('trace-123');
+    expect(response.meta.trace_id).toBe('trace-123');
   });
 
-  it('auto-generates requestId when not provided', () => {
+  it('auto-generates traceId when not provided', () => {
     const { response } = ErrorResponseBuilder.build({
       exception: baseException,
       path: '/api',
     });
-    expect(response.meta.request_id.startsWith('req_')).toBe(true);
+    expect(response.meta.trace_id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
   });
 
   it('includes error.param when set', () => {
@@ -435,12 +428,12 @@ describe('ErrorResponseBuilder.build — optional params', () => {
     expect(response.debug?.service).toBe('worker');
   });
 
-  it('meta.request_id uses provided requestId', () => {
+  it('meta.trace_id uses provided traceId', () => {
     const { response } = ErrorResponseBuilder.build({
       exception: new Error('test'),
       path: '/api',
-      requestId: 'custom-req-id',
+      traceId: 'custom-trace-id',
     });
-    expect(response.meta.request_id).toBe('custom-req-id');
+    expect(response.meta.trace_id).toBe('custom-trace-id');
   });
 });

@@ -49,7 +49,6 @@ export type LogFieldKey =
   | 'payload'
   | 'timeTaken'
   | 'context'
-  | 'requestId'
   | 'userId'
   | 'sessionId'
   | 'environment';
@@ -338,8 +337,7 @@ export interface ILogFormatter {
 
 // Request context interface for tracking request lifecycle
 export interface RequestContext {
-  requestId: string;
-  traceId?: string;
+  traceId: string;
   startTime: number;
   endTime?: number;
   duration?: number;

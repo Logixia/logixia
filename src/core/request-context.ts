@@ -13,11 +13,9 @@ export class RequestContextManager {
    */
   static createContext(request: HttpRequest, traceId?: string): RequestContext {
     const ctx = TraceContext.instance;
-    const requestId = ctx.generate();
     const contextTraceId = traceId || ctx.getCurrentTraceId() || ctx.generate();
 
     const context: RequestContext = {
-      requestId,
       traceId: contextTraceId,
       startTime: Date.now(),
       request,
@@ -25,11 +23,10 @@ export class RequestContextManager {
       ...(request.ip && { ip: request.ip }),
     };
 
-    this.contexts.set(requestId, context);
+    this.contexts.set(contextTraceId, context);
 
     // Set trace ID in async context
     TraceContext.instance.setTraceId(contextTraceId, {
-      requestId,
       method: request.method,
       url: request.url,
     });
@@ -41,11 +38,11 @@ export class RequestContextManager {
    * Update request context with response data
    */
   static updateContext(
-    requestId: string,
+    traceId: string,
     response?: HttpResponse,
     error?: Error
   ): RequestContext | undefined {
-    const context = this.contexts.get(requestId);
+    const context = this.contexts.get(traceId);
     if (!context) {
       return undefined;
     }
@@ -66,17 +63,17 @@ export class RequestContextManager {
   }
 
   /**
-   * Get request context by ID
+   * Get request context by trace ID
    */
-  static getContext(requestId: string): RequestContext | undefined {
-    return this.contexts.get(requestId);
+  static getContext(traceId: string): RequestContext | undefined {
+    return this.contexts.get(traceId);
   }
 
   /**
    * Remove request context (cleanup)
    */
-  static removeContext(requestId: string): boolean {
-    return this.contexts.delete(requestId);
+  static removeContext(traceId: string): boolean {
+    return this.contexts.delete(traceId);
   }
 
   /**
@@ -125,9 +122,9 @@ export class RequestContextManager {
     const now = Date.now();
     let cleaned = 0;
 
-    for (const [requestId, context] of this.contexts.entries()) {
+    for (const [traceId, context] of this.contexts.entries()) {
       if (context.endTime && now - context.endTime > maxAgeMs) {
-        this.contexts.delete(requestId);
+        this.contexts.delete(traceId);
         cleaned++;
       }
     }

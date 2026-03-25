@@ -58,7 +58,6 @@ import { LogixiaContext } from './context/async-context';
 /** Fields injected into the log context by the correlation middleware. */
 export interface CorrelationContext {
   correlationId: string;
-  requestId?: string;
   traceId?: string;
   /** Service that originated the request (from `X-Origin-Service` header). */
   originService?: string;
@@ -72,11 +71,6 @@ export interface CorrelationMiddlewareOptions {
    * @default 'x-correlation-id'
    */
   header?: string;
-  /**
-   * HTTP header for request ID (a per-hop identifier, different from correlationId).
-   * @default 'x-request-id'
-   */
-  requestIdHeader?: string;
   /**
    * HTTP header for the originating service name.
    * @default 'x-origin-service'
@@ -157,7 +151,6 @@ export function withCorrelationId<T>(correlationId: string | undefined, callback
 export function correlationMiddleware(options: CorrelationMiddlewareOptions = {}) {
   const {
     header = 'x-correlation-id',
-    requestIdHeader = 'x-request-id',
     originServiceHeader = 'x-origin-service',
     generate = generateCorrelationId,
     setResponseHeader = true,
@@ -171,7 +164,6 @@ export function correlationMiddleware(options: CorrelationMiddlewareOptions = {}
     const headers = (req['headers'] ?? {}) as Record<string, string | undefined>;
 
     const correlationId = headers[header] ?? generate();
-    const requestId = headers[requestIdHeader] ?? generate();
     const originService = headers[originServiceHeader];
 
     if (setResponseHeader) {
@@ -183,7 +175,6 @@ export function correlationMiddleware(options: CorrelationMiddlewareOptions = {}
 
     const ctx: CorrelationContext = {
       correlationId,
-      requestId,
       ...(originService !== undefined ? { originService } : {}),
     };
 
@@ -206,7 +197,6 @@ export function correlationMiddleware(options: CorrelationMiddlewareOptions = {}
 export function correlationFastifyHook(options: CorrelationMiddlewareOptions = {}) {
   const {
     header = 'x-correlation-id',
-    requestIdHeader = 'x-request-id',
     originServiceHeader = 'x-origin-service',
     generate = generateCorrelationId,
     setResponseHeader = true,
@@ -220,8 +210,6 @@ export function correlationFastifyHook(options: CorrelationMiddlewareOptions = {
     const headers = (request['headers'] ?? {}) as Record<string, string | undefined>;
 
     const correlationId = headers[header] ?? generate();
-    const requestId =
-      headers[requestIdHeader] ?? (request['id'] as string | undefined) ?? generate();
     const originService = headers[originServiceHeader];
 
     if (setResponseHeader) {
@@ -233,7 +221,6 @@ export function correlationFastifyHook(options: CorrelationMiddlewareOptions = {
 
     const ctx: CorrelationContext = {
       correlationId,
-      requestId,
       ...(originService !== undefined ? { originService } : {}),
     };
 
@@ -280,12 +267,6 @@ export async function correlationFetch(
     headers[header] = correlationId;
   }
 
-  // Propagate request-id as well
-  const ctx = LogixiaContext.get();
-  if (ctx?.requestId && !headers['x-request-id']) {
-    headers['x-request-id'] = ctx.requestId as string;
-  }
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (globalThis as any)['fetch'](input, { ...init, headers });
 }
@@ -320,11 +301,6 @@ export function createCorrelationAxiosInterceptor(
       headers[header] = correlationId;
     }
 
-    const ctx = LogixiaContext.get();
-    if (ctx?.requestId && !headers['x-request-id']) {
-      headers['x-request-id'] = ctx.requestId;
-    }
-
     return { ...config, headers };
   };
 }
@@ -356,15 +332,13 @@ export function createCorrelationAxiosInterceptor(
 export function childFromRequest<TLogger extends { child(ctx: Record<string, unknown>): TLogger }>(
   req: Record<string, unknown>,
   logger: TLogger,
-  options: { correlationHeader?: string; requestIdHeader?: string } = {}
+  options: { correlationHeader?: string } = {}
 ): TLogger {
   const correlationHeader = options.correlationHeader ?? 'x-correlation-id';
-  const requestIdHeader = options.requestIdHeader ?? 'x-request-id';
 
   const headers = (req['headers'] ?? {}) as Record<string, string | undefined>;
   const correlationId =
     headers[correlationHeader] ?? getCurrentCorrelationId() ?? generateCorrelationId();
-  const requestId = headers[requestIdHeader] ?? generateCorrelationId();
 
   const method = req['method'] as string | undefined;
   const url = (req['url'] as string | undefined) ?? (req['originalUrl'] as string | undefined);
@@ -377,7 +351,6 @@ export function childFromRequest<TLogger extends { child(ctx: Record<string, unk
 
   return logger.child({
     correlationId,
-    requestId,
     ...(method !== undefined ? { method } : {}),
     ...(url !== undefined ? { url } : {}),
     ...(userAgent !== undefined ? { userAgent } : {}),
@@ -456,9 +429,6 @@ export function buildKafkaCorrelationHeaders(): Record<string, string> {
 
   const correlationId = ctx?.correlationId as string | undefined;
   if (correlationId) headers['x-correlation-id'] = correlationId;
-
-  const requestId = ctx?.requestId as string | undefined;
-  if (requestId) headers['x-request-id'] = requestId;
 
   const traceId = ctx?.traceId as string | undefined;
   if (traceId) headers['x-trace-id'] = traceId;

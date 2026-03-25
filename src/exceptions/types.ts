@@ -67,8 +67,8 @@ export interface LogixiaErrorResponse<
   };
 
   meta: {
-    /** ULID / UUID-based request identifier for log correlation. */
-    request_id: string;
+    /** Trace identifier for log correlation. */
+    trace_id: string;
     /** ISO 8601 timestamp of when the error was produced. */
     timestamp: string;
     /** Request path that caused the error. e.g. `'/api/v1/auth/login'` */

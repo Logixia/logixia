@@ -200,21 +200,21 @@ describe('createExpressContextMiddleware', () => {
     mw(req, {}, done);
   });
 
-  it('sets a requestId in the context', (done) => {
+  it('sets a traceId in the context', (done) => {
     const mw = createExpressContextMiddleware();
     const req: Record<string, unknown> = { headers: {} };
     mw(req, {}, () => {
       const ctx = LogixiaContext.get();
-      expect(typeof ctx?.requestId).toBe('string');
+      expect(typeof ctx?.traceId).toBe('string');
       done();
     });
   });
 
-  it('reads requestId from x-request-id header', (done) => {
+  it('reads traceId from x-trace-id header (express)', (done) => {
     const mw = createExpressContextMiddleware();
-    const req: Record<string, unknown> = { headers: { 'x-request-id': 'req-from-header' } };
+    const req: Record<string, unknown> = { headers: { 'x-trace-id': 'req-from-header' } };
     mw(req, {}, () => {
-      expect(LogixiaContext.get()?.requestId).toBe('req-from-header');
+      expect(LogixiaContext.get()?.traceId).toBe('req-from-header');
       done();
     });
   });
@@ -228,11 +228,11 @@ describe('createExpressContextMiddleware', () => {
     });
   });
 
-  it('uses custom requestIdHeader when provided', (done) => {
-    const mw = createExpressContextMiddleware({ requestIdHeader: 'x-my-request-id' });
-    const req: Record<string, unknown> = { headers: { 'x-my-request-id': 'custom-req' } };
+  it('uses custom traceIdHeader when provided', (done) => {
+    const mw = createExpressContextMiddleware({ traceIdHeader: 'x-my-trace-id' });
+    const req: Record<string, unknown> = { headers: { 'x-my-trace-id': 'custom-trace' } };
     mw(req, {}, () => {
-      expect(LogixiaContext.get()?.requestId).toBe('custom-req');
+      expect(LogixiaContext.get()?.traceId).toBe('custom-trace');
       done();
     });
   });
@@ -257,11 +257,11 @@ describe('createExpressContextMiddleware', () => {
     });
   });
 
-  it('generates a unique requestId when no header is present', (done) => {
+  it('generates a unique traceId when no header is present', (done) => {
     const mw = createExpressContextMiddleware();
     const req: Record<string, unknown> = { headers: {} };
     mw(req, {}, () => {
-      const id = LogixiaContext.get()?.requestId as string;
+      const id = LogixiaContext.get()?.traceId as string;
       expect(id.length).toBeGreaterThan(0);
       done();
     });
@@ -276,18 +276,10 @@ describe('createFastifyContextHook', () => {
     hook({ headers: {} }, {}, done);
   });
 
-  it('sets a requestId in the context', (done) => {
+  it('sets a traceId in the context', (done) => {
     const hook = createFastifyContextHook();
     hook({ headers: {} }, {}, () => {
-      expect(typeof LogixiaContext.get()?.requestId).toBe('string');
-      done();
-    });
-  });
-
-  it('reads requestId from x-request-id header', (done) => {
-    const hook = createFastifyContextHook();
-    hook({ headers: { 'x-request-id': 'fastify-req' } }, {}, () => {
-      expect(LogixiaContext.get()?.requestId).toBe('fastify-req');
+      expect(typeof LogixiaContext.get()?.traceId).toBe('string');
       done();
     });
   });
@@ -300,10 +292,10 @@ describe('createFastifyContextHook', () => {
     });
   });
 
-  it('falls back to request.id field for requestId', (done) => {
+  it('falls back to request.id field for traceId', (done) => {
     const hook = createFastifyContextHook();
     hook({ headers: {}, id: 'fastify-internal-id' }, {}, () => {
-      expect(LogixiaContext.get()?.requestId).toBe('fastify-internal-id');
+      expect(LogixiaContext.get()?.traceId).toBe('fastify-internal-id');
       done();
     });
   });

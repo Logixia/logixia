@@ -33,7 +33,6 @@ function randomShortId(): string {
 }
 
 export interface LogContext {
-  requestId?: string;
   traceId?: string;
   spanId?: string;
   userId?: string;
@@ -108,13 +107,11 @@ export function createExpressContextMiddleware(
   options: {
     /** Extract additional fields from the request. */
     enrich?: (req: Record<string, unknown>) => Partial<LogContext>;
-    /** Header to read the requestId from. Default: 'x-request-id'. */
-    requestIdHeader?: string;
     /** Header to read the traceId from. Default: 'x-trace-id'. */
     traceIdHeader?: string;
   } = {}
 ) {
-  const { enrich, requestIdHeader = 'x-request-id', traceIdHeader = 'x-trace-id' } = options;
+  const { enrich, traceIdHeader = 'x-trace-id' } = options;
 
   return function logixiaContextMiddleware(
     req: Record<string, unknown>,
@@ -122,11 +119,8 @@ export function createExpressContextMiddleware(
     next: () => void
   ): void {
     const headers = (req['headers'] ?? {}) as Record<string, string | undefined>;
-    const traceId = headers[traceIdHeader];
-    const base: LogContext = {
-      requestId: (headers[requestIdHeader] as string | undefined) ?? randomShortId(),
-      ...(traceId !== undefined ? { traceId } : {}),
-    };
+    const traceId = headers[traceIdHeader] ?? randomShortId();
+    const base: LogContext = { traceId };
     LogixiaContext.run({ ...base, ...(enrich ? enrich(req) : {}) }, next);
   };
 }
@@ -139,11 +133,10 @@ export function createExpressContextMiddleware(
 export function createFastifyContextHook(
   options: {
     enrich?: (request: Record<string, unknown>) => Partial<LogContext>;
-    requestIdHeader?: string;
     traceIdHeader?: string;
   } = {}
 ) {
-  const { enrich, requestIdHeader = 'x-request-id', traceIdHeader = 'x-trace-id' } = options;
+  const { enrich, traceIdHeader = 'x-trace-id' } = options;
 
   return function logixiaFastifyHook(
     request: Record<string, unknown>,
@@ -151,14 +144,9 @@ export function createFastifyContextHook(
     done: () => void
   ): void {
     const headers = (request['headers'] ?? {}) as Record<string, string | undefined>;
-    const traceId = headers[traceIdHeader];
-    const base: LogContext = {
-      requestId:
-        (headers[requestIdHeader] as string | undefined) ??
-        (request['id'] as string | undefined) ??
-        randomShortId(),
-      ...(traceId !== undefined ? { traceId } : {}),
-    };
+    const traceId =
+      headers[traceIdHeader] ?? (request['id'] as string | undefined) ?? randomShortId();
+    const base: LogContext = { traceId };
     LogixiaContext.run({ ...base, ...(enrich ? enrich(request) : {}) }, done);
   };
 }

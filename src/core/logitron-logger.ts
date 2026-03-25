@@ -519,7 +519,6 @@ export class LogixiaLogger<
       'payload',
       'timeTaken',
       'context',
-      'requestId',
       'userId',
       'sessionId',
       'environment',
