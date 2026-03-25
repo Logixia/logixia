@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.6.8](https://github.com/Logixia/logixia/compare/v1.6.7...v1.6.8) (2026-03-25)
+
+### 🐛 Bug Fixes
+
+* **trace-middleware:** deep-merge extractor config instead of shallow-spread ([f69fd91](https://github.com/Logixia/logixia/commit/f69fd9141466b1707e71231c9f532b2e78721943))
+
 ## [1.6.7](https://github.com/Logixia/logixia/compare/v1.6.6...v1.6.7) (2026-03-24)
 
 ### 🐛 Bug Fixes
