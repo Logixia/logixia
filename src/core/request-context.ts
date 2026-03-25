@@ -3,7 +3,7 @@
  */
 
 import type { HttpRequest, HttpResponse, RequestContext } from '../types';
-import { generateTraceId, getCurrentTraceId, setTraceId } from '../utils/trace.utils';
+import { TraceContext } from '../utils/trace.utils';
 
 export class RequestContextManager {
   private static contexts = new Map<string, RequestContext>();
@@ -12,8 +12,9 @@ export class RequestContextManager {
    * Create a new request context
    */
   static createContext(request: HttpRequest, traceId?: string): RequestContext {
-    const requestId = generateTraceId();
-    const contextTraceId = traceId || getCurrentTraceId() || generateTraceId();
+    const ctx = TraceContext.instance;
+    const requestId = ctx.generate();
+    const contextTraceId = traceId || ctx.getCurrentTraceId() || ctx.generate();
 
     const context: RequestContext = {
       requestId,
@@ -27,7 +28,7 @@ export class RequestContextManager {
     this.contexts.set(requestId, context);
 
     // Set trace ID in async context
-    setTraceId(contextTraceId, {
+    TraceContext.instance.setTraceId(contextTraceId, {
       requestId,
       method: request.method,
       url: request.url,

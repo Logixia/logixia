@@ -11,7 +11,7 @@ import type { RouteInfo } from '@nestjs/common/interfaces/middleware/middleware-
 import type { NextFunction, Request, Response } from 'express';
 
 import type { LoggerConfig, TraceIdConfig } from '../types';
-import { generateTraceId } from '../utils/trace.utils';
+import { TraceContext } from '../utils/trace.utils';
 import { KafkaTraceInterceptor } from './kafka-trace.interceptor';
 import { LogixiaLoggerService } from './logitron-nestjs.service';
 import { TraceMiddleware } from './trace.middleware';
@@ -69,7 +69,7 @@ export class LogixiaLoggerModule implements NestModule {
         traceConfig = {
           enabled: true,
           contextKey: 'traceId',
-          generator: () => generateTraceId(),
+          generator: () => TraceContext.instance.generate(),
         };
       } else {
         traceConfig = undefined;

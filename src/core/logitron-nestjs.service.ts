@@ -70,7 +70,7 @@ export type LogixiaServiceWithLevels<T extends LoggerConfig<Record<string, numbe
       : LogixiaLoggerService
     : LogixiaLoggerService;
 import { internalError } from '../utils/internal-log';
-import { getCurrentTraceId, TRACE_CONTEXT_KEY } from '../utils/trace.utils';
+import { getTraceContextKey, TraceContext } from '../utils/trace.utils';
 import { LogixiaLogger } from './logitron-logger';
 
 @Injectable({ scope: Scope.TRANSIENT })
@@ -356,12 +356,12 @@ export class LogixiaLoggerService implements LoggerService {
   // ── Misc ───────────────────────────────────────────────────────────────────
 
   getCurrentTraceId(): string | undefined {
-    return getCurrentTraceId();
+    return TraceContext.instance.getCurrentTraceId();
   }
 
-  /** The AsyncLocalStorage key under which the trace ID is stored ('traceId'). */
-  get traceContextKey(): typeof TRACE_CONTEXT_KEY {
-    return TRACE_CONTEXT_KEY;
+  /** Returns the AsyncLocalStorage key currently used to store the trace ID. */
+  get traceContextKey(): string {
+    return getTraceContextKey();
   }
 
   async close(): Promise<void> {

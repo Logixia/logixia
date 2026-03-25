@@ -5,10 +5,12 @@ import { Injectable } from '@nestjs/common';
 import { Observable } from 'rxjs';
 
 import type { TraceIdConfig } from '../types';
-import { extractTraceId, getCurrentTraceId, runWithTraceId } from '../utils/trace.utils';
+import { extractTraceId, TraceContext } from '../utils/trace.utils';
 
 @Injectable()
 export class WebSocketTraceInterceptor implements NestInterceptor {
+  private readonly ctx = TraceContext.instance;
+
   constructor(private readonly config?: TraceIdConfig) {
     this.config = {
       enabled: true,
@@ -49,7 +51,7 @@ export class WebSocketTraceInterceptor implements NestInterceptor {
 
     // Only use current trace ID if no extraction happened and we have one
     if (!traceId) {
-      traceId = getCurrentTraceId();
+      traceId = this.ctx.getCurrentTraceId();
     }
 
     // If still no trace ID and enabled, skip (don't generate)
@@ -68,7 +70,7 @@ export class WebSocketTraceInterceptor implements NestInterceptor {
 
     // Run the handler with trace ID context
     return new Observable((observer) => {
-      runWithTraceId(
+      this.ctx.run(
         traceId!,
         () => {
           const result = next.handle();

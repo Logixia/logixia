@@ -8,50 +8,136 @@ import { v4 as uuidv4 } from 'uuid';
 
 import type { TraceIdConfig, TraceIdExtractorConfig } from '../types';
 
-/** The key under which the trace ID is stored in AsyncLocalStorage. */
+/** Default key used to store the trace ID in AsyncLocalStorage. */
 export const TRACE_CONTEXT_KEY = 'traceId' as const;
 
-// Async local storage for trace context
-export const traceStorage = new AsyncLocalStorage<{
-  traceId: string;
-  [key: string]: unknown;
-}>();
+// ── TraceContext class ────────────────────────────────────────────────────────
 
 /**
- * Default trace ID generator using UUID v4
+ * Singleton that owns the AsyncLocalStorage and the active contextKey.
+ *
+ * Why a class instead of bare module-level variables?
+ *  - The contextKey is user-configurable; encapsulating it here means there is
+ *    exactly one place that reads and writes it.
+ *  - All helpers (getCurrentTraceId, runWithTraceId, etc.) delegate to this
+ *    instance, so the key is always in sync without hidden global state.
+ *  - Easier to test: you can reset the singleton between test cases.
+ *
+ * Usage (advanced):
+ *   import { TraceContext } from 'logixia';
+ *   TraceContext.instance.contextKey          // → 'traceId' (or custom)
+ *   TraceContext.instance.getCurrentTraceId() // same as standalone fn
  */
+export class TraceContext {
+  private static _instance: TraceContext | null = null;
+
+  readonly storage = new AsyncLocalStorage<Record<string, unknown>>();
+  private _contextKey: string = TRACE_CONTEXT_KEY;
+
+  private constructor() {}
+
+  /** The process-wide singleton. */
+  static get instance(): TraceContext {
+    if (!TraceContext._instance) {
+      TraceContext._instance = new TraceContext();
+    }
+    return TraceContext._instance;
+  }
+
+  /** @internal Reset the singleton (useful in tests). */
+  static _reset(): void {
+    TraceContext._instance = null;
+  }
+
+  // ── Key management ──────────────────────────────────────────────────────────
+
+  /** The AsyncLocalStorage key that holds the trace ID value. */
+  get contextKey(): string {
+    return this._contextKey;
+  }
+
+  /** @internal Called by TraceMiddleware when it boots to register the user's key. */
+  setContextKey(key: string): void {
+    this._contextKey = key;
+  }
+
+  // ── Core operations ─────────────────────────────────────────────────────────
+
+  /** UUID v4 generator (default). */
+  generate(): string {
+    return uuidv4();
+  }
+
+  /** Read the trace ID from the current async context. */
+  getCurrentTraceId(): string | undefined {
+    return this.storage.getStore()?.[this._contextKey] as string | undefined;
+  }
+
+  /**
+   * Mutate the CURRENT async context in-place.
+   *
+   * ⚠️  Uses `enterWith()` — prefer `run()` when you can wrap the operation
+   * in a callback, as it scopes the context to the callback only.
+   */
+  setTraceId(traceId: string, data?: Record<string, unknown>): void {
+    const current = this.storage.getStore() ?? {};
+    this.storage.enterWith({ ...current, [this._contextKey]: traceId, ...data });
+  }
+
+  /** Run `fn` inside a new async context that carries `traceId`. */
+  run<T>(traceId: string, fn: () => T, data?: Record<string, unknown>): T {
+    return this.storage.run({ [this._contextKey]: traceId, ...data }, fn);
+  }
+}
+
+// ── Module-level aliases (backwards-compatible public API) ────────────────────
+
+/**
+ * The shared AsyncLocalStorage instance.
+ * @deprecated Prefer `TraceContext.instance.storage` for new code.
+ */
+export const traceStorage = TraceContext.instance.storage;
+
+/** Returns the key currently used to store the trace ID in AsyncLocalStorage. */
+export function getTraceContextKey(): string {
+  return TraceContext.instance.contextKey;
+}
+
+/** @internal Called by TraceMiddleware / traceMiddleware() when they boot. */
+export function _setActiveContextKey(key: string): void {
+  TraceContext.instance.setContextKey(key);
+}
+
+/** Generate a UUID v4 trace ID. */
 export function generateTraceId(): string {
-  return uuidv4();
+  return TraceContext.instance.generate();
 }
 
 /**
- * Get current trace ID from async context
+ * Get the current trace ID from async context.
+ * Returns `undefined` when called outside a traced request.
  */
 export function getCurrentTraceId(): string | undefined {
-  const store = traceStorage.getStore();
-  return store?.traceId;
+  return TraceContext.instance.getCurrentTraceId();
 }
 
 /**
  * Set trace ID in the CURRENT async context without starting a new one.
  *
- * ⚠️  Uses `enterWith()` which mutates the context for the current async
- * execution and ALL futures spawned from it. Prefer `runWithTraceId()` when
- * you can wrap the operation in a callback, as it creates a properly-scoped
- * child context. Use `setTraceId()` only when you cannot use `runWithTraceId()`
- * (e.g., inside a class constructor or a non-callback async entry point).
+ * ⚠️  Uses `enterWith()` — mutates the context for the current async execution
+ * and all futures spawned from it. Prefer `runWithTraceId()` when you can wrap
+ * the operation in a callback.
  */
 export function setTraceId(traceId: string, data?: Record<string, unknown>): void {
-  const currentStore = traceStorage.getStore() ?? {};
-  traceStorage.enterWith({ ...currentStore, traceId, ...data });
+  TraceContext.instance.setTraceId(traceId, data);
 }
 
-/**
- * Run function with trace ID context
- */
+/** Run `fn` inside a new async context carrying `traceId`. */
 export function runWithTraceId<T>(traceId: string, fn: () => T, data?: Record<string, unknown>): T {
-  return traceStorage.run({ traceId, ...data }, fn);
+  return TraceContext.instance.run(traceId, fn, data);
 }
+
+// ── Request extraction ────────────────────────────────────────────────────────
 
 /** Shape that extractTraceId accepts (Express-compatible) */
 interface RequestLike {
@@ -61,55 +147,42 @@ interface RequestLike {
   params?: Record<string, string | undefined>;
 }
 
-/**
- * Extract trace ID from request using configuration
- */
+/** Extract trace ID from request using configuration (header → query → body → params). */
 export function extractTraceId(
   request: unknown,
   config: TraceIdExtractorConfig
 ): string | undefined {
   const req = request as RequestLike;
-  // Try headers first
+
   if (config.header) {
     const headers = Array.isArray(config.header) ? config.header : [config.header];
     for (const header of headers) {
       const value = req.headers?.[header.toLowerCase()];
-      if (value) {
-        return Array.isArray(value) ? value[0] : value;
-      }
+      if (value) return Array.isArray(value) ? value[0] : value;
     }
   }
 
-  // Try query parameters
   if (config.query) {
     const queries = Array.isArray(config.query) ? config.query : [config.query];
     for (const query of queries) {
       const value = req.query?.[query];
-      if (value) {
-        return Array.isArray(value) ? value[0] : value;
-      }
+      if (value) return Array.isArray(value) ? value[0] : value;
     }
   }
 
-  // Try body parameters
   if (config.body) {
     const bodyFields = Array.isArray(config.body) ? config.body : [config.body];
     for (const field of bodyFields) {
       const value = req.body?.[field];
-      if (value) {
-        return value;
-      }
+      if (value) return value;
     }
   }
 
-  // Try route parameters
   if (config.params) {
     const paramFields = Array.isArray(config.params) ? config.params : [config.params];
     for (const param of paramFields) {
       const value = req.params?.[param];
-      if (value) {
-        return value;
-      }
+      if (value) return value;
     }
   }
 
@@ -141,38 +214,27 @@ export function createTraceMiddleware(config: TraceIdConfig) {
     extractor: config?.extractor ? { ...defaultExtractor, ...config.extractor } : defaultExtractor,
   };
 
+  _setActiveContextKey(resolvedConfig.contextKey ?? TRACE_CONTEXT_KEY);
+
   return (req: unknown, res: unknown, next: () => void) => {
     let traceId: string | undefined;
 
-    // Try to extract existing trace ID from incoming request
     if (resolvedConfig.extractor) {
       traceId = extractTraceId(req, resolvedConfig.extractor);
     }
 
-    // Generate new trace ID if none was provided by the caller
     if (!traceId) {
       traceId = resolvedConfig.generator ? resolvedConfig.generator() : generateTraceId();
     }
 
-    // Set trace ID on the request object and propagate back in response header
     (req as Record<string, unknown>).traceId = traceId;
     (res as { setHeader: (k: string, v: string) => void }).setHeader('X-Trace-Id', traceId);
 
-    // Run the rest of the middleware/handler chain inside the trace context.
-    // AsyncLocalStorage.run() propagates the context through all awaited async
-    // operations spawned within the callback, so every logger.log() call
-    // will find the same traceId via getCurrentTraceId().
-    runWithTraceId(
-      traceId,
-      () => {
-        next();
-      },
-      {
-        requestId:
-          ((req as Record<string, unknown>)['id'] as string) ||
-          ((req as Record<string, unknown>)['requestId'] as string) ||
-          generateTraceId(),
-      }
-    );
+    runWithTraceId(traceId, () => next(), {
+      requestId:
+        ((req as Record<string, unknown>)['id'] as string) ||
+        ((req as Record<string, unknown>)['requestId'] as string) ||
+        generateTraceId(),
+    });
   };
 }

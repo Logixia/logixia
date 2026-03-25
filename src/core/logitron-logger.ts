@@ -50,7 +50,7 @@ import { _getOtelPayloadIfEnabled } from '../utils/otel';
 import { applyRedaction } from '../utils/redact.utils';
 import { Sampler } from '../utils/sampling.utils';
 import { deregisterFromShutdown, flushOnExit, registerForShutdown } from '../utils/shutdown.utils';
-import { generateTraceId, getCurrentTraceId } from '../utils/trace.utils';
+import { TraceContext } from '../utils/trace.utils';
 
 // ── Namespace level helpers ──────────────────────────────────────────────────
 
@@ -118,7 +118,7 @@ export class LogixiaLogger<
   private fieldState: Map<string, boolean> = new Map();
 
   /** Stable fallback trace ID generated ONCE per logger instance. */
-  private readonly fallbackTraceId: string = generateTraceId();
+  private readonly fallbackTraceId: string = TraceContext.instance.generate();
 
   // ── Performance: hot-path caches (rebuilt when config changes) ───────────────
   /** Numeric value for each known log level — built once, read on every log call. */
@@ -640,7 +640,7 @@ export class LogixiaLogger<
     // ── Feature 8: Sampling ───────────────────────────────────────────────────
     if (this._sampler) {
       const traceId = this.config.traceId
-        ? (getCurrentTraceId() ?? this.fallbackTraceId)
+        ? (TraceContext.instance.getCurrentTraceId() ?? this.fallbackTraceId)
         : undefined;
       if (!this._sampler.shouldEmit(level, traceId)) return;
     }
@@ -677,7 +677,9 @@ export class LogixiaLogger<
 
     // Use a monomorphic LogEntry shape — always the same fields, some may be undefined.
     // Consistent shape lets V8 inline-cache property accesses across calls.
-    const traceId = this.config.traceId ? (getCurrentTraceId() ?? this.fallbackTraceId) : undefined;
+    const traceId = this.config.traceId
+      ? (TraceContext.instance.getCurrentTraceId() ?? this.fallbackTraceId)
+      : undefined;
     const entry: LogEntry = {
       timestamp: new Date().toISOString(),
       level,
