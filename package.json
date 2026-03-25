@@ -259,7 +259,7 @@
     "@types/pino": "^7.0.4",
     "@types/uuid": "^9.0.0",
     "commitizen": "^4.3.1",
-    "conventional-changelog-conventionalcommits": "^8.0.0",
+    "conventional-changelog-conventionalcommits": "^9.3.0",
     "cz-conventional-changelog": "^3.3.0",
     "eslint": "^10.0.3",
     "eslint-config-prettier": "^10.1.8",
