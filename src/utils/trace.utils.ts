@@ -129,12 +129,13 @@ export const DEFAULT_TRACE_HEADERS = [
  * Create trace ID middleware for Express/NestJS
  */
 export function createTraceMiddleware(config: TraceIdConfig) {
+  const defaultExtractor = {
+    header: DEFAULT_TRACE_HEADERS,
+    query: ['traceId', 'trace_id'],
+  };
   const resolvedConfig: TraceIdConfig = {
-    extractor: {
-      header: DEFAULT_TRACE_HEADERS,
-      query: ['traceId', 'trace_id'],
-    },
     ...config,
+    extractor: config?.extractor ? { ...defaultExtractor, ...config.extractor } : defaultExtractor,
   };
 
   return (req: unknown, res: unknown, next: () => void) => {

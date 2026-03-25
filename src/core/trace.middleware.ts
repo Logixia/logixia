@@ -45,15 +45,18 @@ const DEFAULT_TRACE_HEADERS = [
 @Injectable()
 export class TraceMiddleware implements NestMiddleware {
   constructor(@Optional() private readonly config?: TraceIdConfig) {
+    const defaultExtractor = {
+      header: DEFAULT_TRACE_HEADERS,
+      query: ['traceId', 'trace_id'],
+    };
     this.config = {
       enabled: true,
       generator: generateTraceId,
       contextKey: 'traceId',
-      extractor: {
-        header: DEFAULT_TRACE_HEADERS,
-        query: ['traceId', 'trace_id'],
-      },
       ...config,
+      extractor: config?.extractor
+        ? { ...defaultExtractor, ...config.extractor }
+        : defaultExtractor,
     };
   }
 
@@ -110,15 +113,16 @@ export function createTraceMiddleware(config?: TraceIdConfig): TraceMiddleware {
  * Functional middleware for Express-style usage
  */
 export function traceMiddleware(config?: TraceIdConfig) {
+  const defaultExtractor = {
+    header: DEFAULT_TRACE_HEADERS,
+    query: ['traceId', 'trace_id'],
+  };
   const traceConfig = {
     enabled: true,
     generator: generateTraceId,
     contextKey: 'traceId',
-    extractor: {
-      header: DEFAULT_TRACE_HEADERS,
-      query: ['traceId', 'trace_id'],
-    },
     ...config,
+    extractor: config?.extractor ? { ...defaultExtractor, ...config.extractor } : defaultExtractor,
   };
 
   return (req: Request, res: Response, next: NextFunction) => {
