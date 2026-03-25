@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.7.1](https://github.com/Logixia/logixia/compare/v1.7.0...v1.7.1) (2026-03-25)
+
+### ♻️ Code Refactoring
+
+* **trace:** replace scattered trace fns with TraceContext singleton class ([c8e6456](https://github.com/Logixia/logixia/commit/c8e64569669c2f1a277815fb067a58467f1d7279))
+
 ## [1.7.0](https://github.com/Logixia/logixia/compare/v1.6.8...v1.7.0) (2026-03-25)
 
 ### ✨ Features
