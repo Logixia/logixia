@@ -8,6 +8,9 @@ import { v4 as uuidv4 } from 'uuid';
 
 import type { TraceIdConfig, TraceIdExtractorConfig } from '../types';
 
+/** The key under which the trace ID is stored in AsyncLocalStorage. */
+export const TRACE_CONTEXT_KEY = 'traceId' as const;
+
 // Async local storage for trace context
 export const traceStorage = new AsyncLocalStorage<{
   traceId: string;
