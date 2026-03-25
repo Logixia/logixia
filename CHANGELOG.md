@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.7.2](https://github.com/Logixia/logixia/compare/v1.7.1...v1.7.2) (2026-03-25)
+
+### 🐛 Bug Fixes
+
+* **log-method:** warn once when this.logger is missing instead of silently skipping ([38ff6b3](https://github.com/Logixia/logixia/commit/38ff6b38987f72e2cbc74cba8ea06b36d43edb2f))
+
 ## [1.7.1](https://github.com/Logixia/logixia/compare/v1.7.0...v1.7.1) (2026-03-25)
 
 ### ♻️ Code Refactoring
