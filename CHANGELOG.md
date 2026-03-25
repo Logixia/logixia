@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.8.0](https://github.com/Logixia/logixia/compare/v1.7.2...v1.8.0) (2026-03-25)
+
+### ✨ Features
+
+* **log-method:** use global logger fallback so @LogMethod works without this.logger injection ([c4eddec](https://github.com/Logixia/logixia/commit/c4eddecedbf41afbdd10e74a6d0eb44761949fdb))
+
 ## [1.7.2](https://github.com/Logixia/logixia/compare/v1.7.1...v1.7.2) (2026-03-25)
 
 ### 🐛 Bug Fixes
