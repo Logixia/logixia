@@ -224,11 +224,18 @@ export function LogMethod(options: LogMethodOptions = {}): MethodDecorator {
  */
 @Catch()
 export class LogixiaExceptionFilter implements ExceptionFilter {
+  private readonly _logger: LogixiaLoggerService | undefined;
+
   constructor(
     @Optional()
     @Inject(`${LOGIXIA_LOGGER_PREFIX}SERVICE`)
-    private readonly logger?: LogixiaLoggerService
-  ) {}
+    logger?: LogixiaLoggerService
+  ) {
+    // Prefer the injected logger; fall back to the global module logger so
+    // `new LogixiaExceptionFilter()` (registered in main.ts before DI resolves)
+    // still logs without needing an explicit logger argument.
+    this._logger = logger ?? LogixiaLoggerModule._globalLogger ?? undefined;
+  }
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
@@ -260,7 +267,7 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
     });
 
     // ── Logging ──────────────────────────────────────────────────────────────
-    if (this.logger) {
+    if (this._logger) {
       const requestMeta: Record<string, unknown> = {
         method: request.method ?? '',
         url: request.url ?? '',
@@ -271,14 +278,14 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
       if (httpStatus >= 500) {
         const err = exception instanceof Error ? exception : new Error(String(exception));
         // fire-and-forget — cannot await inside a synchronous ExceptionFilter.catch
-        this.logger.error(err, requestMeta);
+        this._logger.error(err, requestMeta);
       } else if (isLogixiaException(exception)) {
-        this.logger.warn(
+        this._logger.warn(
           `[${errorResponse.error.code}] ${errorResponse.error.message}`,
           requestMeta
         );
       } else {
-        this.logger.warn(`[${httpStatus}] ${errorResponse.error.message}`, requestMeta);
+        this._logger.warn(`[${httpStatus}] ${errorResponse.error.message}`, requestMeta);
       }
     }
 
