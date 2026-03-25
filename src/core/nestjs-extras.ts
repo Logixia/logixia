@@ -116,11 +116,23 @@ export function LogMethod(options: LogMethodOptions = {}): MethodDecorator {
       (target as { constructor?: { name?: string } }).constructor?.name ?? 'Unknown';
     const label = options.label ?? `${className}.${methodName}`;
 
+    let _warnedNoLogger = false;
+
     descriptor.value = async function (
       this: { logger?: LogixiaLoggerService },
       ...args: unknown[]
     ) {
       const logger = this.logger;
+
+      if (!logger && !_warnedNoLogger) {
+        _warnedNoLogger = true;
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[logixia] @LogMethod on ${label}: no "logger" property found on class instance. ` +
+            `Inject LogixiaLoggerService as this.logger to enable logging.`
+        );
+      }
+
       const start = Date.now();
 
       const entry: Record<string, unknown> = { method: label };
