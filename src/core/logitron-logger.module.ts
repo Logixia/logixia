@@ -55,6 +55,32 @@ export class LogixiaLoggerModule implements NestModule {
   private config: LogixiaModuleConfig = {};
   private static loggerConfig: Partial<LoggerConfig> = {};
 
+  /** @internal Global logger instance set when the module boots. Used by @LogMethod fallback. */
+  // eslint-disable-next-line sonarjs/public-static-readonly
+  static _globalLogger: LogixiaLoggerService | null = null;
+
+  /**
+   * Returns the global LogixiaLoggerService instance that was created when the
+   * module booted. Useful for logging outside of NestJS DI — utility functions,
+   * plain scripts, decorators — without injecting the service everywhere.
+   *
+   * Returns `null` if called before `LogixiaLoggerModule.forRoot[Async]()` has
+   * been initialised (i.e. before the NestJS app has started).
+   *
+   * @example
+   * ```ts
+   * // some-util.ts
+   * import { LogixiaLoggerModule } from 'logixia/nest';
+   *
+   * export function doSomething() {
+   *   LogixiaLoggerModule.getGlobalLogger()?.info('doing something');
+   * }
+   * ```
+   */
+  static getGlobalLogger(): LogixiaLoggerService | null {
+    return LogixiaLoggerModule._globalLogger;
+  }
+
   configure(consumer: MiddlewareConsumer) {
     const { forRoutes = DEFAULT_ROUTES, exclude } = this.config;
 
@@ -139,7 +165,9 @@ export class LogixiaLoggerModule implements NestModule {
               },
               ...loggerConfig,
             };
-            return new LogixiaLoggerService(defaultConfig);
+            const service = new LogixiaLoggerService(defaultConfig);
+            LogixiaLoggerModule._globalLogger = service;
+            return service;
           },
           inject: [LOGIXIA_LOGGER_CONFIG],
         },
@@ -215,7 +243,9 @@ export class LogixiaLoggerModule implements NestModule {
             };
             // Store config for middleware access
             LogixiaLoggerModule.loggerConfig = defaultConfig;
-            return new LogixiaLoggerService(defaultConfig);
+            const service = new LogixiaLoggerService(defaultConfig);
+            LogixiaLoggerModule._globalLogger = service;
+            return service;
           },
           inject: [LOGIXIA_LOGGER_CONFIG],
         },

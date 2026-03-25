@@ -38,7 +38,7 @@ import { Catch, Inject, Optional } from '@nestjs/common';
 import { ErrorResponseBuilder } from '../exceptions/builder';
 import { isLogixiaException } from '../exceptions/exception';
 import type { LogLevelString } from '../types';
-import { LOGIXIA_LOGGER_PREFIX } from './logitron-logger.module';
+import { LOGIXIA_LOGGER_PREFIX, LogixiaLoggerModule } from './logitron-logger.module';
 import type { LogixiaLoggerService } from './logitron-nestjs.service';
 
 // ── @InjectLogger() ──────────────────────────────────────────────────────────
@@ -122,14 +122,16 @@ export function LogMethod(options: LogMethodOptions = {}): MethodDecorator {
       this: { logger?: LogixiaLoggerService },
       ...args: unknown[]
     ) {
-      const logger = this.logger;
+      // Prefer the instance's own logger; fall back to the global module logger.
+      const logger: LogixiaLoggerService | undefined =
+        this.logger ?? LogixiaLoggerModule._globalLogger ?? undefined;
 
       if (!logger && !_warnedNoLogger) {
         _warnedNoLogger = true;
         // eslint-disable-next-line no-console
         console.warn(
-          `[logixia] @LogMethod on ${label}: no "logger" property found on class instance. ` +
-            `Inject LogixiaLoggerService as this.logger to enable logging.`
+          `[logixia] @LogMethod on ${label}: no logger available. ` +
+            `Either inject LogixiaLoggerService as this.logger or ensure LogixiaLoggerModule is initialised.`
         );
       }
 
