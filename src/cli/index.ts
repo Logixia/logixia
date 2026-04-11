@@ -2,8 +2,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import chalk from 'chalk';
 import { Command } from 'commander';
+import pc from 'picocolors';
 
 import { analyzeCommand } from './commands/analyze';
 import { exploreCommand } from './commands/explore';
@@ -37,7 +37,7 @@ program.addCommand(exploreCommand);
 
 program.on('command:*', () => {
   console.error(
-    chalk.red('Invalid command: %s\nSee --help for a list of available commands.'),
+    pc.red('Invalid command: %s\nSee --help for a list of available commands.'),
     program.args.join(' ')
   );
   process.exit(1);

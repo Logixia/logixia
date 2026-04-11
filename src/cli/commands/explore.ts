@@ -2,8 +2,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import chalk from 'chalk';
 import { Command } from 'commander';
+import pc from 'picocolors';
 
 import { safeParseLogs } from '../utils';
 
@@ -42,6 +42,15 @@ function stripAnsi(s: string): string {
   return s.replace(ANSI_STRIP_RE, '');
 }
 
+// picocolors doesn't chain like chalk did (`chalk.bgRed.white.bold`), so we
+// compose styles explicitly. `compose(a, b, c)(s)` === `a(b(c(s)))`.
+type Style = (s: string) => string;
+function compose(...fns: Style[]): Style {
+  return (s: string) => fns.reduceRight((acc, fn) => fn(acc), s);
+}
+// picocolors also doesn't expose `bgGray` — the ANSI equivalent is `bgBlackBright`.
+const bgGray: Style = pc.bgBlackBright;
+
 // ── Level helpers ──────────────────────────────────────────────────────────────
 
 export function normalizeLevel(level: unknown): string {
@@ -55,28 +64,28 @@ export function normalizeLevel(level: unknown): string {
   return String(level ?? 'info').toLowerCase();
 }
 
-function levelColor(level: string): (s: string) => string {
+function levelColor(level: string): Style {
   switch (level) {
     case 'error': {
-      return chalk.bgRed.white;
+      return compose(pc.bgRed, pc.white);
     }
     case 'warn': {
-      return chalk.bgYellow.black;
+      return compose(pc.bgYellow, pc.black);
     }
     case 'info': {
-      return chalk.bgBlue.white;
+      return compose(pc.bgBlue, pc.white);
     }
     case 'debug': {
-      return chalk.bgGray.white;
+      return compose(bgGray, pc.white);
     }
     case 'trace': {
-      return chalk.bgMagenta.white;
+      return compose(pc.bgMagenta, pc.white);
     }
     case 'verbose': {
-      return chalk.bgCyan.black;
+      return compose(pc.bgCyan, pc.black);
     }
     default: {
-      return chalk.bgGray.white;
+      return compose(bgGray, pc.white);
     }
   }
 }
@@ -120,18 +129,18 @@ export function syntaxColorJson(line: string): string {
   // Color numeric values → yellow
   // Color booleans / null → magenta / dim
   return line
-    .replace(/"([^"]+)":/g, (_, k: string) => chalk.cyan(`"${k}"`) + ':')
-    .replace(/: "([^"]*)"/g, (_, v: string) => ': ' + chalk.green(`"${v}"`))
-    .replace(/: (-?\d+(?:\.\d+)?)/g, (_, v: string) => ': ' + chalk.yellow(v))
-    .replace(/: (true|false)/g, (_, v: string) => ': ' + chalk.magenta(v))
-    .replace(/: null/g, ': ' + chalk.dim('null'));
+    .replace(/"([^"]+)":/g, (_, k: string) => pc.cyan(`"${k}"`) + ':')
+    .replace(/: "([^"]*)"/g, (_, v: string) => ': ' + pc.green(`"${v}"`))
+    .replace(/: (-?\d+(?:\.\d+)?)/g, (_, v: string) => ': ' + pc.yellow(v))
+    .replace(/: (true|false)/g, (_, v: string) => ': ' + pc.magenta(v))
+    .replace(/: null/g, ': ' + pc.dim('null'));
 }
 
 // ── At-frame parser (no .+ capture groups → no slow-regex) ────────────────────
 
 export function coloriseStackFrame(frame: string): string {
   const trimmed = frame.trim();
-  if (!trimmed.startsWith('at ')) return chalk.dim('  ' + trimmed);
+  if (!trimmed.startsWith('at ')) return pc.dim('  ' + trimmed);
 
   const withoutAt = trimmed.slice(3); // drop leading "at "
   const parenOpen = withoutAt.lastIndexOf('(');
@@ -140,16 +149,16 @@ export function coloriseStackFrame(frame: string): string {
   if (parenOpen !== -1 && parenClose > parenOpen) {
     const name = withoutAt.slice(0, parenOpen).trimEnd();
     const loc = withoutAt.slice(parenOpen + 1, parenClose);
-    return '    ' + chalk.dim('at ') + chalk.cyan(name) + ' ' + chalk.dim('(' + loc + ')');
+    return '    ' + pc.dim('at ') + pc.cyan(name) + ' ' + pc.dim('(' + loc + ')');
   }
 
-  return '    ' + chalk.dim('at ') + chalk.cyan(withoutAt);
+  return '    ' + pc.dim('at ') + pc.cyan(withoutAt);
 }
 
 // ── Detail lines builder ───────────────────────────────────────────────────────
 
 export function buildDetailLines(entry: LogEntry | undefined): string[] {
-  if (!entry) return [chalk.dim('  No entry selected')];
+  if (!entry) return [pc.dim('  No entry selected')];
 
   const lines: string[] = [];
 
@@ -163,13 +172,13 @@ export function buildDetailLines(entry: LogEntry | undefined): string[] {
   // Stack trace section
   if (stack) {
     lines.push('');
-    lines.push(chalk.bold.red('  ▼ STACK TRACE'));
+    lines.push(pc.bold(pc.red('  ▼ STACK TRACE')));
     for (const sl of String(stack).split('\n')) {
       if (!sl.trim()) continue;
       if (sl.trim().startsWith('at ')) {
         lines.push(coloriseStackFrame(sl));
       } else {
-        lines.push('  ' + chalk.red(sl.trim()));
+        lines.push('  ' + pc.red(sl.trim()));
       }
     }
   }
@@ -227,7 +236,7 @@ export class TUIExplorer {
 
   run(): void {
     if (!fs.existsSync(this.filePath)) {
-      console.error(chalk.red(`File not found: ${this.filePath}`));
+      console.error(pc.red(`File not found: ${this.filePath}`));
       process.exit(2);
     }
 
@@ -315,11 +324,11 @@ export class TUIExplorer {
 
   private drawHeader(): void {
     const w = this.width;
-    const title = chalk.bgWhite.black.bold(' LOGIXIA EXPLORE ');
-    const fname = chalk.cyan(` ${path.basename(this.filePath)} `);
-    const count = chalk.dim(`[${this.filteredEntries.length}/${this.allEntries.length}]`);
-    const follow = this.followMode ? chalk.green(' ⟳ FOLLOW') : '';
-    const search = this.searchQuery ? chalk.yellow(` /${this.searchQuery}`) : '';
+    const title = compose(pc.bgWhite, pc.black, pc.bold)(' LOGIXIA EXPLORE ');
+    const fname = pc.cyan(` ${path.basename(this.filePath)} `);
+    const count = pc.dim(`[${this.filteredEntries.length}/${this.allEntries.length}]`);
+    const follow = this.followMode ? pc.green(' ⟳ FOLLOW') : '';
+    const search = this.searchQuery ? pc.yellow(` /${this.searchQuery}`) : '';
 
     const left = ` ${title}${fname}`;
     const right = count + follow + search + ' ';
@@ -327,7 +336,7 @@ export class TUIExplorer {
     const rightLen = stripAnsi(right).length;
     const gap = Math.max(1, w - leftLen - rightLen);
 
-    write(moveTo(1, 1) + chalk.bgBlack(left + ' '.repeat(gap) + right) + clearLine + '\n');
+    write(moveTo(1, 1) + pc.bgBlack(left + ' '.repeat(gap) + right) + clearLine + '\n');
   }
 
   private drawFilterBar(): void {
@@ -342,18 +351,18 @@ export class TUIExplorer {
 
     const badges = LEVELS.map(([lvl, key]) => {
       const active = this.levelFilters.has(lvl);
-      return active ? levelColor(lvl)(` ${key} `) : chalk.dim.strikethrough(` ${key} `);
+      return active ? levelColor(lvl)(` ${key} `) : compose(pc.dim, pc.strikethrough)(` ${key} `);
     }).join(' ');
 
     const searchPart = this.searchMode
-      ? chalk.bgYellow.black(` /${this.searchBuffer}█ `)
-      : chalk.dim('  /: search ');
+      ? compose(pc.bgYellow, pc.black)(` /${this.searchBuffer}█ `)
+      : pc.dim('  /: search ');
 
     const w = this.width;
     const left = '  ' + badges;
     const right = searchPart + ' ';
     const gap = Math.max(1, w - stripAnsi(left).length - stripAnsi(right).length);
-    write(moveTo(2, 1) + chalk.bgBlack(left + ' '.repeat(gap) + right) + clearLine + '\n');
+    write(moveTo(2, 1) + pc.bgBlack(left + ' '.repeat(gap) + right) + clearLine + '\n');
   }
 
   private drawColHeader(): void {
@@ -363,7 +372,11 @@ export class TUIExplorer {
     const msgWidth = Math.max(20, w - timeCol.length - levelCol.length - 2);
     write(
       moveTo(3, 1) +
-        chalk.bold.bgBlack.dim(timeCol + levelCol + ' ' + this.pad('MESSAGE', msgWidth)) +
+        compose(
+          pc.bold,
+          pc.bgBlack,
+          pc.dim
+        )(timeCol + levelCol + ' ' + this.pad('MESSAGE', msgWidth)) +
         clearLine +
         '\n'
     );
@@ -382,7 +395,7 @@ export class TUIExplorer {
       write(moveTo(screenRow, 1));
 
       if (entryIdx >= this.filteredEntries.length) {
-        write(chalk.bgBlack(' '.repeat(w)) + clearLine);
+        write(pc.bgBlack(' '.repeat(w)) + clearLine);
         continue;
       }
 
@@ -401,13 +414,13 @@ export class TUIExplorer {
       const msgSlot = Math.floor(msgWidth * 0.65);
       const msgPart = this.truncate(msg, msgSlot);
       const extraPart = this.truncate(extraFields, msgWidth - msgPart.length - 2);
-      const msgDisplay = msgPart + (extraPart ? chalk.dim('  ' + extraPart) : '');
+      const msgDisplay = msgPart + (extraPart ? pc.dim('  ' + extraPart) : '');
 
       const line = ` ${time} ` + levelBadge(level) + ' ' + this.pad(msgDisplay, msgWidth);
 
       if (isSelected) {
         const plain = this.pad(stripAnsi(line), w);
-        write(chalk.bgWhite.black(plain));
+        write(compose(pc.bgWhite, pc.black)(plain));
       } else if (this.searchQuery) {
         write(this.highlightSearch(this.truncate(line, w)));
       } else {
@@ -428,7 +441,7 @@ export class TUIExplorer {
       : ' ▼ DETAIL ';
     const labelLen = stripAnsi(label).length;
     const sepLine =
-      chalk.bgBlack.cyan.bold(label) + chalk.dim('─'.repeat(Math.max(0, w - labelLen)));
+      compose(pc.bgBlack, pc.cyan, pc.bold)(label) + pc.dim('─'.repeat(Math.max(0, w - labelLen)));
     write(moveTo(sepRow, 1) + sepLine + clearLine + '\n');
 
     // 8 detail content lines
@@ -440,7 +453,7 @@ export class TUIExplorer {
       if (lineIdx < lines.length) {
         write(this.truncate(lines[lineIdx]!, w) + clearLine);
       } else {
-        write(chalk.bgBlack(' '.repeat(w)) + clearLine);
+        write(pc.bgBlack(' '.repeat(w)) + clearLine);
       }
     }
   }
@@ -448,24 +461,27 @@ export class TUIExplorer {
   private drawStatusBar(): void {
     const statusRow = this.height;
     const keys = [
-      chalk.bold('j/k') + ' move',
-      chalk.bold('/') + ' search',
-      chalk.bold('x') + ' export',
-      chalk.bold('E/W/I/D/T/V') + ' filter',
-      chalk.bold('J/K') + ' detail↕',
-      chalk.bold('f') + ' follow',
-      chalk.bold('g/G') + ' top/bot',
-      chalk.bold('q') + ' quit',
+      pc.bold('j/k') + ' move',
+      pc.bold('/') + ' search',
+      pc.bold('x') + ' export',
+      pc.bold('E/W/I/D/T/V') + ' filter',
+      pc.bold('J/K') + ' detail↕',
+      pc.bold('f') + ' follow',
+      pc.bold('g/G') + ' top/bot',
+      pc.bold('q') + ' quit',
     ];
-    const bar = '  ' + keys.join(chalk.dim('  │  '));
-    write(moveTo(statusRow, 1) + chalk.bgBlack.dim(this.truncate(bar, this.width)) + clearLine);
+    const bar = '  ' + keys.join(pc.dim('  │  '));
+    write(
+      moveTo(statusRow, 1) + compose(pc.bgBlack, pc.dim)(this.truncate(bar, this.width)) + clearLine
+    );
 
     // Export prompt overlay
     if (this.exportMode) {
       const promptRow = this.height - 1;
-      const prompt = chalk.bgYellow.black(
-        ` Export path (.json/.csv/.ndjson, blank=cancel): ${this.exportBuffer}█ `
-      );
+      const prompt = compose(
+        pc.bgYellow,
+        pc.black
+      )(` Export path (.json/.csv/.ndjson, blank=cancel): ${this.exportBuffer}█ `);
       write(moveTo(promptRow, 1) + prompt + clearLine);
     }
   }
@@ -669,7 +685,10 @@ export class TUIExplorer {
       const confirmRow = this.height - 1;
       write(
         moveTo(confirmRow, 1) +
-          chalk.bgGreen.black(` ✓ Exported ${this.filteredEntries.length} entries → ${resolved} `) +
+          compose(
+            pc.bgGreen,
+            pc.black
+          )(` ✓ Exported ${this.filteredEntries.length} entries → ${resolved} `) +
           clearLine
       );
       setTimeout(() => {
@@ -679,7 +698,7 @@ export class TUIExplorer {
       const errRow = this.height - 1;
       write(
         moveTo(errRow, 1) +
-          chalk.bgRed.white(` ✗ Export failed: ${String(err.message)} `) +
+          compose(pc.bgRed, pc.white)(` ✗ Export failed: ${String(err.message)} `) +
           clearLine
       );
       setTimeout(() => {
@@ -747,7 +766,8 @@ export class TUIExplorer {
         result += plain.slice(i);
         break;
       }
-      result += plain.slice(i, idx) + chalk.bgYellow.black(plain.slice(idx, idx + needle.length));
+      result +=
+        plain.slice(i, idx) + compose(pc.bgYellow, pc.black)(plain.slice(idx, idx + needle.length));
       i = idx + needle.length;
     }
     return result;

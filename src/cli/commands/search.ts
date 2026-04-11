@@ -2,8 +2,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import chalk from 'chalk';
 import { Command } from 'commander';
+import pc from 'picocolors';
 
 import { formatAsTable, safeParseLogs } from '../utils';
 
@@ -47,7 +47,7 @@ function formatSearchResults(results: any[], format: string, _context: number): 
   }
 
   if (format === 'table') {
-    if (results.length === 0) return chalk.yellow('No results found');
+    if (results.length === 0) return pc.yellow('No results found');
 
     // Determine columns from first result
     const columns = Object.keys(results[0] || {});
@@ -57,12 +57,12 @@ function formatSearchResults(results: any[], format: string, _context: number): 
   }
 
   // Default: line format with context
-  if (results.length === 0) return chalk.yellow('No results found');
+  if (results.length === 0) return pc.yellow('No results found');
 
   return results
     .map((r, idx) => {
       const line = JSON.stringify(r);
-      const prefix = chalk.gray(String(idx + 1) + ':');
+      const prefix = pc.gray(String(idx + 1) + ':');
       return `${prefix} ${line}`;
     })
     .join('\n');
@@ -89,6 +89,6 @@ export const searchCommand = new Command('search')
     const raw = fs.readFileSync(full, 'utf8');
     const results = await searchLogs(raw, opts);
 
-    console.log(chalk.bold(`\nFound ${results.length} matches`));
+    console.log(pc.bold(`\nFound ${results.length} matches`));
     console.log(formatSearchResults(results, opts.format, Number.parseInt(opts.context || '0')));
   });

@@ -2,8 +2,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import chalk from 'chalk';
 import { Command } from 'commander';
+import pc from 'picocolors';
 
 function parseFilter(filter?: string): { field: string; value: string } | null {
   if (!filter) return null;
@@ -34,16 +34,17 @@ function highlightLine(line: string, highlight?: string): string {
     const level = (parsed.level || '').toUpperCase();
 
     // Color by level
-    if (level === 'ERROR') return chalk.red(line);
-    if (level === 'WARN') return chalk.yellow(line);
-    if (level === 'INFO') return chalk.blue(line);
-    if (level === 'DEBUG') return chalk.gray(line);
+    if (level === 'ERROR') return pc.red(line);
+    if (level === 'WARN') return pc.yellow(line);
+    if (level === 'INFO') return pc.blue(line);
+    if (level === 'DEBUG') return pc.gray(line);
 
     return line;
   } catch {
-    // Highlight pattern matches
+    // Highlight pattern matches. picocolors doesn't chain like chalk did
+    // (`chalk.bgYellow.black(...)`), so we nest the calls explicitly.
     const regex = new RegExp(highlight, 'gi');
-    return line.replace(regex, (match) => chalk.bgYellow.black(match));
+    return line.replace(regex, (match) => pc.bgYellow(pc.black(match)));
   }
 }
 
@@ -73,7 +74,7 @@ export const tailCommand = new Command('tail')
     }
 
     if (opts.follow) {
-      console.log(chalk.dim('--- following (ctrl-c to exit) ---'));
+      console.log(pc.dim('--- following (ctrl-c to exit) ---'));
       let pos = fs.statSync(full).size;
       let buffer = '';
 

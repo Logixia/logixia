@@ -31,8 +31,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import chalk from 'chalk';
 import { Command } from 'commander';
+import pc from 'picocolors';
 
 import { formatAsTable, safeParseLogs } from '../utils';
 
@@ -349,7 +349,7 @@ function matchesWhere(row: Record<string, any>, conditions: Condition[] | null):
 function runAggregation(entries: any[], agg: NonNullable<ParsedQuery['aggregation']>): string {
   const { fn, field, groupBy } = agg;
 
-  if (!groupBy) return chalk.yellow('Aggregation requires a GROUP BY field');
+  if (!groupBy) return pc.yellow('Aggregation requires a GROUP BY field');
 
   // Build groups
   const groups: Record<string, any[]> = {};
@@ -368,7 +368,7 @@ function runAggregation(entries: any[], agg: NonNullable<ParsedQuery['aggregatio
   }
 
   // AVG / SUM / MIN / MAX require a numeric field
-  if (!field) return chalk.yellow('Numeric aggregation requires a field: AVG(field) BY group');
+  if (!field) return pc.yellow('Numeric aggregation requires a field: AVG(field) BY group');
 
   const rows = Object.entries(groups)
     .map(([k, v]) => {
@@ -412,7 +412,7 @@ function projectRow(row: Record<string, any>, select: string[] | '*'): Record<st
 }
 
 function formatResults(results: any[], format: string): string {
-  if (results.length === 0) return chalk.yellow('No results found');
+  if (results.length === 0) return pc.yellow('No results found');
 
   if (format === 'json') {
     return JSON.stringify(results, null, 2);
@@ -432,9 +432,9 @@ function formatResults(results: any[], format: string): string {
     .map((r) => {
       const level = (r.level || '').toUpperCase();
       const line = JSON.stringify(r);
-      if (level === 'ERROR' || level === 'CRITICAL') return chalk.red(line);
-      if (level === 'WARN') return chalk.yellow(line);
-      if (level === 'DEBUG' || level === 'VERBOSE') return chalk.gray(line);
+      if (level === 'ERROR' || level === 'CRITICAL') return pc.red(line);
+      if (level === 'WARN') return pc.yellow(line);
+      if (level === 'DEBUG' || level === 'VERBOSE') return pc.gray(line);
       return line;
     })
     .join('\n');
@@ -544,7 +544,7 @@ export const queryCommand = new Command('query')
   .action(async (file: string, opts: any) => {
     const full = path.resolve(process.cwd(), file);
     if (!fs.existsSync(full)) {
-      console.error(chalk.red(`File not found: ${full}`));
+      console.error(pc.red(`File not found: ${full}`));
       process.exit(2);
     }
 
@@ -562,12 +562,12 @@ export const queryCommand = new Command('query')
     });
 
     if (aggregationOutput !== null) {
-      console.log(chalk.bold('\nAggregation result:'));
+      console.log(pc.bold('\nAggregation result:'));
       console.log(aggregationOutput);
     } else {
       console.log(
-        chalk.bold(
-          `\nFound ${chalk.cyan(String(results.length))} match${results.length === 1 ? '' : 'es'}`
+        pc.bold(
+          `\nFound ${pc.cyan(String(results.length))} match${results.length === 1 ? '' : 'es'}`
         )
       );
       if (results.length > 0) {
@@ -577,7 +577,7 @@ export const queryCommand = new Command('query')
 
     // ── Live tail mode ─────────────────────────────────────────────────────
     if (opts.follow) {
-      console.log(chalk.dim('\n--- following (ctrl-c to exit) ---'));
+      console.log(pc.dim('\n--- following (ctrl-c to exit) ---'));
       let pos = fs.statSync(full).size;
       let buffer = '';
 
