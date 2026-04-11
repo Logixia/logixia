@@ -165,7 +165,7 @@
     "dev:intelligent-search": "ts-node examples/intelligent-search.ts",
     "benchmark": "npm run build && node benchmarks/run.mjs",
     "size": "size-limit",
-    "prepare": "husky install"
+    "prepare": "node -e \"if(process.env.HUSKY!=='0'&&process.env.CI!=='true'){try{require('child_process').execSync('husky install',{stdio:'inherit'})}catch(e){process.exit(0)}}\""
   },
   "keywords": [
     "logger",
