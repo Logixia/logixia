@@ -294,7 +294,7 @@
     "access": "public"
   },
   "dependencies": {
-    "commander": "^11.1.0",
+    "commander": "^14.0.3",
     "fast-json-stringify": "^6.3.0",
     "picocolors": "^1.1.1"
   },
