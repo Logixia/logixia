@@ -65,6 +65,13 @@ function namespacePatternToRegex(pattern: string): RegExp {
 /** Max compiled patterns to keep in memory. Oldest entry is evicted when full. */
 const _NS_CACHE_MAX = 1000;
 const _nsPatternCache = new Map<string, RegExp>();
+/**
+ * One-shot warning so operators notice runaway pattern growth.
+ * If the cache is being thrashed (>N evictions) the namespace level config is
+ * almost certainly wrong — likely dynamic/unique patterns being registered.
+ */
+let _nsCacheEvictionWarned = false;
+let _nsCacheEvictionCount = 0;
 
 function matchesNamespacePattern(ns: string, pattern: string): boolean {
   let re = _nsPatternCache.get(pattern);
@@ -74,11 +81,31 @@ function matchesNamespacePattern(ns: string, pattern: string): boolean {
     if (_nsPatternCache.size >= _NS_CACHE_MAX) {
       const firstKey = _nsPatternCache.keys().next().value;
       if (firstKey !== undefined) _nsPatternCache.delete(firstKey);
+      _nsCacheEvictionCount++;
+      if (!_nsCacheEvictionWarned) {
+        _nsCacheEvictionWarned = true;
+        process.stderr.write(
+          `[logixia] namespace pattern cache hit ${_NS_CACHE_MAX} entries — evicting. ` +
+            `This usually means dynamic/unique patterns are being registered at runtime; ` +
+            `review your levelOptions.namespaces configuration.\n`
+        );
+      }
     }
     _nsPatternCache.set(pattern, re);
   }
   return re.test(ns);
 }
+
+/** @internal Test helper to inspect/reset namespace pattern cache state. */
+export const _nsCacheInternal = {
+  size: (): number => _nsPatternCache.size,
+  evictionCount: (): number => _nsCacheEvictionCount,
+  reset: (): void => {
+    _nsPatternCache.clear();
+    _nsCacheEvictionCount = 0;
+    _nsCacheEvictionWarned = false;
+  },
+};
 
 // ── Feature 5: Adaptive level resolution ────────────────────────────────────
 

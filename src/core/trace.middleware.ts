@@ -9,6 +9,20 @@ import type { NextFunction, Request, Response } from 'express';
 import type { TraceIdConfig } from '../types';
 import { DEFAULT_TRACE_HEADERS, extractTraceId, TraceContext } from '../utils/trace.utils';
 
+/** Default response header used to echo the resolved traceId back to the caller. */
+export const DEFAULT_TRACE_RESPONSE_HEADER = 'X-Trace-Id';
+
+/**
+ * Resolve the response header name from config.
+ * - `undefined`   → default `'X-Trace-Id'`
+ * - `string`      → user's custom header
+ * - `false`       → `null` (suppress entirely)
+ */
+export function resolveResponseHeader(config?: TraceIdConfig): string | null {
+  if (config?.responseHeader === false) return null;
+  return config?.responseHeader ?? DEFAULT_TRACE_RESPONSE_HEADER;
+}
+
 // Extend Express Request interface — requires namespace to augment Express typings
 /* eslint-disable @typescript-eslint/no-namespace */
 declare global {
@@ -38,8 +52,11 @@ export class TraceMiddleware implements NestMiddleware {
         ? { ...defaultExtractor, ...config.extractor }
         : defaultExtractor,
     };
-    // Register the user's contextKey so getCurrentTraceId() / getTraceContextKey() reflect it
-    this.ctx.setContextKey(this.config.contextKey ?? 'traceId');
+    // Only mutate the process-wide context key when tracing is actually enabled —
+    // otherwise a disabled middleware would still change global state.
+    if (this.config.enabled) {
+      this.ctx.setContextKey(this.config.contextKey ?? 'traceId');
+    }
   }
 
   use(req: Request, res: Response, next: NextFunction): void {
@@ -53,13 +70,27 @@ export class TraceMiddleware implements NestMiddleware {
       traceId = extractTraceId(req, this.config.extractor);
     }
 
+    if (!traceId && this.config.generator) {
+      const candidate = this.config.generator();
+      // Guard against a user-supplied generator that returns a bad value —
+      // fall back to the built-in UUID generator so the request always has
+      // a valid, non-empty traceId downstream.
+      if (typeof candidate === 'string' && candidate.trim().length > 0) {
+        traceId = candidate;
+      } else {
+        process.stderr.write(
+          '[logixia] TraceIdConfig.generator returned a non-string/empty value — using built-in generator.\n'
+        );
+      }
+    }
     if (!traceId) {
-      traceId = this.config.generator ? this.config.generator() : this.ctx.generate();
+      traceId = this.ctx.generate();
     }
 
     req.traceId = traceId;
 
-    res.setHeader('X-Trace-Id', traceId);
+    const header = resolveResponseHeader(this.config);
+    if (header) res.setHeader(header, traceId);
 
     this.ctx.run(traceId, () => next(), {
       method: req.method,
@@ -93,7 +124,12 @@ export function traceMiddleware(config?: TraceIdConfig) {
     ...config,
     extractor: config?.extractor ? { ...defaultExtractor, ...config.extractor } : defaultExtractor,
   };
-  ctx.setContextKey(traceConfig.contextKey ?? 'traceId');
+
+  // Only mutate the process-wide context key when the middleware is actually
+  // enabled — otherwise a disabled instance would still change global state.
+  if (traceConfig.enabled) {
+    ctx.setContextKey(traceConfig.contextKey ?? 'traceId');
+  }
 
   return (req: Request, res: Response, next: NextFunction) => {
     if (!traceConfig.enabled) {
@@ -106,13 +142,24 @@ export function traceMiddleware(config?: TraceIdConfig) {
       traceId = extractTraceId(req, traceConfig.extractor);
     }
 
+    if (!traceId && traceConfig.generator) {
+      const candidate = traceConfig.generator();
+      if (typeof candidate === 'string' && candidate.trim().length > 0) {
+        traceId = candidate;
+      } else {
+        process.stderr.write(
+          '[logixia] TraceIdConfig.generator returned a non-string/empty value — using built-in generator.\n'
+        );
+      }
+    }
     if (!traceId) {
-      traceId = traceConfig.generator ? traceConfig.generator() : ctx.generate();
+      traceId = ctx.generate();
     }
 
     req.traceId = traceId;
 
-    res.setHeader('X-Trace-Id', traceId);
+    const header = resolveResponseHeader(traceConfig);
+    if (header) res.setHeader(header, traceId);
 
     ctx.run(traceId, () => next(), {
       method: req.method,

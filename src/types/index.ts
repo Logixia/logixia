@@ -69,6 +69,17 @@ export interface TraceIdConfig {
   generator?: () => string;
   contextKey?: string;
   extractor?: TraceIdExtractorConfig;
+  /**
+   * Name of the response header the middleware writes the resolved traceId
+   * into (and that the exception filter echoes back on error responses).
+   *
+   * Defaults to `'X-Trace-Id'`. Set to `false` to suppress the response
+   * header entirely (useful when the caller already supplies one and you
+   * don't want to echo it back).
+   *
+   * @default 'X-Trace-Id'
+   */
+  responseHeader?: string | false;
 }
 
 // ── Redaction ──────────────────────────────────────────────────────────────────

@@ -64,12 +64,13 @@ async function bootstrap() {
     routes: [
       // HTTP
       'GET  /health               — liveness + current traceId',
-      'GET  /health/context       — RequestContextManager stats',
       'POST /health/broadcast     — HTTP→WS traceId propagation demo',
       'GET  /health/log-levels    — fires all log levels',
       'GET  /users                — list users  (@LogMethod debug + child logger)',
       'GET  /users/:id            — find user   (LogixiaException 404 on miss)',
       'POST /users                — create user (timeAsync + conflict 409)',
+      'GET  /users/trace-check             — TraceIdGuard: 403 if no traceId in context',
+      'POST /users/trace-check             — TraceIdGuard: 403 if no traceId in context',
       'GET  /orders               — list orders',
       'POST /orders               — create order',
       'GET  /orders/boom          — LogixiaException 400 → WARN log',

@@ -69,6 +69,56 @@ export type LogixiaServiceWithLevels<T extends LoggerConfig<Record<string, numbe
       ? LogixiaLoggerService & ServiceCustomLevelMethods<L>
       : LogixiaLoggerService
     : LogixiaLoggerService;
+
+/**
+ * Helper — extracts custom level names from a config object's `levelOptions.levels`.
+ */
+type _ExtractCustomLevelNames<T> = T extends { levelOptions?: { levels?: infer L } }
+  ? L extends Record<string, number>
+    ? Exclude<keyof L & string, _ServiceBuiltinLevels>
+    : never
+  : never;
+
+/**
+ * Typed `LogixiaLoggerService` with autocomplete for custom levels.
+ *
+ * Accepts either:
+ *   - **string union** of custom level names: `LogixiaServiceWith<'kafka' | 'payment'>`
+ *   - **config object type** (via `typeof`): `LogixiaServiceWith<typeof logixiaConfig>`
+ *
+ * Define your config with `as const` once, derive the type everywhere:
+ *
+ * @example
+ * ```ts
+ * // logger.config.ts — define once
+ * export const logixiaConfig = {
+ *   levelOptions: {
+ *     levels: { error: 0, warn: 1, info: 2, debug: 3, verbose: 4, kafka: 5, payment: 6 },
+ *   },
+ * } as const;
+ * export type AppLogger = LogixiaServiceWith<typeof logixiaConfig>;
+ *
+ * // any.controller.ts — use everywhere, no casting
+ * constructor(private readonly logger: AppLogger) {}
+ * // this.logger.kafka('msg')  ← fully typed
+ * // this.logger.payment('msg') ← fully typed
+ * ```
+ *
+ * @example
+ * ```ts
+ * // Or use string union directly:
+ * type AppLogger = LogixiaServiceWith<'kafka' | 'payment'>;
+ * ```
+ */
+export type LogixiaServiceWith<T extends string | Record<string, unknown>> =
+  LogixiaLoggerService & {
+    readonly [K in T extends string
+      ? Exclude<T, _ServiceBuiltinLevels>
+      : _ExtractCustomLevelNames<T>]: (
+      message: string,
+      data?: Record<string, unknown>
+    ) => Promise<void>;
+  };
 import { internalError } from '../utils/internal-log';
 import { getTraceContextKey, TraceContext } from '../utils/trace.utils';
 import { LogixiaLogger } from './logitron-logger';
@@ -134,7 +184,7 @@ export class LogixiaLoggerService implements LoggerService {
     for (const levelName of Object.keys(levels)) {
       const lower = levelName.toLowerCase();
       // Skip levels that already have a built-in implementation on this class
-      if (typeof this[lower] !== 'undefined') continue;
+      if (typeof (this as Record<string, unknown>)[lower] !== 'undefined') continue;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (this as any)[lower] = async (
         message: string,
@@ -347,7 +397,7 @@ export class LogixiaLoggerService implements LoggerService {
   // ── Child logger ───────────────────────────────────────────────────────────
 
   child(context: string, data?: Record<string, unknown>): LogixiaLoggerService {
-    const childService = new LogixiaLoggerService();
+    const childService = new LogixiaLoggerService(this._mergedConfig);
     childService.logger = this.logger.child(context, data) as LogixiaLogger;
     childService.context = context;
     return childService;

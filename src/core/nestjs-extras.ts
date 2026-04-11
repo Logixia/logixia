@@ -37,9 +37,15 @@ import { Catch, Inject, Optional } from '@nestjs/common';
 
 import { ErrorResponseBuilder } from '../exceptions/builder';
 import { isLogixiaException } from '../exceptions/exception';
-import type { LogLevelString } from '../types';
-import { LOGIXIA_LOGGER_PREFIX, LogixiaLoggerModule } from './logitron-logger.module';
+import type { LoggerConfig, LogLevelString, TraceIdConfig } from '../types';
+import { TraceContext } from '../utils/trace.utils';
+import {
+  LOGIXIA_LOGGER_CONFIG,
+  LOGIXIA_LOGGER_PREFIX,
+  LogixiaLoggerModule,
+} from './logitron-logger.module';
 import type { LogixiaLoggerService } from './logitron-nestjs.service';
+import { resolveResponseHeader } from './trace.middleware';
 
 // ── @InjectLogger() ──────────────────────────────────────────────────────────
 
@@ -142,6 +148,16 @@ export function LogMethod(options: LogMethodOptions = {}): MethodDecorator {
         entry['args'] = args;
       }
 
+      // Surface logger failures on stderr instead of silently swallowing them —
+      // a broken transport is an operator problem that must be observable.
+      // Uses a flat 2-arg helper (avoids curried `(phase) => (err) =>` nesting
+      // which trips the sonarjs no-nested-functions depth rule).
+      const reportLogFailure = (phase: string, err: unknown): void => {
+        process.stderr.write(
+          `[logixia] @LogMethod(${label}) ${phase} log failed: ${String(err)}\n`
+        );
+      };
+
       if (logger) {
         // Use logLevel (extended method) rather than the NestJS interface debug/info
         // which only accepts (message: unknown, context?: string)
@@ -152,10 +168,10 @@ export function LogMethod(options: LogMethodOptions = {}): MethodDecorator {
           >
         )[level];
         const logFn = (typeof logFnRaw === 'function' ? logFnRaw : logger.debug).bind(logger);
-        await (logFn as (msg: string, data?: Record<string, unknown>) => Promise<void>)(
-          `→ ${label}`,
-          entry
-        ).catch(() => void 0);
+        const entryPromise = (
+          logFn as (msg: string, data?: Record<string, unknown>) => Promise<void>
+        )(`→ ${label}`, entry);
+        await entryPromise.catch((e: unknown) => reportLogFailure('entry', e));
       }
 
       try {
@@ -175,17 +191,30 @@ export function LogMethod(options: LogMethodOptions = {}): MethodDecorator {
             >
           )[level];
           const logFn = (typeof logFnRaw === 'function' ? logFnRaw : logger.debug).bind(logger);
-          await (logFn as (msg: string, data?: Record<string, unknown>) => Promise<void>)(
-            `← ${label}`,
-            exit
-          ).catch(() => void 0);
+          const exitPromise = (
+            logFn as (msg: string, data?: Record<string, unknown>) => Promise<void>
+          )(`← ${label}`, exit);
+          await exitPromise.catch((e: unknown) => reportLogFailure('exit', e));
         }
 
         return result;
       } catch (error) {
         if (logger && logErrors) {
           const err = error instanceof Error ? error : new Error(String(error));
-          logger.error(err, `${label} durationMs=${Date.now() - start}`);
+          // Use the structured overload (Record<string, unknown>) so we get
+          // Promise<void> back and can attach a stderr fallback for transport
+          // failures — otherwise they'd become unhandled rejections.
+          const errLog: unknown = logger.error(err, {
+            method: label,
+            durationMs: Date.now() - start,
+          });
+          if (
+            errLog !== undefined &&
+            errLog !== null &&
+            typeof (errLog as Promise<void>).catch === 'function'
+          ) {
+            (errLog as Promise<void>).catch((e: unknown) => reportLogFailure('error', e));
+          }
         }
         throw error;
       }
@@ -225,16 +254,24 @@ export function LogMethod(options: LogMethodOptions = {}): MethodDecorator {
 @Catch()
 export class LogixiaExceptionFilter implements ExceptionFilter {
   private readonly _logger: LogixiaLoggerService | undefined;
+  private readonly _traceConfig: TraceIdConfig | undefined;
 
   constructor(
     @Optional()
     @Inject(`${LOGIXIA_LOGGER_PREFIX}SERVICE`)
-    logger?: LogixiaLoggerService
+    logger?: LogixiaLoggerService,
+    @Optional()
+    @Inject(LOGIXIA_LOGGER_CONFIG)
+    loggerConfig?: Partial<LoggerConfig>
   ) {
     // Prefer the injected logger; fall back to the global module logger so
     // `new LogixiaExceptionFilter()` (registered in main.ts before DI resolves)
     // still logs without needing an explicit logger argument.
     this._logger = logger ?? LogixiaLoggerModule._globalLogger ?? undefined;
+    // Pick up the user-configured trace settings (response header name, etc.)
+    // so the filter echoes the same header the middleware writes.
+    this._traceConfig =
+      typeof loggerConfig?.traceId === 'object' ? loggerConfig.traceId : undefined;
   }
 
   catch(exception: unknown, host: ArgumentsHost): void {
@@ -255,9 +292,13 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
     }
     const response = ctx.getResponse<MinimalResponse>();
 
-    // Prefer x-trace-id (set by TraceMiddleware) → request.id → auto-generate
+    // ALS is the single source of truth (set by TraceMiddleware).
+    // Fall back to header/request.id only if ALS has nothing (e.g. traceId disabled).
     const traceId =
-      (request.headers?.['x-trace-id'] as string | undefined) ?? request.id ?? undefined;
+      TraceContext.instance.getCurrentTraceId() ??
+      (request.headers?.['x-trace-id'] as string | undefined) ??
+      request.id ??
+      undefined;
 
     const { response: errorResponse, httpStatus } = ErrorResponseBuilder.build({
       exception,
@@ -272,20 +313,41 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
         method: request.method ?? '',
         url: request.url ?? '',
         status: httpStatus,
-        trace_id: errorResponse.meta.trace_id,
+        // Only include trace_id when it exists — keeps log records honest when
+        // tracing is disabled (instead of writing `trace_id: undefined`).
+        ...(errorResponse.meta.trace_id !== undefined
+          ? { trace_id: errorResponse.meta.trace_id }
+          : {}),
       };
 
+      // `error()` / `warn()` return Promise<void> for the structured overload.
+      // We cannot await inside a synchronous ExceptionFilter.catch(), so attach
+      // a `.catch()` to prevent unhandledRejection if a transport fails — and
+      // fall back to stderr so the error is never silently swallowed.
+      const onLogFailure = (err: unknown): void => {
+        process.stderr.write(
+          `[logixia] ExceptionFilter failed to write log entry: ${String(err)}\n`
+        );
+      };
+
+      let logPromise: Promise<void> | void;
       if (httpStatus >= 500) {
         const err = exception instanceof Error ? exception : new Error(String(exception));
-        // fire-and-forget — cannot await inside a synchronous ExceptionFilter.catch
-        this._logger.error(err, requestMeta);
+        logPromise = this._logger.error(err, requestMeta);
       } else if (isLogixiaException(exception)) {
-        this._logger.warn(
+        logPromise = this._logger.warn(
           `[${errorResponse.error.code}] ${errorResponse.error.message}`,
           requestMeta
         );
       } else {
-        this._logger.warn(`[${httpStatus}] ${errorResponse.error.message}`, requestMeta);
+        logPromise = this._logger.warn(
+          `[${httpStatus}] ${errorResponse.error.message}`,
+          requestMeta
+        );
+      }
+
+      if (logPromise && typeof (logPromise as Promise<void>).catch === 'function') {
+        (logPromise as Promise<void>).catch(onLogFailure);
       }
     }
 
@@ -295,7 +357,12 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
     }
 
     // ── Response headers ──────────────────────────────────────────────────
-    response.setHeader('X-Trace-ID', errorResponse.meta.trace_id);
+    if (errorResponse.meta.trace_id) {
+      const traceHeader = resolveResponseHeader(this._traceConfig);
+      if (traceHeader) {
+        response.setHeader(traceHeader, errorResponse.meta.trace_id);
+      }
+    }
     if (httpStatus === 429) {
       response.setHeader('Retry-After', '60');
     }

@@ -83,7 +83,15 @@ function buildTransports(): TransportConfig {
     LogixiaLoggerModule.forRoot({
       appName:     process.env['APP_NAME'] ?? 'thread-gate',
       environment: (process.env['NODE_ENV'] === 'production' ? 'production' : 'development'),
-      traceId:     true,
+      traceId:     {
+        enabled: true,
+        extractor: {
+          header: ['x-trace-id', 'x-request-id'],
+          query: ['traceId'],
+          body:  ['traceId'],
+          params: ['traceId'],
+        },
+      },
       format:      { timestamp: true, colorize: true, json: false },
 
       levelOptions: {
@@ -94,6 +102,7 @@ function buildTransports(): TransportConfig {
           [LogLevel.INFO]:    2,
           [LogLevel.DEBUG]:   3,
           [LogLevel.VERBOSE]: 4,
+          kafka:              5,
         },
         colors: {
           [LogLevel.ERROR]:   'red',
@@ -101,6 +110,8 @@ function buildTransports(): TransportConfig {
           [LogLevel.INFO]:    'blue',
           [LogLevel.DEBUG]:   'green',
           [LogLevel.VERBOSE]: 'cyan',
+          kafka:              'magenta',
+          'kafka.error':      'red',
         },
       },
 

@@ -74,7 +74,7 @@ describe('ErrorResponseBuilder.build — LogixiaException', () => {
     expect(() => new Date(response.meta.timestamp).toISOString()).not.toThrow();
   });
 
-  it('uses the provided traceId', () => {
+  it('uses the caller-supplied traceId when ALS is empty', () => {
     const ex = new LogixiaException(baseOpts);
     const { response } = ErrorResponseBuilder.build({
       exception: ex,
@@ -84,12 +84,12 @@ describe('ErrorResponseBuilder.build — LogixiaException', () => {
     expect(response.meta.trace_id).toBe('custom-trace-123');
   });
 
-  it('auto-generates a traceId when not provided', () => {
+  it('omits trace_id when ALS is empty AND no traceId is supplied', () => {
+    // Builder no longer silently generates a random UUID fallback — the field
+    // is absent when tracing is disabled / not yet initialised.
     const ex = new LogixiaException(baseOpts);
     const { response } = ErrorResponseBuilder.build({ exception: ex, path: '/p' });
-    expect(response.meta.trace_id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-    );
+    expect(response.meta.trace_id).toBeUndefined();
   });
 
   it('includes param when set', () => {

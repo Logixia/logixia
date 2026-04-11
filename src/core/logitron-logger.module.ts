@@ -55,9 +55,44 @@ export class LogixiaLoggerModule implements NestModule {
   private config: LogixiaModuleConfig = {};
   private static loggerConfig: Partial<LoggerConfig> = {};
 
-  /** @internal Global logger instance set when the module boots. Used by @LogMethod fallback. */
-  // eslint-disable-next-line sonarjs/public-static-readonly
+  /**
+   * @internal Backing field for the global logger. Do not read or write
+   * directly — use {@link getGlobalLogger} / {@link _setGlobalLogger} which
+   * enforce single-init semantics.
+   */
+  // Retained for backwards compatibility with internal callers that read the
+  // field directly (e.g. nestjs-extras). Treat as read-only — writes must go
+  // through _setGlobalLogger / _resetGlobalLogger.
+  // eslint-disable-next-line sonarjs/public-static-readonly -- intentional: we need to swap this in tests via _resetGlobalLogger, so `readonly` is too strict
   static _globalLogger: LogixiaLoggerService | null = null;
+
+  /**
+   * @internal Set the global logger exactly once.
+   *
+   * Called from the module's forRoot / forRootAsync factory. If the module is
+   * initialised more than once in the same process (nested DI context, test
+   * harness creating multiple apps, hot reload, etc.) a warning is written to
+   * stderr and the first logger wins — silently overwriting would allow the
+   * newer instance's transport config to replace the live one while the old
+   * one is still being used by registered shutdown hooks, decorators, etc.
+   *
+   * Use {@link _resetGlobalLogger} in tests to reset between runs.
+   */
+  static _setGlobalLogger(service: LogixiaLoggerService): void {
+    if (LogixiaLoggerModule._globalLogger !== null) {
+      process.stderr.write(
+        '[logixia] LogixiaLoggerModule.forRoot() was called more than once — ignoring the second init. ' +
+          'If this is intentional (e.g. in tests), call LogixiaLoggerModule._resetGlobalLogger() first.\n'
+      );
+      return;
+    }
+    LogixiaLoggerModule._globalLogger = service;
+  }
+
+  /** @internal Clear the global logger. Tests only. */
+  static _resetGlobalLogger(): void {
+    LogixiaLoggerModule._globalLogger = null;
+  }
 
   /**
    * Returns the global LogixiaLoggerService instance that was created when the
@@ -84,26 +119,23 @@ export class LogixiaLoggerModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     const { forRoutes = DEFAULT_ROUTES, exclude } = this.config;
 
-    // Configure middleware with trace config
-    const middlewareConfig = (req: Request, res: Response, next: NextFunction) => {
-      let traceConfig: TraceIdConfig | undefined;
+    // Resolve the trace config ONCE at configure() time — it does not change
+    // per request, so constructing a fresh TraceMiddleware on every invocation
+    // (the old behaviour) was just allocation churn.
+    let resolvedTraceConfig: TraceIdConfig | undefined;
+    if (typeof LogixiaLoggerModule.loggerConfig.traceId === 'object') {
+      resolvedTraceConfig = LogixiaLoggerModule.loggerConfig.traceId as TraceIdConfig;
+    } else if (LogixiaLoggerModule.loggerConfig.traceId === true) {
+      resolvedTraceConfig = {
+        enabled: true,
+        contextKey: 'traceId',
+        generator: () => TraceContext.instance.generate(),
+      };
+    }
 
-      if (typeof LogixiaLoggerModule.loggerConfig.traceId === 'object') {
-        traceConfig = LogixiaLoggerModule.loggerConfig.traceId as TraceIdConfig;
-      } else if (LogixiaLoggerModule.loggerConfig.traceId === true) {
-        // Default configuration when traceId is simply true
-        traceConfig = {
-          enabled: true,
-          contextKey: 'traceId',
-          generator: () => TraceContext.instance.generate(),
-        };
-      } else {
-        traceConfig = undefined;
-      }
-
-      const middleware = new TraceMiddleware(traceConfig);
-      return middleware.use(req, res, next);
-    };
+    const middleware = new TraceMiddleware(resolvedTraceConfig);
+    const middlewareConfig = (req: Request, res: Response, next: NextFunction) =>
+      middleware.use(req, res, next);
 
     if (exclude) {
       consumer
@@ -166,7 +198,7 @@ export class LogixiaLoggerModule implements NestModule {
               ...loggerConfig,
             };
             const service = new LogixiaLoggerService(defaultConfig);
-            LogixiaLoggerModule._globalLogger = service;
+            LogixiaLoggerModule._setGlobalLogger(service);
             return service;
           },
           inject: [LOGIXIA_LOGGER_CONFIG],
@@ -244,7 +276,7 @@ export class LogixiaLoggerModule implements NestModule {
             // Store config for middleware access
             LogixiaLoggerModule.loggerConfig = defaultConfig;
             const service = new LogixiaLoggerService(defaultConfig);
-            LogixiaLoggerModule._globalLogger = service;
+            LogixiaLoggerModule._setGlobalLogger(service);
             return service;
           },
           inject: [LOGIXIA_LOGGER_CONFIG],

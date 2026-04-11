@@ -76,8 +76,19 @@ export class TraceContext {
   /**
    * Mutate the CURRENT async context in-place.
    *
-   * ⚠️  Uses `enterWith()` — prefer `run()` when you can wrap the operation
-   * in a callback, as it scopes the context to the callback only.
+   * ⚠️  DEPRECATED — unsafe for concurrent requests.
+   *
+   * Uses `AsyncLocalStorage.enterWith()`, which mutates the current async
+   * execution context and every Promise chain spawned from it. In a server
+   * processing overlapping requests this can cause a trace ID set for one
+   * request to bleed into *other* in-flight requests that share the same
+   * async parent (e.g. a module-level setup function or a cached handler).
+   *
+   * Use {@link run} instead — it scopes the context to a callback so there
+   * is no risk of cross-request leakage.
+   *
+   * @deprecated Use `TraceContext.instance.run(traceId, fn)` — do not call
+   *             `setTraceId` from request-handling code.
    */
   setTraceId(traceId: string, data?: Record<string, unknown>): void {
     const current = this.storage.getStore() ?? {};
@@ -124,9 +135,23 @@ export function getCurrentTraceId(): string | undefined {
 /**
  * Set trace ID in the CURRENT async context without starting a new one.
  *
- * ⚠️  Uses `enterWith()` — mutates the context for the current async execution
- * and all futures spawned from it. Prefer `runWithTraceId()` when you can wrap
- * the operation in a callback.
+ * ⚠️  DEPRECATED — unsafe for concurrent requests.
+ *
+ * Uses `AsyncLocalStorage.enterWith()`, which mutates the current async
+ * execution context and every Promise chain spawned from it. Under load this
+ * can cause a trace ID from one request to bleed into others sharing the same
+ * async parent.
+ *
+ * Use {@link runWithTraceId} instead:
+ *
+ * ```ts
+ * await runWithTraceId(traceId, async () => {
+ *   // everything here is scoped to this traceId only
+ * });
+ * ```
+ *
+ * @deprecated Use `runWithTraceId(traceId, fn)` — do not call `setTraceId`
+ *             from request-handling code.
  */
 export function setTraceId(traceId: string, data?: Record<string, unknown>): void {
   TraceContext.instance.setTraceId(traceId, data);
@@ -147,6 +172,17 @@ interface RequestLike {
   params?: Record<string, string | undefined>;
 }
 
+/**
+ * Coerce an arbitrary value to a non-empty trace ID string, or `undefined`.
+ * Rejects empty/whitespace-only strings, non-strings, and non-first array elements.
+ */
+function toValidTraceId(value: unknown): string | undefined {
+  const first = Array.isArray(value) ? value[0] : value;
+  if (typeof first !== 'string') return undefined;
+  const trimmed = first.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 /** Extract trace ID from request using configuration (header → query → body → params). */
 export function extractTraceId(
   request: unknown,
@@ -157,23 +193,23 @@ export function extractTraceId(
   if (config.header) {
     const headers = Array.isArray(config.header) ? config.header : [config.header];
     for (const header of headers) {
-      const value = req.headers?.[header.toLowerCase()];
-      if (value) return Array.isArray(value) ? value[0] : value;
+      const value = toValidTraceId(req.headers?.[header.toLowerCase()]);
+      if (value) return value;
     }
   }
 
   if (config.query) {
     const queries = Array.isArray(config.query) ? config.query : [config.query];
     for (const query of queries) {
-      const value = req.query?.[query];
-      if (value) return Array.isArray(value) ? value[0] : value;
+      const value = toValidTraceId(req.query?.[query]);
+      if (value) return value;
     }
   }
 
   if (config.body) {
     const bodyFields = Array.isArray(config.body) ? config.body : [config.body];
     for (const field of bodyFields) {
-      const value = req.body?.[field];
+      const value = toValidTraceId(req.body?.[field]);
       if (value) return value;
     }
   }
@@ -181,7 +217,7 @@ export function extractTraceId(
   if (config.params) {
     const paramFields = Array.isArray(config.params) ? config.params : [config.params];
     for (const param of paramFields) {
-      const value = req.params?.[param];
+      const value = toValidTraceId(req.params?.[param]);
       if (value) return value;
     }
   }

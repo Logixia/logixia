@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { LogixiaLoggerService } from '../../../../src/core/logitron-nestjs.service';
 import { LogMethod } from '../../../../src/core/nestjs-extras';
-import { RequestContextManager, createHttpRequest } from '../../../../src/core/request-context';
 import { LogixiaException } from '../../../../src/exceptions/exception';
 
 export interface User {
@@ -28,14 +27,7 @@ export class UsersService {
 
   @LogMethod({ level: 'debug', logArgs: false })
   async findAll(): Promise<User[]> {
-    // RequestContextManager — track this "operation" for stats
-    const reqCtx = RequestContextManager.createContext(
-      createHttpRequest('GET', '/users', {})
-    );
-
     await this.log.info('Fetching all users', { count: DB.length });
-
-    RequestContextManager.updateContext(reqCtx.requestId, { statusCode: 200, headers: {}, timestamp: Date.now() });
     return DB;
   }
 
@@ -85,8 +77,4 @@ export class UsersService {
     return user;
   }
 
-  /** Used by the health endpoint to expose RequestContextManager stats */
-  getContextStats() {
-    return RequestContextManager.getStats();
-  }
 }

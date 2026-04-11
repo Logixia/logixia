@@ -1,6 +1,5 @@
 import { Controller, Get, Post } from '@nestjs/common';
 import { LogixiaLoggerService } from '../../../../src/core/logitron-nestjs.service';
-import { RequestContextManager } from '../../../../src/core/request-context';
 import { getCurrentTraceId } from '../../../../src/utils/trace.utils';
 import { EventsGateway } from '../events/events.gateway';
 
@@ -8,7 +7,6 @@ import { EventsGateway } from '../events/events.gateway';
  * Health / diagnostics controller.
  *
  * GET  /health          — liveness check with current traceId
- * GET  /health/context  — RequestContextManager stats
  * POST /health/broadcast — trigger server-push WS event (shows HTTP→WS traceId propagation)
  * GET  /health/log-levels — demonstrate all log levels from a single request
  */
@@ -28,13 +26,6 @@ export class HealthController {
     const traceId = getCurrentTraceId();
     await this.log.info('Health check', { traceId });
     return { status: 'ok', traceId, ts: new Date().toISOString() };
-  }
-
-  @Get('context')
-  async contextStats() {
-    const stats = RequestContextManager.getStats();
-    await this.log.info('RequestContext stats', stats);
-    return stats;
   }
 
   /**

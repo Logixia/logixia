@@ -20,7 +20,7 @@ import { getCurrentTraceId } from '../../../../src/utils/trace.utils';
  * KafkaSimulatorController inside a runWithTraceId() wrapper, so traceId
  * propagation still works without a real broker.
  */
-@UseInterceptors(new KafkaTraceInterceptor())
+@UseInterceptors(new KafkaTraceInterceptor(undefined, true))
 @Controller()
 export class KafkaController {
   private readonly log: LogixiaLoggerService;

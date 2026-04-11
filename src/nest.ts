@@ -17,7 +17,7 @@ export {
   LOGIXIA_LOGGER_PREFIX,
   LogixiaLoggerModule,
 } from './core/logitron-logger.module';
+export type { LogixiaServiceWith, LogixiaServiceWithLevels } from './core/logitron-nestjs.service';
 export { LogixiaLoggerService } from './core/logitron-nestjs.service';
-export { RequestContextManager } from './core/request-context';
 export { TraceMiddleware } from './core/trace.middleware';
 export { WebSocketTraceInterceptor } from './core/websocket-trace.interceptor';

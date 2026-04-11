@@ -13,8 +13,7 @@
  * ```
  */
 
-import { randomUUID } from 'node:crypto';
-
+import { TraceContext } from '../utils/trace.utils.js';
 import { isLogixiaException } from './exception.js';
 import type { LogixiaErrorResponse } from './types.js';
 
@@ -46,13 +45,16 @@ export interface BuildParams {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
- * Generates a trace ID using Node's built-in `crypto.randomUUID`.
- * No extra dependencies required.
+ * Generates a trace ID via the shared {@link TraceContext} generator.
+ *
+ * Delegates to `TraceContext.instance.generate()` so any custom generator
+ * configured on `TraceIdConfig.generator` is respected — avoids the silent
+ * "builder has its own UUID source" divergence this module had previously.
  *
  * @example `'550e8400-e29b-41d4-a716-446655440000'`
  */
 export function generateTraceId(): string {
-  return randomUUID();
+  return TraceContext.instance.generate();
 }
 
 /** @deprecated Use `generateTraceId` instead. */
@@ -131,18 +133,28 @@ export class ErrorResponseBuilder {
    * @param params - See `BuildParams`.
    * @returns The unified error response and the HTTP status code to send.
    *
+   * @remarks
+   * `traceId` does not need to be supplied by the caller in most cases — the
+   * builder reads `TraceContext.instance.getCurrentTraceId()` internally and
+   * falls back to the explicit `traceId` argument only when AsyncLocalStorage
+   * is empty. If neither source yields a value, `meta.trace_id` is omitted.
+   *
    * @example In a NestJS exception filter
    * ```ts
    * const { response, httpStatus } = ErrorResponseBuilder.build<AppCode, AppType>({
    *   exception,
-   *   traceId: request.headers['x-trace-id'] as string | undefined,
+   *   // Omit traceId — it will be picked up from ALS automatically.
    *   path:    request.url,
    *   service: process.env.SERVICE_NAME,
    *   startTime: request.startTime,
    * });
    *
    * if (process.env.NODE_ENV === 'production') delete response.debug;
-   * response.setHeader('X-Trace-ID', response.meta.trace_id);
+   * // Echo the resolved traceId back on whatever header your TraceIdConfig says —
+   * // do NOT hardcode 'X-Trace-Id', use `resolveResponseHeader(config)` instead.
+   * if (response.meta.trace_id) {
+   *   response.setHeader(resolveResponseHeader(config) ?? 'X-Trace-Id', response.meta.trace_id);
+   * }
    * response.status(httpStatus).json(response);
    * ```
    */
@@ -150,7 +162,8 @@ export class ErrorResponseBuilder {
     params: BuildParams
   ): { response: LogixiaErrorResponse<TCode, TType>; httpStatus: number } {
     const { exception, path, service, startTime, traceId: rawTraceId } = params;
-    const traceId = rawTraceId ?? generateTraceId();
+    // ALS is authoritative → caller-supplied → undefined (field omitted from response).
+    const traceId = TraceContext.instance.getCurrentTraceId() ?? rawTraceId;
     const timestamp = new Date().toISOString();
     const durationMs = startTime !== undefined ? Date.now() - startTime : undefined;
 
@@ -173,7 +186,7 @@ export class ErrorResponseBuilder {
         success: false,
         error: errorBlock,
         meta: {
-          trace_id: traceId,
+          ...(traceId !== undefined ? { trace_id: traceId } : {}),
           timestamp,
           path,
           status: exception.httpStatus,
@@ -207,7 +220,7 @@ export class ErrorResponseBuilder {
       const response: LogixiaErrorResponse<TCode, TType> = {
         success: false,
         error: { type, code, message },
-        meta: { trace_id: traceId, timestamp, path, status },
+        meta: { ...(traceId !== undefined ? { trace_id: traceId } : {}), timestamp, path, status },
         ...(debug !== undefined ? { debug } : {}),
       };
 
@@ -225,7 +238,12 @@ export class ErrorResponseBuilder {
         code: 'INTERNAL_SERVER_ERROR' as TCode,
         message: 'An unexpected error occurred.',
       },
-      meta: { trace_id: traceId, timestamp, path, status: 500 },
+      meta: {
+        ...(traceId !== undefined ? { trace_id: traceId } : {}),
+        timestamp,
+        path,
+        status: 500,
+      },
       ...(debug !== undefined ? { debug } : {}),
     };
 

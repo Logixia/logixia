@@ -2,16 +2,63 @@
 
 import type { CallHandler, ExecutionContext, NestInterceptor } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
-import { Observable } from 'rxjs';
+import { EMPTY, Observable } from 'rxjs';
 
 import type { TraceIdConfig } from '../types';
 import { extractTraceId, TraceContext } from '../utils/trace.utils';
+import { LogixiaLoggerModule } from './logitron-logger.module';
+
+/**
+ * Observable counters exposed for monitoring Kafka consumer trace hygiene.
+ *
+ * Usage:
+ *   import { KafkaTraceInterceptor } from 'logixia/nest';
+ *   setInterval(() => {
+ *     myMetrics.gauge('kafka.trace.dropped', KafkaTraceInterceptor.metrics.dropped);
+ *   }, 10_000);
+ */
+export interface KafkaTraceMetrics {
+  /** Messages processed where a traceId was successfully resolved (body/header/ALS). */
+  accepted: number;
+  /** Messages handled without any traceId — `requireTraceId: false`. */
+  acceptedWithoutTrace: number;
+  /** Messages dropped because `requireTraceId: true` and no traceId was found. */
+  dropped: number;
+}
 
 @Injectable()
 export class KafkaTraceInterceptor implements NestInterceptor {
+  /**
+   * Process-wide counters. Readable from anywhere — scrape into your metrics
+   * system (Prometheus, Datadog, CloudWatch) on an interval.
+   */
+  static readonly metrics: KafkaTraceMetrics = {
+    accepted: 0,
+    acceptedWithoutTrace: 0,
+    dropped: 0,
+  };
+
+  /** Reset counters (tests). */
+  static resetMetrics(): void {
+    KafkaTraceInterceptor.metrics.accepted = 0;
+    KafkaTraceInterceptor.metrics.acceptedWithoutTrace = 0;
+    KafkaTraceInterceptor.metrics.dropped = 0;
+  }
+
   private readonly ctx = TraceContext.instance;
 
-  constructor(private readonly config?: TraceIdConfig) {
+  /**
+   * @param config        - TraceIdConfig options (extractor keys, contextKey, etc.)
+   * @param requireTraceId - When true, messages with no traceId are silently skipped
+   *                         (EMPTY Observable — message is ack'd, consumer stays alive).
+   *                         A WARN is logged AND `KafkaTraceInterceptor.metrics.dropped`
+   *                         increments so the missing traceId is observable end-to-end.
+   *                         Default: false (handler runs without trace context).
+   */
+  constructor(
+    private readonly config?: TraceIdConfig,
+    private readonly requireTraceId: boolean = false
+  ) {
     this.config = {
       enabled: true,
       contextKey: 'traceId',
@@ -25,7 +72,6 @@ export class KafkaTraceInterceptor implements NestInterceptor {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NestJS interceptor interface requires Observable<any>
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
-    // Check if trace ID is enabled
     if (!this.config?.enabled) {
       return next.handle();
     }
@@ -36,29 +82,33 @@ export class KafkaTraceInterceptor implements NestInterceptor {
 
     let traceId: string | undefined;
 
-    // Try to extract existing trace ID using extractor
     if (this.config.extractor) {
-      // Create a request-like object for extractTraceId
-      const requestLike = {
-        body: data,
-        headers: rpcData?.headers || {},
-        query: {},
-        params: {},
-      };
-      traceId = extractTraceId(requestLike, this.config.extractor);
+      traceId = extractTraceId(
+        { body: data, headers: rpcData?.headers ?? {}, query: {}, params: {} },
+        this.config.extractor
+      );
     }
 
-    // Only use current trace ID if no extraction happened and we have one
     if (!traceId) {
       traceId = this.ctx.getCurrentTraceId();
     }
 
-    // If still no trace ID and enabled, skip (don't generate)
     if (!traceId) {
+      if (this.requireTraceId) {
+        // Warn via global logger (set when LogixiaLoggerModule boots) and ack
+        // the message by returning EMPTY — consumer stays alive, no retry loop.
+        KafkaTraceInterceptor.metrics.dropped++;
+        LogixiaLoggerModule.getGlobalLogger()?.warn(
+          `[KafkaTraceInterceptor] Missing traceId on topic "${rpcData?.topic}" — message skipped.`
+        );
+        return EMPTY;
+      }
+      KafkaTraceInterceptor.metrics.acceptedWithoutTrace++;
       return next.handle();
     }
 
-    // Set up Kafka-specific context data
+    KafkaTraceInterceptor.metrics.accepted++;
+
     const kafkaContext = {
       messageType: 'kafka',
       topic: rpcData?.topic,
@@ -68,7 +118,6 @@ export class KafkaTraceInterceptor implements NestInterceptor {
       timestamp: rpcData?.timestamp,
     };
 
-    // Run the handler with trace ID context
     return new Observable((subscriber) => {
       this.ctx.run(
         traceId!,
