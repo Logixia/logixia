@@ -37,6 +37,19 @@ export class ConsoleTransport implements ITransport {
     ['reset', '\x1b[0m'],
   ]);
 
+  // CWE-117 guard: strip ASCII control characters from user-supplied text so
+  // attacker-controlled log payloads cannot inject ANSI escapes, overwrite
+  // lines, or forge log entries on the operator's terminal. Keeps \t (0x09)
+  // since tabs are harmless, and strips everything else in the C0 + DEL + C1
+  // ranges. Applied only to text mode — JSON mode already escapes via
+  // JSON.stringify.
+  // eslint-disable-next-line no-control-regex
+  private static readonly CONTROL_CHARS_RE = /[\x00-\x08\x0B-\x1F\x7F-\x9F]/g;
+
+  private static sanitize(value: string): string {
+    return value.replace(ConsoleTransport.CONTROL_CHARS_RE, '');
+  }
+
   constructor(private config: ConsoleTransportConfig = {}) {}
 
   write(entry: TransportLogEntry): Promise<void> {
@@ -82,20 +95,21 @@ export class ConsoleTransport implements ITransport {
 
     // Context
     if (entry.context) {
-      const context = `[${entry.context}]`;
+      const context = `[${ConsoleTransport.sanitize(entry.context)}]`;
       parts.push(this.colorize(context, 'cyan'));
     }
 
     // Trace ID
     if (entry.traceId) {
-      const traceId = `(${entry.traceId})`;
+      const traceId = `(${ConsoleTransport.sanitize(entry.traceId)})`;
       parts.push(this.colorize(traceId, 'magenta'));
     }
 
     // Message
-    parts.push(entry.message);
+    parts.push(ConsoleTransport.sanitize(entry.message));
 
-    // Data
+    // Data — JSON.stringify already escapes control chars as \u001b, so the
+    // JSON representation is safe to print without further sanitization.
     if (entry.data && Object.keys(entry.data).length > 0) {
       const data = JSON.stringify(entry.data);
       parts.push(this.colorize(data, 'blue'));

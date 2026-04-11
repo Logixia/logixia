@@ -222,12 +222,18 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
 
   private async connectSQLite(): Promise<void> {
     try {
-      const sqlite3 = await import('sqlite3').catch(() => {
+      // Optional peer dependencies resolved at runtime only.
+      // Variable module specifiers bypass TS static resolution so logixia can
+      // ship without declaring `sqlite`/`sqlite3` as devDependencies.
+      const sqlite3ModuleName = 'sqlite3';
+      const sqliteModuleName = 'sqlite';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- optional runtime dependency without bundled types
+      const sqlite3: any = await import(sqlite3ModuleName).catch(() => {
         throw new Error('SQLite driver not installed. Run: npm install sqlite3 sqlite');
       });
-      const { open } = await import('sqlite').catch(() => {
+      const { open } = (await import(sqliteModuleName).catch(() => {
         throw new Error('SQLite driver not installed. Run: npm install sqlite3 sqlite');
-      });
+      })) as { open: (opts: { filename: string; driver: unknown }) => Promise<unknown> };
 
       this.connection = await open({
         filename: this.config.database,

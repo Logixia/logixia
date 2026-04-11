@@ -100,6 +100,7 @@ function sanitizeHeaders(
   if (!headers) return {};
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(headers)) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
     out[k] = redactSet.has(k.toLowerCase()) ? '[REDACTED]' : v;
   }
   return out;

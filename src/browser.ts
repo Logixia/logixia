@@ -197,6 +197,26 @@ export class BrowserConsoleTransport implements IBrowserTransport {
 
 // ── Remote Batch Transport ────────────────────────────────────────────────────
 
+function validateRemoteUrl(raw: string): string {
+  if (typeof raw !== 'string' || raw.length === 0) {
+    throw new TypeError('BrowserRemoteTransport: `url` must be a non-empty string');
+  }
+  // Allow same-origin relative paths (e.g. "/api/logs") — these are safe.
+  if (raw.startsWith('/') && !raw.startsWith('//')) return raw;
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new TypeError(`BrowserRemoteTransport: invalid url "${raw}"`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new TypeError(
+      `BrowserRemoteTransport: url scheme "${parsed.protocol}" is not allowed; use http: or https:`
+    );
+  }
+  return raw;
+}
+
 /**
  * Browser transport that batches log entries and sends them to a remote
  * HTTP endpoint via `fetch` (available in all modern browsers and Edge runtimes).
@@ -237,7 +257,7 @@ export class BrowserRemoteTransport implements IBrowserTransport {
     flushIntervalMs?: number;
     level?: BrowserLogLevel;
   }) {
-    this.url = options.url;
+    this.url = validateRemoteUrl(options.url);
     this.headers = options.headers ?? {};
     this.batchSize = options.batchSize ?? 100;
     this.flushIntervalMs = options.flushIntervalMs ?? 5000;

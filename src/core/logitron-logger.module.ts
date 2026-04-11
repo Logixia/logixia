@@ -155,7 +155,9 @@ export class LogixiaLoggerModule implements NestModule {
     LogixiaLoggerModule.loggerConfig = config || {};
 
     const traceConfig =
-      typeof config?.traceId === 'object' ? config.traceId : { enabled: !!config?.traceId };
+      config?.traceId && typeof config.traceId === 'object'
+        ? config.traceId
+        : { enabled: !!config?.traceId };
 
     return {
       module: LogixiaLoggerModule,

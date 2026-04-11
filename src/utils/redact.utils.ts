@@ -184,6 +184,11 @@ export function redactObject(
   const result: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(obj)) {
+    // Prototype pollution guard: skip forbidden keys that could mutate
+    // Object.prototype when assigned via bracket notation on a literal object.
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      continue;
+    }
     const fullPath = _currentPath ? `${_currentPath}.${key}` : key;
 
     // ── 1. Path-based redaction ──────────────────────────────────────────────

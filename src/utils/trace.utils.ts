@@ -142,12 +142,44 @@ export function getCurrentTraceId(): string | undefined {
  * can cause a trace ID from one request to bleed into others sharing the same
  * async parent.
  *
- * Use {@link runWithTraceId} instead:
+ * Use {@link runWithTraceId} instead. Migration patterns:
  *
+ * **Express / Fastify middleware — before:**
  * ```ts
- * await runWithTraceId(traceId, async () => {
- *   // everything here is scoped to this traceId only
+ * app.use((req, _res, next) => {
+ *   setTraceId(req.headers['x-trace-id'] ?? generateTraceId());
+ *   next();
  * });
+ * ```
+ * **after:**
+ * ```ts
+ * app.use((req, _res, next) => {
+ *   runWithTraceId(req.headers['x-trace-id'] ?? generateTraceId(), () => next());
+ * });
+ * ```
+ *
+ * **Kafka / queue consumer — before:**
+ * ```ts
+ * async function handle(msg) {
+ *   setTraceId(msg.headers['x-trace-id']);
+ *   await processMessage(msg);
+ * }
+ * ```
+ * **after:**
+ * ```ts
+ * async function handle(msg) {
+ *   await runWithTraceId(msg.headers['x-trace-id'], () => processMessage(msg));
+ * }
+ * ```
+ *
+ * **Background job — before:**
+ * ```ts
+ * setTraceId(generateTraceId(), { jobId: job.id });
+ * await job.run();
+ * ```
+ * **after:**
+ * ```ts
+ * await runWithTraceId(generateTraceId(), () => job.run(), { jobId: job.id });
  * ```
  *
  * @deprecated Use `runWithTraceId(traceId, fn)` — do not call `setTraceId`

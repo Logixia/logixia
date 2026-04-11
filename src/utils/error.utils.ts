@@ -114,6 +114,7 @@ function _serializeError(
 
   for (const key of Object.getOwnPropertyNames(error)) {
     if (skip.has(key)) continue;
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
     try {
       serialized[key] = serializeValue(errorRecord[key], maxDepth - depth - 1);
     } catch {
@@ -148,6 +149,7 @@ function serializeValue(value: unknown, remainingDepth: number): unknown {
   if (typeof value === 'object') {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
       try {
         out[k] = serializeValue(v, remainingDepth - 1);
       } catch {

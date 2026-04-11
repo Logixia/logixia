@@ -87,6 +87,7 @@ export class JsonFormatter implements ILogFormatter {
     const serialized: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(payload)) {
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
       try {
         if (value instanceof Error) {
           serialized[key] = serializeError(value);

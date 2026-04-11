@@ -30,10 +30,18 @@
  */
 
 import * as https from 'node:https';
-import * as url from 'node:url';
 
 import type { IAsyncTransport, TransportLogEntry } from '../types/transport.types';
 import { internalError, internalWarn } from '../utils/internal-log';
+
+/**
+ * Azure AD tenant IDs are either a GUID or a verified domain (e.g. `contoso.onmicrosoft.com`).
+ * This pattern is deliberately permissive on structure but strict on character
+ * set — it rejects the breakout characters (`/`, `@`, `:`, `?`, `#`, whitespace)
+ * that would let a hostile config smuggle a different host, path, or query into
+ * the OAuth token URL.
+ */
+const AZURE_TENANT_RE = /^[a-z0-9][a-z0-9.-]{1,253}$/i;
 
 export interface AzureMonitorTransportConfig {
   /** DCE (Data Collection Endpoint) URL, e.g. `https://<name>.ingest.monitor.azure.com`. */
@@ -153,14 +161,22 @@ export class AzureMonitorTransport implements IAsyncTransport {
       scope: 'https://monitor.azure.com/.default',
     }).toString();
 
+    const tenantId = this.tenantId;
+    if (!AZURE_TENANT_RE.test(tenantId)) {
+      internalWarn(
+        `AzureMonitorTransport: refusing to request token — tenantId "${tenantId}" is not a valid GUID or domain`
+      );
+      return null;
+    }
+
     return new Promise<string | null>((resolve, reject) => {
-      const reqUrl = url.parse(
-        `https://login.microsoftonline.com/${this.tenantId}/oauth2/v2.0/token`
+      const reqUrl = new URL(
+        `https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/oauth2/v2.0/token`
       );
       const req = https.request(
         {
           hostname: reqUrl.hostname,
-          path: reqUrl.path,
+          path: `${reqUrl.pathname}${reqUrl.search}`,
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -198,15 +214,29 @@ export class AzureMonitorTransport implements IAsyncTransport {
 
     const records = entries.map((e) => this.toAzureRecord(e));
     const body = JSON.stringify(records);
-    const reqUrl = url.parse(
-      `${this.endpoint}/dataCollectionRules/${this.ruleId}/streams/${this.streamName}?api-version=2023-01-01`
-    );
+    let reqUrl: URL;
+    try {
+      // Build from the user-configured DCE endpoint; encodeURIComponent-ing the
+      // ruleId/streamName stops a hostile config from smuggling extra path
+      // segments or query params into the request.
+      reqUrl = new URL(
+        `dataCollectionRules/${encodeURIComponent(this.ruleId)}/streams/${encodeURIComponent(this.streamName)}?api-version=2023-01-01`,
+        this.endpoint.endsWith('/') ? this.endpoint : `${this.endpoint}/`
+      );
+    } catch (error) {
+      internalError(`AzureMonitorTransport: invalid endpoint "${this.endpoint}"`, error);
+      return;
+    }
+    if (reqUrl.protocol !== 'https:') {
+      internalError(`AzureMonitorTransport: endpoint must use https (got ${reqUrl.protocol})`);
+      return;
+    }
 
     return new Promise<void>((resolve, reject) => {
       const req = https.request(
         {
           hostname: reqUrl.hostname,
-          path: reqUrl.path,
+          path: `${reqUrl.pathname}${reqUrl.search}`,
           method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,

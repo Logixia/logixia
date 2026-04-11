@@ -5,6 +5,12 @@
 import type { ILogFormatter, LogEntry } from '../types';
 import { LogLevel } from '../types';
 
+// CWE-117 guard: strip ASCII control chars so attacker-supplied log data
+// cannot smuggle ANSI escapes through the text formatter.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS_RE = /[\x00-\x08\x0B-\x1F\x7F-\x9F]/g;
+const stripControls = (value: string): string => value.replace(CONTROL_CHARS_RE, '');
+
 export class TextFormatter implements ILogFormatter {
   private colorize: boolean;
   private includeTimestamp: boolean;
@@ -64,33 +70,37 @@ export class TextFormatter implements ILogFormatter {
 
     // Add app name
     if (this.includeAppName) {
+      const safeAppName = stripControls(entry.appName);
       const appName = this.colorize
-        ? `${this.colors.bold}${entry.appName}${this.colors.reset}`
-        : entry.appName;
+        ? `${this.colors.bold}${safeAppName}${this.colors.reset}`
+        : safeAppName;
       parts.push(`[${appName}]`);
     }
 
     // Add trace ID
     if (this.includeTraceId && entry.traceId) {
+      const safeTraceId = stripControls(entry.traceId);
       const traceId = this.colorize
-        ? `${this.colors.dim}${entry.traceId}${this.colors.reset}`
-        : entry.traceId;
+        ? `${this.colors.dim}${safeTraceId}${this.colors.reset}`
+        : safeTraceId;
       parts.push(`[${traceId}]`);
     }
 
     // Add context
     if (this.includeContext && entry.context) {
+      const safeContext = stripControls(entry.context);
       const context = this.colorize
-        ? `${this.colors.cyan}${entry.context}${this.colors.reset}`
-        : entry.context;
+        ? `${this.colors.cyan}${safeContext}${this.colors.reset}`
+        : safeContext;
       parts.push(`[${context}]`);
     }
 
     // Add message
+    const safeMessage = stripControls(entry.message);
     const message =
       this.colorize && entry.level === LogLevel.ERROR
-        ? `${this.colors.error}${entry.message}${this.colors.reset}`
-        : entry.message;
+        ? `${this.colors.error}${safeMessage}${this.colors.reset}`
+        : safeMessage;
     parts.push(message);
 
     // Add payload
