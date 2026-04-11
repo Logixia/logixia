@@ -34,6 +34,8 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
+        env:
+          HUSKY: 0 # skip husky install in CI — no local git hooks needed
         run: npm install
 
       - name: Build
@@ -44,4 +46,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
+          HUSKY: 0 # skip commit-msg / pre-commit hooks on the auto-generated release commit
         run: npx --yes -p semantic-release@25 -p @semantic-release/changelog@6 -p @semantic-release/git@10 -p conventional-changelog-conventionalcommits@8 semantic-release
