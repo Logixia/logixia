@@ -3,6 +3,18 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.8.4](https://github.com/Logixia/logixia/compare/v1.8.3...v1.8.4) (2026-04-11)
+
+### 🐛 Bug Fixes
+
+* **build:** stop bundling optional DB drivers + repair size-limit CI ([0336e00](https://github.com/Logixia/logixia/commit/0336e0057f5d78eaaf7c4ebe53ad9fd2a741a694))
+* **ci:** disable husky hooks during semantic-release ([66f75a1](https://github.com/Logixia/logixia/commit/66f75a14e0805ed68232ca6971e2a88c960b839a))
+* **ci:** stop husky leaking 'HUSKY=0 skip install' into npm pack stdout ([89efdb4](https://github.com/Logixia/logixia/commit/89efdb40e6b6f8680d84c7829468edbe9401b758))
+
+### ♻️ Code Refactoring
+
+* **cli:** migrate chalk → picocolors ([846f213](https://github.com/Logixia/logixia/commit/846f213e6797e77489c068b04f04b8e173fa373f))
+
 ## [1.8.3](https://github.com/Logixia/logixia/compare/v1.8.2...v1.8.3) (2026-04-11)
 
 ### ♻️ Code Refactoring
