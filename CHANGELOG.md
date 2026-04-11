@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.8.3](https://github.com/Logixia/logixia/compare/v1.8.2...v1.8.3) (2026-04-11)
+
+### ♻️ Code Refactoring
+
+* **core:** production readiness pass — memory, ALS, logging, kafka metrics ([b9f2d68](https://github.com/Logixia/logixia/commit/b9f2d680c3d2947b5cb4e2a7da9049062721ae1e))
+
 ## [1.8.2](https://github.com/Logixia/logixia/compare/v1.8.1...v1.8.2) (2026-03-25)
 
 ### ♻️ Code Refactoring
