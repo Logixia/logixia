@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.8.5](https://github.com/Logixia/logixia/compare/v1.8.4...v1.8.5) (2026-04-17)
+
+### 🐛 Bug Fixes
+
+* **logger:** defend against non-string context and entry fields ([e639356](https://github.com/Logixia/logixia/commit/e639356ce75e6d56ee7f0f4975752460c0ad46c3))
+
 ## [1.8.4](https://github.com/Logixia/logixia/compare/v1.8.3...v1.8.4) (2026-04-11)
 
 ### 🐛 Bug Fixes
