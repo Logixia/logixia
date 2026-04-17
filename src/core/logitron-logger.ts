@@ -44,6 +44,7 @@ import type {
   TimingEntry,
 } from '../types';
 import { LogLevel } from '../types';
+import { safeToString } from '../utils/coerce.utils';
 import { isError, serializeError } from '../utils/error.utils';
 import { internalError, internalLog, internalWarn } from '../utils/internal-log';
 import { _getOtelPayloadIfEnabled } from '../utils/otel';
@@ -502,7 +503,7 @@ export class LogixiaLogger<
   }
 
   setContext(context: string): void {
-    this.context = context;
+    this.context = typeof context === 'string' ? context : safeToString(context);
   }
 
   getContext(): string | undefined {

@@ -3,6 +3,7 @@ import type {
   ITransport,
   TransportLogEntry,
 } from '../types/transport.types';
+import { safeToString } from '../utils/coerce.utils';
 
 /**
  * Writes log entries to stdout (info/debug/verbose) and stderr (error/warn).
@@ -46,8 +47,10 @@ export class ConsoleTransport implements ITransport {
   // eslint-disable-next-line no-control-regex
   private static readonly CONTROL_CHARS_RE = /[\x00-\x08\x0B-\x1F\x7F-\x9F]/g;
 
-  private static sanitize(value: string): string {
-    return value.replace(ConsoleTransport.CONTROL_CHARS_RE, '');
+  private static sanitize(value: unknown): string {
+    // Coerce to string first: upstream code (NestJS internals, user payloads)
+    // can pass objects / Errors here, and .replace() would throw otherwise.
+    return safeToString(value).replace(ConsoleTransport.CONTROL_CHARS_RE, '');
   }
 
   constructor(private config: ConsoleTransportConfig = {}) {}

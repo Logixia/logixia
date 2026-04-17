@@ -9,6 +9,7 @@ import type {
   ITransport,
   TransportLogEntry,
 } from '../types/transport.types';
+import { safeToString } from '../utils/coerce.utils';
 import { internalError } from '../utils/internal-log';
 
 const writeFile = promisify(fs.writeFile);
@@ -99,12 +100,13 @@ export class FileTransport implements ITransport, IBatchTransport {
         });
 
       case 'csv': {
+        const safeMessage = safeToString(entry.message);
         const fields = [
           entry.timestamp.toISOString(),
           entry.level,
-          `"${entry.message.replace(/"/g, '""')}"`,
-          entry.context || '',
-          entry.traceId || '',
+          `"${safeMessage.replace(/"/g, '""')}"`,
+          safeToString(entry.context),
+          safeToString(entry.traceId),
           JSON.stringify(entry.data || {}),
         ];
         return fields.join(',');
@@ -112,7 +114,7 @@ export class FileTransport implements ITransport, IBatchTransport {
 
       case 'text':
       default:
-        return `${entry.timestamp.toISOString()} [${entry.level.toUpperCase()}] ${entry.message}${entry.data ? ' ' + JSON.stringify(entry.data) : ''}`;
+        return `${entry.timestamp.toISOString()} [${entry.level.toUpperCase()}] ${safeToString(entry.message)}${entry.data ? ' ' + JSON.stringify(entry.data) : ''}`;
     }
   }
 

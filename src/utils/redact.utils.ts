@@ -115,20 +115,29 @@ const PII_AGGRESSIVE_PATHS: readonly string[] = [
  */
 function resolveConfig(config: RedactConfig): RedactConfig {
   const { autoDetect } = config;
-  if (!autoDetect) return config;
-
-  const aggressive = autoDetect === 'aggressive';
-
-  const extraPaths = aggressive ? PII_AGGRESSIVE_PATHS : PII_CONSERVATIVE_PATHS;
-  const extraPatterns = aggressive
-    ? [...PII_CONSERVATIVE_PATTERNS, ...PII_AGGRESSIVE_PATTERNS]
-    : PII_CONSERVATIVE_PATTERNS;
-
   const { paths = [], patterns = [] } = config;
+
+  let mergedPaths: readonly string[] = paths;
+  let mergedPatterns: readonly RegExp[] = patterns;
+
+  if (autoDetect) {
+    const aggressive = autoDetect === 'aggressive';
+    const extraPaths = aggressive ? PII_AGGRESSIVE_PATHS : PII_CONSERVATIVE_PATHS;
+    const extraPatterns = aggressive
+      ? [...PII_CONSERVATIVE_PATTERNS, ...PII_AGGRESSIVE_PATTERNS]
+      : PII_CONSERVATIVE_PATTERNS;
+    mergedPaths = [...paths, ...extraPaths];
+    mergedPatterns = [...patterns, ...extraPatterns];
+  }
+
+  // Filter out non-strings / non-RegExps: callers occasionally pass through
+  // env-derived arrays that contain `undefined` entries (e.g.
+  // `LOGIXIA_REDACT=,foo,`), and a non-string would crash `pathToRegExp`'s
+  // split/replace pipeline.
   return {
     ...config,
-    paths: [...paths, ...extraPaths],
-    patterns: [...patterns, ...extraPatterns],
+    paths: mergedPaths.filter((p): p is string => typeof p === 'string'),
+    patterns: mergedPatterns.filter((p): p is RegExp => p instanceof RegExp),
   };
 }
 

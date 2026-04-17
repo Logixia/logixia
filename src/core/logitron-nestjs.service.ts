@@ -119,6 +119,7 @@ export type LogixiaServiceWith<T extends string | Record<string, unknown>> =
       data?: Record<string, unknown>
     ) => Promise<void>;
   };
+import { safeToString } from '../utils/coerce.utils';
 import { internalError } from '../utils/internal-log';
 import { getTraceContextKey, TraceContext } from '../utils/trace.utils';
 import { LogixiaLogger } from './logitron-logger';
@@ -378,8 +379,9 @@ export class LogixiaLoggerService implements LoggerService {
   // ── Context / level management ─────────────────────────────────────────────
 
   setContext(context: string): void {
-    this.context = context;
-    this.logger.setContext(context);
+    const coerced = typeof context === 'string' ? context : safeToString(context);
+    this.context = coerced;
+    this.logger.setContext(coerced);
   }
 
   getContext(): string | undefined {
@@ -430,8 +432,12 @@ export class LogixiaLoggerService implements LoggerService {
 
   // ── Private helpers ────────────────────────────────────────────────────────
 
-  private setContextIfProvided(context?: string): void {
-    if (context && context !== this.context) {
+  private setContextIfProvided(context?: unknown): void {
+    // NestJS framework occasionally passes non-string values (ExecutionContext,
+    // arguments host, etc.) in the context slot. Silently ignore those — we
+    // only want an explicit string label to override `this.context`.
+    if (typeof context !== 'string' || context.length === 0) return;
+    if (context !== this.context) {
       this.setContext(context);
     }
   }
