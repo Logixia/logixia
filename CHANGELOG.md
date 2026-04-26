@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.8.6](https://github.com/Logixia/logixia/compare/v1.8.5...v1.8.6) (2026-04-26)
+
+### 🐛 Bug Fixes
+
+* **transport:** eliminate shutdown-phase log loss and noisy error spam ([7ec51a1](https://github.com/Logixia/logixia/commit/7ec51a1377aaf2ed802ac0a9e4c4144fe1a458a7))
+
 ## [1.8.5](https://github.com/Logixia/logixia/compare/v1.8.4...v1.8.5) (2026-04-17)
 
 ### 🐛 Bug Fixes
