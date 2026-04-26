@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.10.0](https://github.com/Logixia/logixia/compare/v1.9.0...v1.10.0) (2026-04-26)
+
+### ✨ Features
+
+* add postinstall banner and funding field ([5544ce0](https://github.com/Logixia/logixia/commit/5544ce0f578f0884d1b9751bd2836ae3f0f94de5))
+
 ## [1.9.0](https://github.com/Logixia/logixia/compare/v1.8.6...v1.9.0) (2026-04-26)
 
 ### ✨ Features
