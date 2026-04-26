@@ -131,6 +131,7 @@
   },
   "files": [
     "dist",
+    "scripts/postinstall.js",
     "README.md",
     "LICENSE"
   ],
@@ -165,6 +166,7 @@
     "dev:intelligent-search": "ts-node examples/intelligent-search.ts",
     "benchmark": "npm run build && node benchmarks/run.mjs",
     "size": "size-limit",
+    "postinstall": "node scripts/postinstall.js",
     "prepare": "node -e \"if(process.env.HUSKY!=='0'&&process.env.CI!=='true'){try{require('child_process').execSync('husky install',{stdio:'inherit'})}catch(e){process.exit(0)}}\""
   },
   "keywords": [
@@ -224,6 +226,12 @@
     "url": "https://github.com/Logixia/logixia/issues"
   },
   "homepage": "https://logixia.github.io/logixia/",
+  "funding": [
+    {
+      "type": "github",
+      "url": "https://github.com/sponsors/webcoderspeed"
+    }
+  ],
   "peerDependencies": {
     "@nestjs/common": "^10.0.0 || ^11.0.0",
     "express": "^4.0.0 || ^5.0.0",
