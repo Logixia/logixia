@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.9.0](https://github.com/Logixia/logixia/compare/v1.8.6...v1.9.0) (2026-04-26)
+
+### ✨ Features
+
+* **transport:** add per-transport filter predicate ([10d8ce1](https://github.com/Logixia/logixia/commit/10d8ce1861a03c6d17453fd1a1a5535cc760d4b0))
+
 ## [1.8.6](https://github.com/Logixia/logixia/compare/v1.8.5...v1.8.6) (2026-04-26)
 
 ### 🐛 Bug Fixes
