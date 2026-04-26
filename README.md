@@ -105,6 +105,7 @@ await logger.info('Server started', { port: 3000 });
 - [Timer API](#timer-api)
 - [Field management](#field-management)
 - [Transport level control](#transport-level-control)
+- [Transport filter predicate](#transport-filter-predicate)
 - [Log search](#log-search)
 - [OpenTelemetry](#opentelemetry)
 - [Graceful shutdown](#graceful-shutdown)
@@ -1537,6 +1538,55 @@ const ids = logger.getAvailableTransports(); // ['console', 'file-0', 'database-
 logger.clearTransportLevelPreferences();
 ```
 
+## Transport filter predicate
+
+Every transport (database, file, console, analytics, custom) accepts an optional `filter` function. It runs after the level check and lets you express any condition over the full log entry — by context, message content, payload fields, or anything else. Return `false` to skip the entry for that transport only; other transports are unaffected.
+
+```typescript
+const logger = createLogger({
+  appName: 'api',
+  environment: 'production',
+  transports: {
+    // Only persist error/warn entries that come from PaymentService to the DB
+    database: {
+      type: 'mongodb',
+      connectionString: process.env.MONGO_URI,
+      database: 'appdb',
+      collection: 'logs',
+      filter: (entry) =>
+        ['error', 'warn'].includes(entry.level) && entry.context === 'PaymentService',
+    },
+
+    // Write everything to the main file, but exclude noisy health-check pings
+    file: {
+      filename: 'app.log',
+      dirname: './logs',
+      filter: (entry) => entry.message !== 'health check',
+    },
+
+    // Console gets everything — no filter
+    console: { colorize: true },
+  },
+});
+```
+
+The `filter` predicate receives a `TransportLogEntry`:
+
+```typescript
+interface TransportLogEntry {
+  timestamp: Date;
+  level: string; // 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'verbose' | string
+  message: string;
+  data?: Record<string, unknown>;
+  context?: string; // set via logger.child('MyService') or setContext()
+  traceId?: string;
+  appName?: string;
+  environment?: string;
+}
+```
+
+`filter` and `level` are independent — both must pass for an entry to be written. Use `level` for threshold filtering (everything at or above `warn`) and `filter` for precise, field-level rules.
+
 ---
 
 ## Log search
@@ -1643,8 +1693,10 @@ Or flush and close manually — useful in Kubernetes SIGTERM handlers:
 
 ```typescript
 process.on('SIGTERM', async () => {
-  await logger.flush(); // wait for all in-flight writes
-  await logger.close(); // close connections, deregister shutdown handlers
+  // close() flushes all transports first, then closes connections.
+  // Any log calls that arrive during the flush (e.g. from Kafka/MongoDB
+  // disconnect handlers) are still written before the gate closes.
+  await logger.close();
   process.exit(0);
 });
 ```
@@ -2317,6 +2369,7 @@ interface LoggerConfig {
       colorize?: boolean;
       timestamp?: boolean;
       format?: 'json' | 'text';
+      filter?: (entry: TransportLogEntry) => boolean;
     };
 
     file?:
@@ -2337,6 +2390,7 @@ interface LoggerConfig {
             maxFiles?: number;
             compress?: boolean;
           };
+          filter?: (entry: TransportLogEntry) => boolean;
         }
       | Array<FileTransportConfig>; // array for multiple file targets
 
@@ -2352,8 +2406,10 @@ interface LoggerConfig {
           username?: string;
           password?: string;
           ssl?: boolean;
+          level?: string; // minimum level threshold for this transport
           batchSize?: number;
           flushInterval?: number; // ms
+          filter?: (entry: TransportLogEntry) => boolean; // entry-level predicate
         }
       | Array<DatabaseTransportConfig>;
 
