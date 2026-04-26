@@ -178,6 +178,11 @@ export class TransportManager extends EventEmitter {
         continue;
       }
 
+      // Run the transport's custom filter predicate if one is set
+      if (transport.filter && !transport.filter(transportEntry)) {
+        continue;
+      }
+
       const writePromise = this.writeToTransport(id, transport, transportEntry);
       writePromises.push(writePromise);
     }

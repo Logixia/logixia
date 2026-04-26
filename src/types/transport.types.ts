@@ -16,6 +16,11 @@ export interface ITransport {
   name: string;
   level?: string | undefined;
   /**
+   * Optional predicate evaluated before writing. Return false to skip this
+   * entry for this transport. Runs after the level check.
+   */
+  filter?: (entry: TransportLogEntry) => boolean;
+  /**
    * Write a log entry. May return a Promise (async / cloud transports) or
    * void (sync / in-memory batch transports that flush on their own schedule).
    */
@@ -47,6 +52,7 @@ export interface FileTransportConfig {
   batchSize?: number;
   flushInterval?: number;
   rotation?: RotationConfig;
+  filter?: (entry: TransportLogEntry) => boolean;
 }
 
 export interface DatabaseTransportConfig {
@@ -63,6 +69,7 @@ export interface DatabaseTransportConfig {
   level?: string;
   batchSize?: number;
   flushInterval?: number;
+  filter?: (entry: TransportLogEntry) => boolean;
 }
 
 export interface ConsoleTransportConfig {
@@ -76,6 +83,7 @@ export interface ConsoleTransportConfig {
    * using the same colors the user configured on the logger.
    */
   levelColors?: Record<string, string>;
+  filter?: (entry: TransportLogEntry) => boolean;
 }
 
 export interface AnalyticsTransportConfig {
@@ -88,6 +96,7 @@ export interface AnalyticsTransportConfig {
   enableUserTracking?: boolean;
   enableEventTracking?: boolean;
   customProperties?: Record<string, unknown>;
+  filter?: (entry: TransportLogEntry) => boolean;
 }
 
 export interface MixpanelTransportConfig extends AnalyticsTransportConfig {

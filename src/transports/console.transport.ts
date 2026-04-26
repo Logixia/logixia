@@ -15,6 +15,7 @@ import { safeToString } from '../utils/coerce.utils';
  */
 export class ConsoleTransport implements ITransport {
   public readonly name = 'console';
+  public readonly filter?: (entry: TransportLogEntry) => boolean;
 
   // Pre-built ANSI color map — avoids object recreation inside formatEntry()
   private static readonly COLORS: ReadonlyMap<string, string> = new Map([
@@ -53,7 +54,9 @@ export class ConsoleTransport implements ITransport {
     return safeToString(value).replace(ConsoleTransport.CONTROL_CHARS_RE, '');
   }
 
-  constructor(private config: ConsoleTransportConfig = {}) {}
+  constructor(private config: ConsoleTransportConfig = {}) {
+    if (config.filter) this.filter = config.filter;
+  }
 
   write(entry: TransportLogEntry): Promise<void> {
     const formatted = this.formatEntry(entry) + '\n';

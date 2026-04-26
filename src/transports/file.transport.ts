@@ -32,6 +32,7 @@ export class FileTransport implements ITransport, IBatchTransport {
   public readonly level?: string | undefined;
   public readonly batchSize?: number;
   public readonly flushInterval?: number;
+  public readonly filter?: (entry: TransportLogEntry) => boolean;
 
   private config: FileTransportConfig;
   private writeStream: WriteStream | undefined;
@@ -52,6 +53,7 @@ export class FileTransport implements ITransport, IBatchTransport {
     this.level = config.level;
     this.batchSize = this.config.batchSize || 100;
     this.flushInterval = this.config.flushInterval || 5000;
+    if (config.filter) this.filter = config.filter;
     this.currentFilePath = this.generateFilePath();
     this.ensureDirectoryExists();
   }

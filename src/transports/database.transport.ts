@@ -34,6 +34,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
   public readonly name = 'database';
   public readonly batchSize: number;
   public readonly flushInterval: number;
+  public readonly filter?: (entry: TransportLogEntry) => boolean;
 
   private batch: TransportLogEntry[] = [];
   private flushTimer?: NodeJS.Timeout;
@@ -46,6 +47,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
   constructor(private config: DatabaseTransportConfig) {
     this.batchSize = config.batchSize || 100;
     this.flushInterval = config.flushInterval || 5000; // 5 seconds
+    if (config.filter) this.filter = config.filter;
     // Validate table name early so misconfiguration fails at construction, not at first write
     if (config.table) {
       validateSqlIdentifier(config.table, 'table');
