@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.10.1](https://github.com/Logixia/logixia/compare/v1.10.0...v1.10.1) (2026-04-26)
+
+### 📚 Documentation
+
+* document transport filter predicate and graceful shutdown fix ([f8167ac](https://github.com/Logixia/logixia/commit/f8167acbc425f41c6d39950c1971121b82b28cb6))
+
 ## [1.10.0](https://github.com/Logixia/logixia/compare/v1.9.0...v1.10.0) (2026-04-26)
 
 ### ✨ Features
