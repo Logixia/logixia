@@ -649,7 +649,6 @@ export class LogixiaLogger<
     this.timers.clear();
 
     if (this.transportManager) {
-      await this.transportManager.flush();
       await this.transportManager.close();
     }
 

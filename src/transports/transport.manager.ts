@@ -150,6 +150,8 @@ export class TransportManager extends EventEmitter {
   }
 
   async write(entry: LogEntry): Promise<void> {
+    if (this.isShuttingDown) return;
+
     // Build the transport entry — exactOptionalPropertyTypes requires we only set
     // optional properties when they have a real value (not undefined).
     const transportEntry: TransportLogEntry = {
@@ -162,9 +164,6 @@ export class TransportManager extends EventEmitter {
     if (entry.context !== undefined) transportEntry.context = entry.context;
     if (entry.traceId !== undefined) transportEntry.traceId = entry.traceId;
     if (entry.environment !== undefined) transportEntry.environment = entry.environment;
-    if (this.isShuttingDown) {
-      throw new Error('TransportManager is shutting down');
-    }
 
     const writePromises: Promise<void>[] = [];
 
@@ -361,10 +360,11 @@ export class TransportManager extends EventEmitter {
   }
 
   async close(): Promise<void> {
-    this.isShuttingDown = true;
-
-    // Flush all transports first
+    // Flush first so any in-flight log calls that race in during shutdown still
+    // get written — only block new writes once we move to the close phase.
     await this.flush();
+
+    this.isShuttingDown = true;
 
     // Close all transports
     const closePromises: Promise<void>[] = [];
