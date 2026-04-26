@@ -255,7 +255,7 @@
     "@types/pg": "^8.15.5",
     "@types/pino": "^7.0.4",
     "@types/uuid": "^9.0.0",
-    "conventional-changelog-conventionalcommits": "^8.0.0",
+    "conventional-changelog-conventionalcommits": "^9.3.1",
     "eslint": "^10.0.3",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-simple-import-sort": "^12.1.1",
