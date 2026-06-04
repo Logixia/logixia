@@ -34,7 +34,7 @@ export class FileTransport implements ITransport, IBatchTransport {
   public readonly flushInterval?: number;
   public readonly filter?: (entry: TransportLogEntry) => boolean;
 
-  private config: FileTransportConfig;
+  private readonly config: FileTransportConfig;
   private writeStream: WriteStream | undefined;
   private batch: TransportLogEntry[] = [];
   private batchTimer?: NodeJS.Timeout | undefined;
@@ -42,6 +42,13 @@ export class FileTransport implements ITransport, IBatchTransport {
   private currentFilePath: string;
   /** Guards against concurrent rotation — two simultaneous writes both seeing shouldRotateNow(). */
   private isRotating = false;
+  /**
+   * The in-flight drain promise, or undefined when idle. Concurrent flush() calls
+   * (e.g. the un-awaited flush addToBatch fires on every Nth entry) all await this
+   * single promise instead of starting their own drain, so the batch is never
+   * snapshotted and written twice.
+   */
+  private flushPromise: Promise<void> | undefined;
 
   constructor(config: FileTransportConfig) {
     this.config = {
@@ -80,14 +87,38 @@ export class FileTransport implements ITransport, IBatchTransport {
   }
 
   async flush(): Promise<void> {
-    if (this.batch.length > 0) {
-      await this.writeBatch([...this.batch]);
-      this.batch = [];
-    }
-
     if (this.batchTimer) {
       clearTimeout(this.batchTimer);
       this.batchTimer = undefined;
+    }
+
+    // Serialize concurrent flushes. addToBatch() calls flush() un-awaited on every
+    // Nth entry, so a synchronous burst of writes can fire many overlapping flushes.
+    // Every caller (awaited or not) joins the SAME in-flight drain, so the batch is
+    // never snapshotted twice — which previously turned N log calls into N² file
+    // lines (the batch-flush duplication bug). Callers that await flush() still see
+    // the batch fully drained because they await the shared drain promise.
+    if (!this.flushPromise) {
+      this.flushPromise = this.drain().finally(() => {
+        this.flushPromise = undefined;
+      });
+    }
+
+    await this.flushPromise;
+  }
+
+  /**
+   * Drains the batch to disk one snapshot at a time. Entries appended while a
+   * write is in flight are picked up by the next loop iteration, so a single
+   * drain() empties the batch completely regardless of concurrent writes.
+   */
+  private async drain(): Promise<void> {
+    while (this.batch.length > 0) {
+      // Detach the current batch SYNCHRONOUSLY before awaiting, so entries pushed
+      // during the write land in a fresh array and are never re-written.
+      const pending = this.batch;
+      this.batch = [];
+      await this.writeBatch(pending);
     }
   }
 
@@ -124,6 +155,12 @@ export class FileTransport implements ITransport, IBatchTransport {
     this.batch.push(entry);
 
     if (this.batch.length >= (this.config.batchSize || 100)) {
+      // Cancel any pending interval flush — the threshold flush supersedes it, and
+      // a leftover timer would fire a redundant flush after the batch is already gone.
+      if (this.batchTimer) {
+        clearTimeout(this.batchTimer);
+        this.batchTimer = undefined;
+      }
       this.flush().catch((err: unknown) => internalError('FileTransport batch flush failed', err));
     } else if (!this.batchTimer && this.config.flushInterval) {
       this.batchTimer = setTimeout(() => {
@@ -152,18 +189,18 @@ export class FileTransport implements ITransport, IBatchTransport {
   }
 
   private shouldRotateNow(): boolean {
-    if (!this.config.rotation) return false;
+    if (!this.config.rotation?.interval) return false;
 
     const now = new Date();
     const timeDiff = now.getTime() - this.lastRotation.getTime();
-    const rotationInterval = this.parseInterval(this.config.rotation.interval!);
+    const rotationInterval = this.parseInterval(this.config.rotation.interval);
 
     return timeDiff >= rotationInterval;
   }
 
   private parseInterval(interval: string): number {
     // eslint-disable-next-line sonarjs/slow-regex -- simple bounded pattern for interval parsing
-    const match = interval.match(/(\d+)([hdwmy])/i);
+    const match = new RegExp(/(\d+)([hdwmy])/i).exec(interval);
     if (!match) return 24 * 60 * 60 * 1000; // Default 1 day
 
     const value = Number.parseInt(match[1] || '1', 10);
@@ -268,7 +305,7 @@ export class FileTransport implements ITransport, IBatchTransport {
       const fileStats = await Promise.all(logFiles);
       const sortedFiles = fileStats.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
-      const filesToDelete = sortedFiles.slice(this.config.rotation!.maxFiles!);
+      const filesToDelete = sortedFiles.slice(this.config.rotation.maxFiles);
 
       for (const file of filesToDelete) {
         await unlink(file.path);
