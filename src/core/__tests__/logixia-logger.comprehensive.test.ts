@@ -587,6 +587,46 @@ describe('setLevel', () => {
   });
 });
 
+// ── Redaction integration (autoDetect-only config must apply) ─────────────────
+
+describe('redaction applied through the logger', () => {
+  it('applies autoDetect redaction even with no explicit paths/patterns (BUG 1)', async () => {
+    const out = spyOutput();
+    const logger = new LogixiaLogger({
+      ...BASE_CONFIG,
+      environment: 'production',
+      format: { json: true, colorize: false, timestamp: false },
+      redact: { autoDetect: 'aggressive' },
+    });
+    await logger.info('t', {
+      password: 'hunter2',
+      email: 'x@y.com',
+      jwt: 'eyJhbGciOiJ.aaa.bbb',
+    });
+    out.restore();
+    const joined = out.joined();
+    expect(joined).not.toContain('hunter2');
+    expect(joined).not.toContain('x@y.com');
+    expect(joined).not.toContain('eyJhbGciOiJ.aaa.bbb');
+    expect(joined).toContain('[REDACTED]');
+  });
+
+  it('redacts a top-level password key via conservative autoDetect (BUG 1 + BUG 2)', async () => {
+    const out = spyOutput();
+    const logger = new LogixiaLogger({
+      ...BASE_CONFIG,
+      format: { json: true, colorize: false, timestamp: false },
+      redact: { autoDetect: 'conservative' },
+    });
+    await logger.info('t', { password: 'hunter2', keep: 'visible' });
+    out.restore();
+    const joined = out.joined();
+    expect(joined).not.toContain('hunter2');
+    expect(joined).toContain('visible');
+    expect(joined).toContain('[REDACTED]');
+  });
+});
+
 // ── Error object logging ──────────────────────────────────────────────────────
 
 describe('error() with Error object', () => {

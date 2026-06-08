@@ -405,11 +405,15 @@ export class LogixiaLogger<
       this._formattedAppName = '';
     }
 
-    // 6. Redact flag — if no redact config, skip applyRedaction entirely
+    // 6. Redact flag — if no redact config, skip applyRedaction entirely.
+    //    autoDetect injects built-in PII paths/patterns at redaction time, so
+    //    it must flip the flag on even with no explicit paths/patterns set —
+    //    otherwise autoDetect-only configs silently leak PII.
     this._hasRedact = !!(
       this.config.redact &&
       ((this.config.redact.paths?.length ?? 0) > 0 ||
-        (this.config.redact.patterns?.length ?? 0) > 0)
+        (this.config.redact.patterns?.length ?? 0) > 0 ||
+        !!this.config.redact.autoDetect)
     );
   }
 
