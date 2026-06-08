@@ -52,6 +52,72 @@ describe('redactObject — path-based redaction', () => {
     expect(result.x).toBe(CENSOR);
   });
 
+  it('** matches zero or more segments — including a top-level key', () => {
+    // JSDoc for pathToRegExp: `**` matches "zero or more segments".
+    // '**.password' must therefore match a bare top-level `password` key
+    // (zero leading segments), not only nested ones. This is critical for
+    // PII safety: top-level `password` is the most common shape.
+    const obj = { password: 'hunter2', user: { password: 'nested' } };
+    const result = redactObject(obj, { paths: ['**.password'] });
+    expect(result.password).toBe(CENSOR);
+    expect((result.user as Record<string, unknown>).password).toBe(CENSOR);
+  });
+
+  it('**.token matches a top-level token key', () => {
+    const result = redactObject({ token: 'tok-abc' }, { paths: ['**.token'] });
+    expect(result.token).toBe(CENSOR);
+  });
+
+  it('**.password respects segment boundaries (does not match passwordHint)', () => {
+    // The trailing segment must match a WHOLE key, not a substring.
+    const result = redactObject(
+      { passwordHint: 'safe', password: 'x' },
+      { paths: ['**.password'] }
+    );
+    expect(result.passwordHint).toBe('safe');
+    expect(result.password).toBe(CENSOR);
+  });
+
+  it('trailing ** matches the prefix key itself (zero trailing segments)', () => {
+    const obj = { req: { headers: { a: 'x' } } };
+    const result = redactObject(obj, { paths: ['req.**'] });
+    expect(result.req).toBe(CENSOR);
+  });
+
+  it('trailing ** also matches when the prefix is a leaf (req → redacted)', () => {
+    const result = redactObject({ req: 'leaf' }, { paths: ['req.**'] });
+    expect(result.req).toBe(CENSOR);
+  });
+
+  it('middle ** matches zero intermediate segments (a.**.b matches a.b)', () => {
+    const obj = { a: { b: 'x' } };
+    const result = redactObject(obj, { paths: ['a.**.b'] });
+    expect((result.a as Record<string, unknown>).b).toBe(CENSOR);
+  });
+
+  it('middle ** matches one or more intermediate segments (a.**.b matches a.x.b)', () => {
+    const obj = { a: { x: { b: 'deep' } } };
+    const result = redactObject(obj, { paths: ['a.**.b'] });
+    expect(((result.a as Record<string, unknown>).x as Record<string, unknown>).b).toBe(CENSOR);
+  });
+
+  it('collapses consecutive ** (a.**.**.b behaves like a.**.b)', () => {
+    const obj = { a: { b: 'zero', x: { b: 'one' } } };
+    const result = redactObject(obj, { paths: ['a.**.**.b'] });
+    const a = result.a as Record<string, unknown>;
+    expect(a.b).toBe(CENSOR);
+    expect((a.x as Record<string, unknown>).b).toBe(CENSOR);
+  });
+
+  it('collapses leading ** runs (**.**.token behaves like **.token)', () => {
+    const result = redactObject(
+      { token: 'top', a: { token: 'nested' } },
+      { paths: ['**.**.token'] }
+    );
+    expect(result.token).toBe(CENSOR);
+    expect((result.a as Record<string, unknown>).token).toBe(CENSOR);
+  });
+
   it('redacts a deeply nested path (3+ levels)', () => {
     const obj = { a: { b: { c: { token: 'abc' } } } };
     const result = redactObject(obj, { paths: ['a.b.c.token'] });
