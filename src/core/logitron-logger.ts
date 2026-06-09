@@ -841,6 +841,15 @@ export class LogixiaLogger<
         return;
       } catch (error) {
         internalError('Transport write failed', error);
+        // Notify plugin onError hooks (e.g. Sentry/alerting). runOnError
+        // swallows hook errors internally, so this can never re-throw.
+        if (this._pluginRegistry.size > 0) {
+          await this._pluginRegistry.runOnError(
+            error instanceof Error ? error : new Error(String(error)),
+            entry
+          );
+        }
+        // Fall through to the stdout/stderr fallback so the log is not lost.
       }
     }
 

@@ -11,6 +11,7 @@
  *  - Logger.use() and Logger.unuse()
  */
 
+import { LogixiaLogger } from '../core/logitron-logger';
 import type { LogixiaPlugin } from '../plugin';
 import { globalPluginRegistry, PluginRegistry, usePlugin } from '../plugin';
 import type { LogEntry } from '../types';
@@ -260,6 +261,38 @@ describe('PluginRegistry', () => {
       expect(result!.payload?.step).toBe(1);
       expect(result!.payload?.step2).toBe(2);
     });
+
+    it('isolates a throwing onLog plugin and keeps processing (no crash)', async () => {
+      registry.register({
+        name: 'thrower',
+        onLog() {
+          throw new Error('plugin blew up');
+        },
+      });
+      registry.register({
+        name: 'after',
+        onLog(e) {
+          return { ...e, payload: { ...e.payload, reached: true } };
+        },
+      });
+      const entry = makeEntry();
+      // A buggy plugin must not crash logging; the chain continues with the
+      // un-transformed entry, and later plugins still run.
+      const result = await registry.runOnLog(entry);
+      expect(result).not.toBeNull();
+      expect(result!.payload?.reached).toBe(true);
+    });
+
+    it('isolates a rejecting async onLog plugin', async () => {
+      registry.register({
+        name: 'async-thrower',
+        async onLog() {
+          await Promise.resolve();
+          throw new Error('async plugin blew up');
+        },
+      });
+      await expect(registry.runOnLog(makeEntry())).resolves.not.toBeNull();
+    });
   });
 
   // ── runOnError ───────────────────────────────────────────────────────────────
@@ -423,5 +456,50 @@ describe('Full plugin lifecycle', () => {
     await registry.runOnShutdown();
 
     expect(events).toEqual(['init', 'log', 'error', 'shutdown']);
+  });
+});
+
+// ── Logger ↔ plugin integration ───────────────────────────────────────────────
+
+describe('Logger plugin integration', () => {
+  const BASE = {
+    appName: 'PluginIT',
+    environment: 'test' as const,
+    format: { timestamp: false, colorize: false, json: false },
+    traceId: false,
+    levelOptions: { level: 'info' as const },
+  };
+
+  it('invokes a plugin onError hook when a transport write fails', async () => {
+    const logger = new LogixiaLogger({ ...BASE, transports: { console: { format: 'json' } } });
+    const seen: Error[] = [];
+    logger.use({
+      name: 'err-capture',
+      onError(e) {
+        seen.push(e);
+      },
+    });
+
+    // Force the transport write to fail.
+    const tm = (logger as unknown as { transportManager: { write: () => Promise<void> } })
+      .transportManager;
+    const boom = new Error('transport exploded');
+    tm.write = () => Promise.reject(boom);
+
+    await logger.info('will fail to write');
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBe(boom);
+  });
+
+  it('a throwing onLog plugin does not crash a logger.info call', async () => {
+    const logger = new LogixiaLogger({ ...BASE });
+    logger.use({
+      name: 'bad',
+      onLog() {
+        throw new Error('plugin crash');
+      },
+    });
+    await expect(logger.info('still works')).resolves.toBeUndefined();
   });
 });
