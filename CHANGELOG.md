@@ -3,6 +3,22 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.10.2](https://github.com/Logixia/logixia/compare/v1.10.1...v1.10.2) (2026-06-09)
+
+
+### Bug Fixes
+
+* **console:** compact JSON, sanitize level for CWE-117, route warn to stderr ([c0108a9](https://github.com/Logixia/logixia/commit/c0108a942a242918e4050cc74ad523f5eb3b6181))
+* **logger:** merge child/context data into log payload ([bc776d6](https://github.com/Logixia/logixia/commit/bc776d6580ba4db182dba981e29d99d4029d0daa))
+* **plugins:** isolate throwing onLog and invoke onError on transport failure ([68be1bf](https://github.com/Logixia/logixia/commit/68be1bf1fa15609bde6cde9be7e92da4a9a80315))
+* **redact:** apply autoDetect rules when no explicit paths or patterns set ([6df0c2a](https://github.com/Logixia/logixia/commit/6df0c2a3941a9893cae58be4131d6d72c8c61368))
+* **redact:** make ** glob match zero segments so **.password redacts top-level keys ([e3ce30d](https://github.com/Logixia/logixia/commit/e3ce30dfe8fb8f8d2b72ee2f9934333dd6534555))
+* **sampling:** always emit WARN regardless of global rate ([a7fb7f9](https://github.com/Logixia/logixia/commit/a7fb7f9a4cf54eb15dde59da14b063d378ff61d9))
+* **shutdown:** register flush handler even when other signal listeners exist ([e30588d](https://github.com/Logixia/logixia/commit/e30588dea1cb1b473162ce6f100f20ecdf21b09c))
+* **trace:** parse W3C traceId out of the traceparent header ([c74ae42](https://github.com/Logixia/logixia/commit/c74ae42b247efe0625bd656f4d169a717fe51e60))
+* **transport:** prevent file log duplication from overlapping batch f… ([8b3be23](https://github.com/Logixia/logixia/commit/8b3be23d8d291ac86af9f1a2c49ee90ca7888978))
+* **transport:** prevent file log duplication from overlapping batch flushes ([a2fc846](https://github.com/Logixia/logixia/commit/a2fc84644b75b576299889390bffe5d2409846a9))
+
 ## [1.10.1](https://github.com/Logixia/logixia/compare/v1.10.0...v1.10.1) (2026-04-26)
 
 ### 📚 Documentation
