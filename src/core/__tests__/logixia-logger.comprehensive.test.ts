@@ -322,6 +322,22 @@ describe('Child logger', () => {
     expect(parsed.context).toBe('svc');
   });
 
+  it('child logger merges its context data into every log payload', async () => {
+    const out = spyOutput();
+    const parent = new LogixiaLogger({
+      ...BASE_CONFIG,
+      format: { json: true },
+      levelOptions: { level: 'info' },
+    });
+    const child = parent.child('svc', { serviceVersion: '2.0', region: 'us-east' });
+    await child.info('child msg', { adHoc: true });
+    out.restore();
+    const parsed = JSON.parse(out.joined());
+    expect(parsed.payload.serviceVersion).toBe('2.0');
+    expect(parsed.payload.region).toBe('us-east');
+    expect(parsed.payload.adHoc).toBe(true);
+  });
+
   it('child logger does not affect parent context', () => {
     const parent = new LogixiaLogger({ ...BASE_CONFIG });
     parent.child('child-ctx');

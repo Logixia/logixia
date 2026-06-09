@@ -207,17 +207,15 @@ export class LogixiaLogger<
     const resolvedLevel = resolveInitialLevel(this.config);
     this.config.levelOptions = { ...this.config.levelOptions, level: resolvedLevel };
 
-    if (!this.config.fields) {
-      this.config.fields = {
-        timestamp: '[yyyy-mm-dd HH:MM:ss.MS]',
-        level: '[log_level]',
-        appName: '[app_name]',
-        traceId: '[trace_id]',
-        message: '[message]',
-        payload: '[payload]',
-        timeTaken: '[time_taken_MS]',
-      };
-    }
+    this.config.fields ??= {
+      timestamp: '[yyyy-mm-dd HH:MM:ss.MS]',
+      level: '[log_level]',
+      appName: '[app_name]',
+      traceId: '[trace_id]',
+      message: '[message]',
+      payload: '[payload]',
+      timeTaken: '[time_taken_MS]',
+    };
 
     this.context = context ?? '';
 
@@ -272,7 +270,7 @@ export class LogixiaLogger<
     if (!shutdownCfg) return;
 
     const normalized: GracefulShutdownConfig =
-      shutdownCfg === true ? { enabled: true } : (shutdownCfg as GracefulShutdownConfig);
+      shutdownCfg === true ? { enabled: true } : shutdownCfg;
 
     if (!normalized.enabled) return;
 
@@ -306,9 +304,7 @@ export class LogixiaLogger<
    */
   private _buildPerfCaches(): void {
     // 1. Level value map — pre-merge built-ins + custom levels once
-    const customLevelEntries = Object.entries(
-      (this.config.levelOptions?.levels ?? {}) as Record<string, number>
-    );
+    const customLevelEntries = Object.entries(this.config.levelOptions?.levels ?? {});
     this._levelValues = new Map<string, number>([
       [LogLevel.ERROR, 0],
       [LogLevel.WARN, 1],
@@ -356,10 +352,10 @@ export class LogixiaLogger<
     for (const f of fieldNames) {
       if (this.fieldState.has(f)) {
         this._fieldCache.set(f, this.fieldState.get(f)!);
-      } else if (this.config.fields?.[f as keyof typeof this.config.fields] !== undefined) {
-        this._fieldCache.set(f, this.config.fields[f as keyof typeof this.config.fields] !== false);
-      } else {
+      } else if (this.config.fields?.[f as keyof typeof this.config.fields] === undefined) {
         this._fieldCache.set(f, true);
+      } else {
+        this._fieldCache.set(f, this.config.fields[f as keyof typeof this.config.fields] !== false);
       }
     }
 
@@ -397,12 +393,12 @@ export class LogixiaLogger<
 
     // 5. Pre-computed "[appName] " string (gray when colorize is on)
     const appNameRaw = `[${this.config.appName ?? 'App'}]`;
-    if (this._fieldCache.get('appName') !== false) {
+    if (this._fieldCache.get('appName') === false) {
+      this._formattedAppName = '';
+    } else {
       this._formattedAppName = colorize
         ? `${this._colorMap.get('gray')!}${appNameRaw}${this._colorMap.get('reset')!} `
         : `${appNameRaw} `;
-    } else {
-      this._formattedAppName = '';
     }
 
     // 6. Redact flag — if no redact config, skip applyRedaction entirely.
@@ -495,7 +491,7 @@ export class LogixiaLogger<
 
   setLevel(level: LogLevelString): void {
     this.config.levelOptions = this.config.levelOptions ?? {};
-    this.config.levelOptions.level = level as string;
+    this.config.levelOptions.level = level;
     // Refresh the cached numeric threshold so shouldLog() stays accurate
     this._minLevelValue = this._levelValues.get(level) ?? this._minLevelValue;
     // Rebuild level string cache in case colours are keyed per-level
@@ -599,7 +595,14 @@ export class LogixiaLogger<
 
   child(context: string, data?: Record<string, unknown>): ILogger {
     const childLogger = new LogixiaLogger(this.config, context);
-    if (data) childLogger.contextData = { ...this.contextData, ...data };
+    // Inherit the parent's bound fields plus any child-specific data. The
+    // hot-path merge in log() is gated on _hasContextData, so it must be set
+    // here or the merged fields are silently dropped from every log.
+    const mergedContextData = { ...this.contextData, ...data };
+    if (Object.keys(mergedContextData).length > 0) {
+      childLogger.contextData = mergedContextData;
+      childLogger._hasContextData = true;
+    }
     return childLogger;
   }
 
