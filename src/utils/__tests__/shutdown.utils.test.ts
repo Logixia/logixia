@@ -235,18 +235,36 @@ describe('flushOnExit', () => {
     process.removeAllListeners('SIGUSR2');
   });
 
-  it('does not attach SIGTERM listener if another listener already exists', async () => {
+  it('still flushes when another SIGTERM listener already exists', async () => {
+    // A framework (NestJS/Express) commonly registers its own signal handler.
+    // logixia must still attach its own so the documented flush-on-exit runs —
+    // signals support multiple listeners.
     const preExistingHandler = jest.fn();
     process.on('SIGTERM', preExistingHandler);
+
+    const logger = makeFakeLogger();
+    registerForShutdown(logger);
 
     const countBefore = process.listenerCount('SIGTERM');
     flushOnExit({ timeout: 1000 });
     const countAfter = process.listenerCount('SIGTERM');
 
-    // flushOnExit skips registration when listener count > 0
-    expect(countAfter).toBe(countBefore);
+    // logixia adds exactly one handler on top of the pre-existing one.
+    expect(countAfter).toBe(countBefore + 1);
+
+    await emitSignal('SIGTERM');
+    expect(logger.close).toHaveBeenCalledTimes(1);
 
     process.removeListener('SIGTERM', preExistingHandler);
+  });
+
+  it('does not register its own handler twice across repeated flushOnExit calls', () => {
+    const before = process.listenerCount('SIGTERM');
+    flushOnExit({ timeout: 1000 });
+    flushOnExit({ timeout: 1000 });
+    flushOnExit({ timeout: 1000 });
+    // Idempotent: only one logixia handler regardless of call count.
+    expect(process.listenerCount('SIGTERM')).toBe(before + 1);
   });
 
   it('a failing logger close does not prevent other loggers from being flushed', async () => {

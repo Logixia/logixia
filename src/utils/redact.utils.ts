@@ -143,7 +143,11 @@ function resolveConfig(config: RedactConfig): RedactConfig {
 
 /**
  * Convert a dot-notation path pattern to a RegExp.
- * Supports `*` (one segment) and `**` (zero or more segments).
+ * Supports `*` (exactly one segment) and `**` (zero or more segments).
+ *
+ * Because `**` may match *zero* segments, it also absorbs the dot separator
+ * that joins it to its neighbour — so `**.password` matches both a bare
+ * top-level `password` (zero leading segments) and any nested `*.password`.
  *
  * Examples:
  *   "password"          → /^password$/
@@ -151,17 +155,48 @@ function resolveConfig(config: RedactConfig): RedactConfig {
  *   "*.token"           → /^[^.]+\.token$/
  *   "req.headers.*"     → /^req\.headers\.[^.]+$/
  *   "**"                → /^.*$/
+ *   "**.password"       → /^(?:.*\.)?password$/   (matches `password` and `a.b.password`)
+ *   "req.**"            → /^req(?:\..*)?$/         (matches `req` and `req.a.b`)
+ *
+ * Consecutive `**` segments are collapsed (`a.**.**.b` ≡ `a.**.b`).
  */
 function pathToRegExp(pattern: string): RegExp {
-  const regexStr = pattern
+  // Collapse runs of consecutive `**` — they are semantically redundant
+  // (`a.**.**.b` ≡ `a.**.b`) and would otherwise emit two optional groups that
+  // fight over the shared separator and fail to match zero-segment paths.
+  const segments = pattern
     .split('.')
-    .map((segment) => {
-      if (segment === '**') return '.*';
-      if (segment === '*') return '[^.]+';
-      // Escape regex special chars in the segment
-      return segment.replace(/[$()*+.?[\\\]^{|}]/g, '\\$&');
-    })
-    .join('\\.');
+    .filter((seg, i, arr) => !(seg === '**' && arr[i - 1] === '**'));
+  const lastIndex = segments.length - 1;
+
+  let regexStr = '';
+  for (const [i, segment] of segments.entries()) {
+    // A `**` token emits an optional group that already contains the dot on
+    // one side, so the matching boundary separator must NOT be emitted here:
+    //   - a non-final `**` (leading/middle) → group `(?:.*\.)?` owns its RIGHT dot
+    //   - a trailing `**`                   → group `(?:\..*)?` owns its LEFT dot
+    // Every other boundary (including a middle `**`'s structural LEFT dot) is a
+    // literal `\.`.
+    const prevOwnsRightDot = i > 0 && segments[i - 1] === '**' && i - 1 < lastIndex;
+    const ownsLeftDot = segment === '**' && i === lastIndex && i > 0;
+    if (i > 0 && !prevOwnsRightDot && !ownsLeftDot) {
+      regexStr += String.raw`\.`;
+    }
+
+    if (segment === '**') {
+      // `**` = zero or more path segments.
+      if (lastIndex === 0) {
+        regexStr += '.*'; // standalone `**`
+      } else if (i === lastIndex) {
+        regexStr += String.raw`(?:\..*)?`; // trailing `X.**` — optional ".segs"
+      } else {
+        regexStr += String.raw`(?:.*\.)?`; // leading/middle — optional "segs."
+      }
+      continue;
+    }
+
+    regexStr += segment === '*' ? '[^.]+' : segment.replace(/[$()*+.?[\\\]^{|}]/g, '\\$&');
+  }
 
   return new RegExp(`^${regexStr}$`);
 }

@@ -105,6 +105,34 @@ describe('Sampler', () => {
       expect(dropped).toBe(true);
       s.destroy();
     });
+
+    it('warn always passes with any global rate (documented safety guarantee)', () => {
+      // SamplingConfig JSDoc: "ERROR and WARN default to 1.0 even when a lower
+      // global rate is set, unless you explicitly override them here."
+      const s = new Sampler({ rate: 0.001 });
+      let allPass = true;
+      for (let i = 0; i < 50; i++) {
+        if (!s.shouldEmit('warn')) {
+          allPass = false;
+          break;
+        }
+      }
+      expect(allPass).toBe(true);
+      s.destroy();
+    });
+
+    it('warn respects an explicit perLevel override', () => {
+      const s = new Sampler({ rate: 1.0, perLevel: { warn: 0.0 } });
+      let dropped = false;
+      for (let i = 0; i < 50; i++) {
+        if (!s.shouldEmit('warn')) {
+          dropped = true;
+          break;
+        }
+      }
+      expect(dropped).toBe(true);
+      s.destroy();
+    });
   });
 
   // ── Per-level overrides ────────────────────────────────────────────────────

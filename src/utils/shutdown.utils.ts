@@ -22,6 +22,9 @@ type Closeable = { close(): Promise<void> };
 /** Module-level registry of all logger instances that have opted into graceful shutdown */
 const registry = new Set<Closeable>();
 let shutdownHandlerRegistered = false;
+/** Our own handler + the signals we attached it to, so reset() can detach exactly it. */
+let activeHandler: ((signal: NodeJS.Signals) => void | Promise<void>) | undefined;
+let activeSignals: NodeJS.Signals[] = [];
 
 /**
  * Register a logger instance so it is included in the graceful shutdown flush.
@@ -76,11 +79,15 @@ export function flushOnExit(options: FlushOnExitOptions = {}): void {
     }
   };
 
+  // Register our own handler unconditionally. Signals support multiple
+  // listeners, so other frameworks' handlers (NestJS/Express) don't block ours —
+  // the previous `listenerCount === 0` guard meant the documented flush silently
+  // never ran whenever any other listener existed. The `shutdownHandlerRegistered`
+  // flag above keeps THIS function idempotent (one logixia handler, not N).
+  activeHandler = handler;
+  activeSignals = signals;
   for (const signal of signals) {
-    // Only add if not already handled (avoids double-handling in long-lived processes)
-    if (process.listenerCount(signal) === 0) {
-      process.on(signal, handler);
-    }
+    process.on(signal, activeHandler);
   }
 }
 
@@ -90,5 +97,12 @@ export function flushOnExit(options: FlushOnExitOptions = {}): void {
  */
 export function resetShutdownHandlers(): void {
   registry.clear();
+  if (activeHandler) {
+    for (const signal of activeSignals) {
+      process.removeListener(signal, activeHandler);
+    }
+  }
+  activeHandler = undefined;
+  activeSignals = [];
   shutdownHandlerRegistered = false;
 }

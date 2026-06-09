@@ -8,7 +8,10 @@
 import type { SamplingConfig } from '../types';
 
 // Safety-critical levels that are NEVER sampled below 100 % by default.
-const ALWAYS_EMIT_LEVELS = new Set(['error', 'fatal']);
+// Per SamplingConfig docs, ERROR and WARN are always emitted unless explicitly
+// overridden via `perLevel`; `fatal` (a common custom highest-severity level)
+// is included for the same reason.
+const ALWAYS_EMIT_LEVELS = new Set(['error', 'warn', 'fatal']);
 
 // ── Sampler ───────────────────────────────────────────────────────────────────
 

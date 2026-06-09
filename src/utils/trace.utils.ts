@@ -215,6 +215,19 @@ function toValidTraceId(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+/** W3C trace-context: `version-traceId(32hex)-spanId(16hex)-flags(2hex)`. */
+const W3C_TRACEPARENT_RE = /^[\da-f]{2}-([\da-f]{32})-[\da-f]{16}-[\da-f]{2}$/i;
+
+/**
+ * Extract the 32-hex trace-id segment from a W3C `traceparent` header value.
+ * Returns the parsed trace ID, or the original value unchanged when it is not a
+ * well-formed traceparent (so non-W3C propagation still works).
+ */
+function parseTraceparent(value: string): string {
+  const m = W3C_TRACEPARENT_RE.exec(value);
+  return m ? m[1]! : value;
+}
+
 /** Extract trace ID from request using configuration (header → query → body → params). */
 export function extractTraceId(
   request: unknown,
@@ -225,8 +238,9 @@ export function extractTraceId(
   if (config.header) {
     const headers = Array.isArray(config.header) ? config.header : [config.header];
     for (const header of headers) {
-      const value = toValidTraceId(req.headers?.[header.toLowerCase()]);
-      if (value) return value;
+      const lower = header.toLowerCase();
+      const value = toValidTraceId(req.headers?.[lower]);
+      if (value) return lower === 'traceparent' ? parseTraceparent(value) : value;
     }
   }
 

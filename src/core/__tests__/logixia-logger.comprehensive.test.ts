@@ -322,6 +322,22 @@ describe('Child logger', () => {
     expect(parsed.context).toBe('svc');
   });
 
+  it('child logger merges its context data into every log payload', async () => {
+    const out = spyOutput();
+    const parent = new LogixiaLogger({
+      ...BASE_CONFIG,
+      format: { json: true },
+      levelOptions: { level: 'info' },
+    });
+    const child = parent.child('svc', { serviceVersion: '2.0', region: 'us-east' });
+    await child.info('child msg', { adHoc: true });
+    out.restore();
+    const parsed = JSON.parse(out.joined());
+    expect(parsed.payload.serviceVersion).toBe('2.0');
+    expect(parsed.payload.region).toBe('us-east');
+    expect(parsed.payload.adHoc).toBe(true);
+  });
+
   it('child logger does not affect parent context', () => {
     const parent = new LogixiaLogger({ ...BASE_CONFIG });
     parent.child('child-ctx');
@@ -584,6 +600,46 @@ describe('setLevel', () => {
     out.restore();
     expect(out.joined()).not.toContain('before change');
     expect(out.joined()).toContain('after change');
+  });
+});
+
+// ── Redaction integration (autoDetect-only config must apply) ─────────────────
+
+describe('redaction applied through the logger', () => {
+  it('applies autoDetect redaction even with no explicit paths/patterns (BUG 1)', async () => {
+    const out = spyOutput();
+    const logger = new LogixiaLogger({
+      ...BASE_CONFIG,
+      environment: 'production',
+      format: { json: true, colorize: false, timestamp: false },
+      redact: { autoDetect: 'aggressive' },
+    });
+    await logger.info('t', {
+      password: 'hunter2',
+      email: 'x@y.com',
+      jwt: 'eyJhbGciOiJ.aaa.bbb',
+    });
+    out.restore();
+    const joined = out.joined();
+    expect(joined).not.toContain('hunter2');
+    expect(joined).not.toContain('x@y.com');
+    expect(joined).not.toContain('eyJhbGciOiJ.aaa.bbb');
+    expect(joined).toContain('[REDACTED]');
+  });
+
+  it('redacts a top-level password key via conservative autoDetect (BUG 1 + BUG 2)', async () => {
+    const out = spyOutput();
+    const logger = new LogixiaLogger({
+      ...BASE_CONFIG,
+      format: { json: true, colorize: false, timestamp: false },
+      redact: { autoDetect: 'conservative' },
+    });
+    await logger.info('t', { password: 'hunter2', keep: 'visible' });
+    out.restore();
+    const joined = out.joined();
+    expect(joined).not.toContain('hunter2');
+    expect(joined).toContain('visible');
+    expect(joined).toContain('[REDACTED]');
   });
 });
 

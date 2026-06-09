@@ -62,27 +62,27 @@ export class ConsoleTransport implements ITransport {
     const formatted = this.formatEntry(entry) + '\n';
     // Use process.stderr for errors, stdout for everything else —
     // avoids the extra indirection that console.log/error add.
-    const out = entry.level.toLowerCase() === 'error' ? process.stderr : process.stdout;
+    const lvl = entry.level.toLowerCase();
+    // Per the class contract, error AND warn go to stderr; everything else stdout.
+    const out = lvl === 'error' || lvl === 'warn' ? process.stderr : process.stdout;
     out.write(formatted);
     return Promise.resolve();
   }
 
   private formatEntry(entry: TransportLogEntry): string {
     if (this.config.format === 'json') {
-      return JSON.stringify(
-        {
-          timestamp: this.config.timestamp !== false ? entry.timestamp.toISOString() : undefined,
-          level: entry.level,
-          message: entry.message,
-          ...(entry.data || {}),
-          context: entry.context,
-          traceId: entry.traceId,
-          appName: entry.appName,
-          environment: entry.environment,
-        },
-        null,
-        2
-      );
+      // Compact (single-line) JSON so line-based log collectors can parse one
+      // entry per line. JSON.stringify already escapes control chars.
+      return JSON.stringify({
+        timestamp: this.config.timestamp !== false ? entry.timestamp.toISOString() : undefined,
+        level: entry.level,
+        message: entry.message,
+        ...(entry.data || {}),
+        context: entry.context,
+        traceId: entry.traceId,
+        appName: entry.appName,
+        environment: entry.environment,
+      });
     }
 
     // Text format
@@ -94,8 +94,9 @@ export class ConsoleTransport implements ITransport {
       parts.push(this.colorize(timestamp, 'gray'));
     }
 
-    // Level
-    const level = entry.level.toUpperCase().padEnd(5);
+    // Level — sanitized too: custom levels are user-controlled and could carry
+    // ANSI escapes / control chars (CWE-117).
+    const level = ConsoleTransport.sanitize(entry.level).toUpperCase().padEnd(5);
     const coloredLevel = this.colorize(level, this.getLevelColor(entry.level));
     parts.push(coloredLevel);
 

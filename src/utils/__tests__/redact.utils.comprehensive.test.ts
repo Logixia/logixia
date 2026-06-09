@@ -164,8 +164,9 @@ describe('applyRedaction', () => {
   });
 
   describe('autoDetect: conservative', () => {
-    // Note: PII_CONSERVATIVE_PATHS uses `**.password` etc. which matches
-    // keys at any nested depth (e.g. user.password), not bare top-level keys.
+    // Note: PII_CONSERVATIVE_PATHS uses `**.password` etc. which matches the
+    // key at any depth — both nested (user.password) and bare top-level keys
+    // (`**` matches zero or more segments).
     it('redacts nested **.password fields', () => {
       const result = applyRedaction(
         { user: { password: 'secret' } },

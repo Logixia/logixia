@@ -54,6 +54,9 @@ export interface LogixiaPlugin {
    *
    * - Return the entry (modified or unchanged) to continue processing.
    * - Return `null` to **drop** the entry — no transport will receive it.
+   *
+   * Errors thrown inside `onLog` are swallowed so a buggy plugin cannot crash
+   * logging; the chain continues with the previous (un-transformed) entry.
    */
   onLog?(entry: LogEntry): LogEntry | null | Promise<LogEntry | null>;
 
@@ -117,11 +120,19 @@ export class PluginRegistry {
    * (possibly transformed) entry.
    */
   async runOnLog(entry: LogEntry): Promise<LogEntry | null> {
-    let current: LogEntry | null = entry;
+    let current: LogEntry = entry;
     for (const plugin of this._plugins) {
       if (!plugin.onLog) continue;
-      current = await plugin.onLog(current);
-      if (current === null) return null;
+      let next: LogEntry | null;
+      try {
+        next = await plugin.onLog(current);
+      } catch {
+        // Isolate buggy plugins: a throwing onLog must not crash logging.
+        // Skip this plugin and continue the chain with the un-transformed entry.
+        continue;
+      }
+      if (next === null) return null;
+      current = next;
     }
     return current;
   }
