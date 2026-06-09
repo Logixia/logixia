@@ -155,6 +155,23 @@ describe('extractTraceId', () => {
       expect(extractTraceId(req, { header: 'traceparent' })).toBe('tid-0');
     });
 
+    it('parses the trace-id segment out of a W3C traceparent header', () => {
+      // W3C format: version-traceId(32hex)-spanId(16hex)-flags
+      const req = {
+        headers: {
+          traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
+        },
+      };
+      expect(extractTraceId(req, { header: 'traceparent' })).toBe(
+        '4bf92f3577b34da6a3ce929d0e0e4736'
+      );
+    });
+
+    it('falls back to the raw value when traceparent is not W3C-formatted', () => {
+      const req = { headers: { traceparent: 'not-a-w3c-value' } };
+      expect(extractTraceId(req, { header: 'traceparent' })).toBe('not-a-w3c-value');
+    });
+
     it('returns undefined when header is absent', () => {
       const req = { headers: { other: 'value' } };
       expect(extractTraceId(req, { header: 'x-trace-id' })).toBeUndefined();
