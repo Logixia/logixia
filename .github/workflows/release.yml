@@ -1,40 +1,54 @@
-name: Release
+name: Release (manual fallback)
 
+# The primary release path is the `release` job inside ci.yml.
+# This workflow exists only as a manual escape hatch — use it when you
+# need to cut a release without pushing a new commit (e.g. after fixing
+# a broken NPM_TOKEN or recovering from a failed release mid-flight).
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
-permissions:
-  contents: write
-  pull-requests: write
+concurrency:
+  group: release
+  cancel-in-progress: false # never cancel an in-flight release — queue instead
 
 jobs:
-  release-please:
-    runs-on: ubuntu-latest
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-    steps:
-      - uses: googleapis/release-please-action@v4
-        id: release
-        with:
-          release-type: node
-
-  publish:
-    needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+  release:
+    name: Semantic Release (manual)
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      id-token: write # required for npm trusted publishing (OIDC) + provenance
+      contents: write # push release tag + chore(release) commit
+      issues: write # comment on released issues
+      pull-requests: write # comment on released PRs
+      id-token: write # npm provenance attestation
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
         with:
-          node-version: 22
-          registry-url: https://registry.npmjs.org
-          cache: npm
-      - run: npm ci
-      - run: npm run build
-      # Trusted publishing: no NPM_TOKEN. --provenance passed defensively
-      # (npm auto-generates it, but some CLI versions need the flag).
-      - run: npm publish --provenance --access public
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        env:
+          HUSKY: 0 # skip husky install in CI — no local git hooks needed
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # No NPM_TOKEN — npm publish uses OIDC trusted publishing.
+          # @semantic-release/npm auto-detects the GitHub Actions OIDC token
+          # when id-token: write is granted (see permissions above) and no
+          # NPM_TOKEN is set, so no secret is needed. Requires a trusted
+          # publisher to be configured for this package on npmjs.com.
+          NPM_CONFIG_PROVENANCE: true
+          HUSKY: 0 # skip commit-msg / pre-commit hooks on the auto-generated release commit
+        run: npx --yes -p semantic-release@25 -p @semantic-release/changelog@6 -p @semantic-release/git@10 -p conventional-changelog-conventionalcommits@8 semantic-release

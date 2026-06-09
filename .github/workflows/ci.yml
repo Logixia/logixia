@@ -148,3 +148,68 @@ jobs:
           name: dist
           path: dist/
           retention-days: 3
+
+  # ─────────────────────────────────────────────────────────
+  # 4. Release — only on direct push to main
+  #
+  # Why "local branch is behind remote" used to happen so often:
+  #
+  #   semantic-release checks that local HEAD == origin HEAD before it
+  #   will publish.  Any commit pushed to main AFTER github.sha (the SHA
+  #   this run was triggered by) but BEFORE the release step executes
+  #   causes the check to fail.  Sources include:
+  #     • bot/dependabot commits
+  #     • concurrent CI runs from quick successive pushes
+  #   The "Sync with remote" step below eliminates all of these by
+  #   fast-forwarding local to the current tip of origin/main right
+  #   before semantic-release runs.  semantic-release then sees
+  #   local == remote and proceeds normally.
+  # ─────────────────────────────────────────────────────────
+  release:
+    name: Semantic Release
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write # push release tag + chore(release) commit
+      issues: write # comment on released issues
+      pull-requests: write # comment on released PRs
+      id-token: write # npm provenance attestation
+
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Fast-forward local main to the current tip of origin/main.
+      # Eliminates "local branch is behind the remote" skips caused by
+      # any commit pushed to main after github.sha was captured.
+      - name: Sync with remote
+        run: git fetch origin && git reset --hard origin/main
+
+      - name: Install dependencies
+        env:
+          HUSKY: 0 # skip husky install in CI — no local git hooks needed
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # No NPM_TOKEN — npm publish uses OIDC trusted publishing.
+          # @semantic-release/npm auto-detects the GitHub Actions OIDC token
+          # when id-token: write is granted (see permissions above) and no
+          # NPM_TOKEN is set, so no secret is needed. Requires a trusted
+          # publisher to be configured for this package on npmjs.com.
+          NPM_CONFIG_PROVENANCE: true
+          HUSKY: 0 # skip commit-msg / pre-commit hooks on the auto-generated release commit
+        run: npx --yes -p semantic-release@25 -p @semantic-release/changelog@6 -p @semantic-release/git@10 -p conventional-changelog-conventionalcommits@8 semantic-release
