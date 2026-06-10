@@ -79,7 +79,7 @@ function _serializeError(
         seen
       );
     } else {
-      serialized.cause = serializeValue(errorWithCause.cause, maxDepth - depth - 1);
+      serialized.cause = serializeValue(errorWithCause.cause, maxDepth - depth - 1, seen);
     }
   }
 
@@ -89,7 +89,7 @@ function _serializeError(
     serialized.errors = aggregateError.errors.map((e) =>
       e instanceof Error
         ? _serializeError(e, includeStack, maxDepth, excludeFields, depth + 1, seen)
-        : serializeValue(e, maxDepth - depth - 1)
+        : serializeValue(e, maxDepth - depth - 1, seen)
     );
   }
 
@@ -116,7 +116,7 @@ function _serializeError(
     if (skip.has(key)) continue;
     if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
     try {
-      serialized[key] = serializeValue(errorRecord[key], maxDepth - depth - 1);
+      serialized[key] = serializeValue(errorRecord[key], maxDepth - depth - 1, seen);
     } catch {
       serialized[key] = '[Unserializable]';
     }
@@ -127,8 +127,13 @@ function _serializeError(
 
 /**
  * Recursively serialize an arbitrary value to a JSON-safe representation.
+ *
+ * The `seen` guard is threaded through (not recreated) so cross-referencing
+ * errors nested inside plain objects/arrays are caught by the same circular
+ * check that protects the top-level error tree, rather than only relying on the
+ * depth limit.
  */
-function serializeValue(value: unknown, remainingDepth: number): unknown {
+function serializeValue(value: unknown, remainingDepth: number, seen: WeakSet<object>): unknown {
   if (remainingDepth <= 0) return '[Max Depth]';
   if (value === null || value === undefined) return value;
 
@@ -139,19 +144,26 @@ function serializeValue(value: unknown, remainingDepth: number): unknown {
   if (value instanceof Date) return value.toISOString();
 
   if (value instanceof Error) {
-    return _serializeError(value, true, remainingDepth, [], 0, new WeakSet());
+    if (seen.has(value)) {
+      return { name: value.name, message: value.message, _circular: true };
+    }
+    return _serializeError(value, true, remainingDepth, [], 0, seen);
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => serializeValue(item, remainingDepth - 1));
+    if (seen.has(value)) return '[Circular]';
+    seen.add(value);
+    return value.map((item) => serializeValue(item, remainingDepth - 1, seen));
   }
 
   if (typeof value === 'object') {
+    if (seen.has(value)) return '[Circular]';
+    seen.add(value);
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
       try {
-        out[k] = serializeValue(v, remainingDepth - 1);
+        out[k] = serializeValue(v, remainingDepth - 1, seen);
       } catch {
         out[k] = '[Unserializable]';
       }
