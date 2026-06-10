@@ -35,6 +35,8 @@ export {
 export { applyRedaction, redactObject } from './utils/redact.utils';
 export type { LevelSignalOptions, ReconfigurableLogger } from './utils/runtime-control';
 export { createLevelControlHandler, registerLevelSignal } from './utils/runtime-control';
+export type { SafeStringifyOptions } from './utils/safe-stringify';
+export { decycleValue, retrocycle, safeStringify } from './utils/safe-stringify';
 export * from './utils/shutdown.utils';
 export * from './utils/trace.utils';
 export type {
