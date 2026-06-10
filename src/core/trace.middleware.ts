@@ -23,6 +23,27 @@ export function resolveResponseHeader(config?: TraceIdConfig): string | null {
   return config?.responseHeader ?? DEFAULT_TRACE_RESPONSE_HEADER;
 }
 
+/**
+ * Echo the trace ID on the response, tolerating non-Express responses and
+ * already-sent headers. NestJS can run on Fastify (reply.header() instead of
+ * res.setHeader()), and on a closed/sent response setHeader throws — neither
+ * should crash the request. The trace ID is still propagated via async context.
+ */
+function writeTraceHeader(res: unknown, header: string, traceId: string): void {
+  const r = res as {
+    setHeader?: (k: string, v: string) => void;
+    header?: (k: string, v: string) => void;
+    headersSent?: boolean;
+  };
+  if (r.headersSent) return;
+  try {
+    if (typeof r.setHeader === 'function') r.setHeader(header, traceId);
+    else if (typeof r.header === 'function') r.header(header, traceId);
+  } catch {
+    /* response not in a header-settable state — context propagation still works */
+  }
+}
+
 // Extend Express Request interface — requires namespace to augment Express typings
 /* eslint-disable @typescript-eslint/no-namespace */
 declare global {
@@ -90,13 +111,13 @@ export class TraceMiddleware implements NestMiddleware {
     req.traceId = traceId;
 
     const header = resolveResponseHeader(this.config);
-    if (header) res.setHeader(header, traceId);
+    if (header) writeTraceHeader(res, header, traceId);
 
     this.ctx.run(traceId, () => next(), {
       method: req.method,
       url: req.url,
       userAgent: req.get('User-Agent'),
-      ip: req.ip || req.connection.remoteAddress,
+      ip: req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress,
     });
   }
 }
@@ -159,13 +180,13 @@ export function traceMiddleware(config?: TraceIdConfig) {
     req.traceId = traceId;
 
     const header = resolveResponseHeader(traceConfig);
-    if (header) res.setHeader(header, traceId);
+    if (header) writeTraceHeader(res, header, traceId);
 
     ctx.run(traceId, () => next(), {
       method: req.method,
       url: req.url,
       userAgent: req.get('User-Agent'),
-      ip: req.ip || req.connection.remoteAddress,
+      ip: req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress,
     });
   };
 }
