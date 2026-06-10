@@ -3,6 +3,21 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.11.0](https://github.com/Logixia/logixia/compare/v1.10.3...v1.11.0) (2026-06-10)
+
+### ✨ Features
+
+* **runtime:** dynamic log-level reconfiguration without restart (R3+R4) ([ab5ad68](https://github.com/Logixia/logixia/commit/ab5ad6858e44c12e746919e655747b4de7ef4210)), closes [winston#1107](https://github.com/Logixia/winston/issues/1107) [206/#677](https://github.com/206/logixia/issues/677) [nestjs-pino#371](https://github.com/Logixia/nestjs-pino/issues/371)
+* **sampling:** adaptive anomaly-driven sampling (R6) ([b80505b](https://github.com/Logixia/logixia/commit/b80505baff2a4b76d3b7bc68e10e982de5115c67))
+* **transport:** OTLP Logs export — OpenTelemetry-native log emission (R2) ([6268ee7](https://github.com/Logixia/logixia/commit/6268ee738ccb0af775e4736298fd3a5716a1a6a8))
+* **utils:** robust serialization beyond [Circular] — BigInt + $ref decycle (R9) ([9526ac7](https://github.com/Logixia/logixia/commit/9526ac7aba61df7683b0c525a2283310d6c3b686))
+* **wide-events:** canonical log lines / wide events API (R1) ([86ad66a](https://github.com/Logixia/logixia/commit/86ad66a9daa21e599d2dc0c37825d6a3957c049a))
+
+### 📚 Documentation
+
+* document new roadmap features + flush-on-exit reliability guarantee (R5) ([0f4f372](https://github.com/Logixia/logixia/commit/0f4f3726b2654fb40130ed82577dbf420e837d7c)), closes [#1705](https://github.com/Logixia/logixia/issues/1705) [1889/#2054](https://github.com/1889/logixia/issues/2054)
+* **research:** logger improvement research + prioritized roadmap ([8859212](https://github.com/Logixia/logixia/commit/88592126876cf0ba8d0451c534fb95eba4fe91e4)), closes [#1705](https://github.com/Logixia/logixia/issues/1705) [#206](https://github.com/Logixia/logixia/issues/206)
+
 ## [1.10.3](https://github.com/Logixia/logixia/compare/v1.10.2...v1.10.3) (2026-06-10)
 
 ### 🐛 Bug Fixes
