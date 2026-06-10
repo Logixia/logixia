@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.11.1](https://github.com/Logixia/logixia/compare/v1.11.0...v1.11.1) (2026-06-10)
+
+### ⚡ Performance
+
+* **core:** synchronous hot path — logixia now beats pino on 5 of 6 scenarios ([cab7b65](https://github.com/Logixia/logixia/commit/cab7b6510aab923644d7a02c9f820650543d7afc)), closes [#1](https://github.com/Logixia/logixia/issues/1)
+
 ## [1.11.0](https://github.com/Logixia/logixia/compare/v1.10.3...v1.11.0) (2026-06-10)
 
 ### ✨ Features
