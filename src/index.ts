@@ -46,6 +46,19 @@ export type {
   TypedLogger,
 } from './utils/typed-logger';
 export { createTypedLogger, defineLogSchema } from './utils/typed-logger';
+export type {
+  WideEventFields,
+  WideEventLogger,
+  WideEventMiddlewareOptions,
+  WideEventOptions,
+} from './wide-events';
+export {
+  addEventFields,
+  getEventFields,
+  setEventField,
+  wideEventMiddleware,
+  withWideEvent,
+} from './wide-events';
 
 // Search module exports
 export * from './search';
