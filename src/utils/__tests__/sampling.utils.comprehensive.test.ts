@@ -319,6 +319,41 @@ describe('Sampler', () => {
     });
   });
 
+  // ── bounded trace tracking (memory leak guard) ──────────────────────────────
+
+  describe('traceConsistent — bounded memory', () => {
+    it('does not grow the sampled-trace set without limit when no stats timer resets it', () => {
+      // rate 1.0 → every unique trace is remembered as "sampled". Without a bound
+      // this Set would grow one entry per traceId forever (the leak). The cap
+      // clears it on overflow, so its size stays bounded.
+      const s = new Sampler({ rate: 1.0, traceConsistent: true });
+      const internals = s as unknown as {
+        sampledTraces: Set<string>;
+        maxTrackedTraces: number;
+      };
+      const cap = internals.maxTrackedTraces;
+
+      for (let i = 0; i < cap + 50; i += 1) {
+        s.shouldEmit('info', `trace-${i}`);
+      }
+
+      // Never exceeds the cap (it clears and refills rather than growing forever).
+      expect(internals.sampledTraces.size).toBeLessThanOrEqual(cap);
+      s.destroy();
+    });
+
+    it('still emits correctly after a trace-set overflow clear', () => {
+      const s = new Sampler({ rate: 1.0, traceConsistent: true });
+      const internals = s as unknown as { maxTrackedTraces: number };
+      for (let i = 0; i < internals.maxTrackedTraces + 10; i += 1) {
+        s.shouldEmit('info', `t-${i}`);
+      }
+      // A fresh trace after overflow still gets a correct (emit) decision.
+      expect(s.shouldEmit('info', 'fresh-trace')).toBe(true);
+      s.destroy();
+    });
+  });
+
   // ── destroy ───────────────────────────────────────────────────────────────
 
   describe('destroy', () => {

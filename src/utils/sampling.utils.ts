@@ -34,6 +34,15 @@ export class Sampler {
   private readonly sampledTraces = new Set<string>();
   /** Trace IDs that have been dropped in this window → always drop. */
   private readonly droppedTraces = new Set<string>();
+  /**
+   * Upper bound on tracked trace IDs. resetStats() only clears these Sets when a
+   * stats timer is running, so without an onStats callback they would otherwise
+   * grow unbounded for the life of the process (one entry per unique traceId) —
+   * a memory leak in any long-running service using traceConsistent sampling.
+   * When a Set hits this cap it is cleared; a re-seen trace simply gets a fresh
+   * sampling decision, which is acceptable for sampling consistency.
+   */
+  private readonly maxTrackedTraces = 100_000;
 
   // Rate-limiting state
   private _tokenBucket = 0;
@@ -100,9 +109,9 @@ export class Sampler {
       // First time we see this traceId — make the sampling decision now
       const emit = this._sampleByRate(lvl);
       if (emit) {
-        this.sampledTraces.add(traceId);
+        this._rememberTrace(this.sampledTraces, traceId);
       } else {
-        this.droppedTraces.add(traceId);
+        this._rememberTrace(this.droppedTraces, traceId);
       }
       if (emit) this._trackEmitted(lvl);
       else this._trackDropped(lvl);
@@ -159,6 +168,19 @@ export class Sampler {
     if (rate <= 0.0) return false;
     // eslint-disable-next-line sonarjs/pseudo-random -- probabilistic sampling, not security-sensitive
     return Math.random() < rate;
+  }
+
+  /**
+   * Record a trace decision, bounding the Set so it can't grow without limit.
+   * If the Set has reached the cap, clear it before inserting — stale decisions
+   * are simply re-made on next sight, which keeps memory bounded at the cost of
+   * occasional re-sampling for very high-cardinality trace workloads.
+   */
+  private _rememberTrace(set: Set<string>, traceId: string): void {
+    if (set.size >= this.maxTrackedTraces) {
+      set.clear();
+    }
+    set.add(traceId);
   }
 
   private _consumeToken(): boolean {
