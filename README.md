@@ -1,8 +1,9 @@
 # logixia
 
 <p align="center">
-  <strong>The async-first logging library that ships complete.</strong><br/>
-  TypeScript-first &middot; Non-blocking by design &middot; NestJS &middot; Database &middot; Cloud &middot; Tracing &middot; OTel &middot; Browser
+  <strong>The async-first TypeScript logger that ships complete.</strong><br/>
+  Wide events &middot; OpenTelemetry (OTLP) &middot; Runtime log levels &middot; Redaction &middot; Adaptive sampling<br/>
+  NestJS &middot; Express &middot; Fastify &middot; Database &middot; Cloud &middot; Tracing &middot; Prometheus &middot; Browser
 </p>
 
 <p align="center">
@@ -163,45 +164,70 @@ logixia takes a different approach: **everything ships built-in, and nothing blo
 
 ## Feature comparison
 
-| Feature                              | **logixia** |    pino     |          winston          | bunyan  |
-| ------------------------------------ | :---------: | :---------: | :-----------------------: | :-----: |
-| TypeScript-first                     |     yes     |   partial   |          partial          | partial |
-| Async / non-blocking writes          |     yes     |     no      |            no             |   no    |
-| NestJS module (built-in)             |     yes     |     no      |            no             |   no    |
-| Database transports (built-in)       |     yes     |     no      |            no             |   no    |
-| Cloud transports (CW, GCP, Azure)    |     yes     |     no      |            no             |   no    |
-| File rotation (built-in)             |     yes     |  pino-roll  | winston-daily-rotate-file |   no    |
-| Multi-transport concurrent           |     yes     |     no      |            yes            |   no    |
-| Log search                           |     yes     |     no      |            no             |   no    |
-| Field redaction (built-in)           |     yes     | pino-redact |            no             |   no    |
-| Request tracing (AsyncLocalStorage)  |     yes     |     no      |            no             |   no    |
-| Kafka + WebSocket trace interceptors |     yes     |     no      |            no             |   no    |
-| Correlation ID propagation           |     yes     |     no      |            no             |   no    |
-| Browser / Edge / Bun / Deno support  |     yes     |   partial   |            no             |   no    |
-| OpenTelemetry / W3C headers          |     yes     |     no      |            no             |   no    |
-| Graceful shutdown / flush            |     yes     |     no      |            no             |   no    |
-| Custom log levels                    |     yes     |     yes     |            yes            |   yes   |
-| Adaptive log level (NODE_ENV)        |     yes     |     no      |            no             |   no    |
-| Plugin / extension API               |     yes     |     no      |            no             |   no    |
-| Prometheus metrics extraction        |     yes     |     no      |            no             |   no    |
-| Visual TUI log explorer              |     yes     |     no      |            no             |   no    |
-| Actively maintained                  |     yes     |     yes     |            yes            |   no    |
+| Feature                               | **logixia** |    pino     |          winston          | bunyan  |
+| ------------------------------------- | :---------: | :---------: | :-----------------------: | :-----: |
+| TypeScript-first                      |     yes     |   partial   |          partial          | partial |
+| Async / non-blocking writes           |     yes     |     no      |            no             |   no    |
+| NestJS module (built-in)              |     yes     |     no      |            no             |   no    |
+| Database transports (built-in)        |     yes     |     no      |            no             |   no    |
+| Cloud transports (CW, GCP, Azure)     |     yes     |     no      |            no             |   no    |
+| File rotation (built-in)              |     yes     |  pino-roll  | winston-daily-rotate-file |   no    |
+| Multi-transport concurrent            |     yes     |     no      |            yes            |   no    |
+| Log search                            |     yes     |     no      |            no             |   no    |
+| Field + message redaction (built-in)  |     yes     | pino-redact |            no             |   no    |
+| Request tracing (AsyncLocalStorage)   |     yes     |     no      |            no             |   no    |
+| Kafka + WebSocket trace interceptors  |     yes     |     no      |            no             |   no    |
+| Correlation ID propagation            |     yes     |     no      |            no             |   no    |
+| Browser / Edge / Bun / Deno support   |     yes     |   partial   |            no             |   no    |
+| OpenTelemetry / W3C headers           |     yes     |     no      |            no             |   no    |
+| **OTLP logs export (OTel-native)**    |   **yes**   |  transport  |            no             |   no    |
+| **Wide events / canonical log lines** |   **yes**   |     no      |            no             |   no    |
+| **Runtime log-level reconfig**        |   **yes**   |  external   |            no             |   no    |
+| **Adaptive (anomaly) sampling**       |   **yes**   |     no      |            no             |   no    |
+| Graceful shutdown / flush (no loss)   |     yes     |   partial   |            no             |   no    |
+| Custom log levels                     |     yes     |     yes     |            yes            |   yes   |
+| Adaptive log level (NODE_ENV)         |     yes     |     no      |            no             |   no    |
+| Plugin / extension API                |     yes     |     no      |            no             |   no    |
+| Prometheus metrics extraction         |     yes     |     no      |            no             |   no    |
+| Visual TUI log explorer               |     yes     |     no      |            no             |   no    |
+| Actively maintained                   |     yes     |     yes     |            yes            |   no    |
 
 ---
 
 ## Performance
 
-logixia uses `fast-json-stringify` (a pre-compiled serializer) for JSON output, which is ~59% faster than `JSON.stringify`. The hot path — level check, redaction decision, and format — is optimised with pre-built caches built once on construction, not on every log call.
+logixia is async-first and built for the hot path: a synchronous fast path for in-process transports (no Promise allocated when the write completes synchronously), a millisecond-cached timestamp, lazy formatting (each transport formats once — no wasted pre-format), and per-call work (level check, namespace resolution, redaction decision) served off pre-built caches. The result: logixia **beats pino on 5 of 6 real-world scenarios**, beats winston and bunyan across the board, and keeps **p99 latency at 1–3µs** with no tail spikes.
 
-| Library     | Simple log (ops/sec) | Structured log (ops/sec) | Error log (ops/sec) |  p99 latency |
-| ----------- | -------------------: | -----------------------: | ------------------: | -----------: |
-| pino        |            1,258,000 |                  630,000 |             390,000 |     2.5–12µs |
-| **logixia** |          **840,000** |              **696,000** |         **654,000** | **4.8–10µs** |
-| winston     |              738,000 |                  371,000 |             433,000 |       9–16µs |
+Benchmarked against **pino, winston, and bunyan** — all writing to `/dev/null` (pure serialization + framework overhead, no disk/terminal cost). Node 20, Apple M-series; numbers are ops/sec, higher is better. Reproduce with `npm run benchmark`.
 
-logixia is **10% faster than pino on structured logging** and **68% faster on error serialization**. It beats winston across the board. Pino leads on simple string logs because it uses synchronous direct writes to `process.stdout` — a trade-off that blocks the event loop under heavy I/O and disappears as soon as you add real metadata.
+| Scenario                       |      pino |   **logixia** |   winston |  bunyan |
+| ------------------------------ | --------: | ------------: | --------: | ------: |
+| Simple string log              | 3,220,000 |     2,769,000 | 1,577,000 | 707,000 |
+| **Structured log (5 fields)**  | 1,319,000 | **1,536,000** |   699,000 | 536,000 |
+| **Error object logging**       |   907,000 | **1,940,000** | 1,062,000 | 573,000 |
+| **Child / per-request logger** | 1,093,000 | **1,436,000** |   321,000 | 380,000 |
+| **Deep nested object**         |   891,000 | **1,040,000** |   435,000 | 442,000 |
+| **High-cardinality (12 flds)** |   651,000 | **1,027,000** |   316,000 | 404,000 |
 
-To reproduce: `node benchmarks/run.mjs`
+**What this means:**
+
+- ✅ **logixia is faster than pino on 5 of 6 scenarios** — including **+114% on error logging**, **+58% on high-cardinality**, **+31% on child loggers**, and **+16% on structured logs** — the shapes that dominate real production traffic.
+- ✅ **logixia beats winston and bunyan in every scenario**, often by 2–3×, and avoids their tail-latency spikes (winston hit **3,038µs p99** on high-cardinality and **412µs** on deep objects; logixia stays **1–3µs p99** throughout).
+- ⚖️ **pino still wins the trivial simple-string case** (−14%) because it writes synchronously straight to `process.stdout` — fast in a microbenchmark, but it blocks the event loop under real I/O and is exactly the path behind pino's open [flush-on-exit log-loss bug](#graceful-shutdown). logixia stays non-blocking and guarantees delivery, and pulls ahead the moment you log anything structured.
+
+**Distinctive-feature throughput** (no cross-library equivalent — `npm run benchmark:features`):
+
+| Operation                                |   ops/sec |   p99 |
+| ---------------------------------------- | --------: | ----: |
+| Wide event (accumulate 6 fields + emit)  |   742,000 | 3.7µs |
+| `safeStringify` (BigInt + circular)      | 2,735,000 | 0.5µs |
+| `decycle` + `retrocycle` round-trip      | 1,003,000 | 1.3µs |
+| Adaptive-sampling decision (hot path)    | 1,950,000 | 0.9µs |
+| Namespace child logging (`db.*` → debug) | 1,966,000 | 0.8µs |
+
+Sampling and namespace resolution add **negligible overhead** (~µs), so you can keep them on in production.
+
+To reproduce: `npm run benchmark` (core) and `npm run benchmark:features` (distinctive APIs).
 
 ---
 

@@ -188,6 +188,16 @@ export function initOtelBridge(opts: OtelBridgeOptions = {}): void {
 
 /**
  * @internal
+ * True when initOtelBridge() has been called. Lets the logger hot path skip the
+ * `_getOtelPayloadIfEnabled()` call (and its `{}` allocation + Object.keys) on
+ * every log when the bridge is off — the overwhelmingly common case.
+ */
+export function _isOtelBridgeEnabled(): boolean {
+  return _bridgeOptions !== null;
+}
+
+/**
+ * @internal
  * Used by the core logger to inject OTel context when the bridge is active.
  * Returns `{}` when the bridge is not initialised or no active span exists.
  */

@@ -149,13 +149,23 @@ export class TransportManager extends EventEmitter {
     return true;
   }
 
-  async write(entry: LogEntry): Promise<void> {
+  /**
+   * Write an entry to all eligible transports.
+   *
+   * Returns `void` when every transport completed synchronously (the common
+   * console-only hot path — no Promise allocated, no microtask scheduled), and a
+   * `Promise<void>` only when at least one transport's write is genuinely async.
+   * The logger awaits the result either way; awaiting a non-thenable is a no-op,
+   * so the public `Promise<void>` API is preserved without paying for it on the
+   * sync path.
+   */
+  write(entry: LogEntry): void | Promise<void> {
     if (this.isShuttingDown) return;
 
     // Build the transport entry — exactOptionalPropertyTypes requires we only set
     // optional properties when they have a real value (not undefined).
     const transportEntry: TransportLogEntry = {
-      timestamp: new Date(entry.timestamp),
+      timestamp: typeof entry.timestamp === 'string' ? new Date(entry.timestamp) : entry.timestamp,
       level: entry.level,
       message: entry.message,
       appName: entry.appName,
@@ -165,67 +175,99 @@ export class TransportManager extends EventEmitter {
     if (entry.traceId !== undefined) transportEntry.traceId = entry.traceId;
     if (entry.environment !== undefined) transportEntry.environment = entry.environment;
 
-    const writePromises: Promise<void>[] = [];
-
-    for (const [id, transport] of this.transports) {
-      // Configure transport levels if prompting is enabled
-      if (this.promptForLevels && !this.transportLevelPreferences.has(id)) {
-        await this.configureTransportLevels(id);
-      }
-
-      // Check if transport should handle this log level
-      if (!this.shouldTransportHandle(transport, transportEntry.level, id)) {
-        continue;
-      }
-
-      // Run the transport's custom filter predicate if one is set
-      if (transport.filter && !transport.filter(transportEntry)) {
-        continue;
-      }
-
-      const writePromise = this.writeToTransport(id, transport, transportEntry);
-      writePromises.push(writePromise);
+    // Prompting needs an async pre-step — only taken when explicitly enabled.
+    if (this.promptForLevels) {
+      return this._writeAsyncWithPrompt(transportEntry);
     }
 
-    // Wait for all transports to complete (or fail)
-    const results = await Promise.allSettled(writePromises);
+    let pending: Promise<void>[] | undefined;
 
-    // Check for any failures
-    const failures = results.filter(
-      (result) => result.status === 'rejected'
-    ) as PromiseRejectedResult[];
+    for (const [id, transport] of this.transports) {
+      if (!this.shouldTransportHandle(transport, transportEntry.level, id)) continue;
+      if (transport.filter && !transport.filter(transportEntry)) continue;
+
+      const result = this.writeToTransport(id, transport, transportEntry);
+      // Only collect genuinely-pending results. A synchronous transport returns
+      // undefined → nothing to await.
+      if (result && typeof (result as Promise<void>).then === 'function') {
+        if (pending === undefined) pending = [];
+        pending.push(result as Promise<void>);
+      }
+    }
+
+    if (pending === undefined) return; // all transports were synchronous
+
+    return Promise.allSettled(pending).then((results) => {
+      const failures = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+      if (failures.length > 0) {
+        const errors = failures.map((f) => f.reason);
+        this.emit('error', new Error(`Transport write failures: ${errors.join(', ')}`), 'multiple');
+      }
+    });
+  }
+
+  /** Slow path used only when interactive level-prompting is enabled. */
+  private async _writeAsyncWithPrompt(transportEntry: TransportLogEntry): Promise<void> {
+    const writePromises: Promise<void>[] = [];
+    for (const [id, transport] of this.transports) {
+      if (!this.transportLevelPreferences.has(id)) {
+        await this.configureTransportLevels(id);
+      }
+      if (!this.shouldTransportHandle(transport, transportEntry.level, id)) continue;
+      if (transport.filter && !transport.filter(transportEntry)) continue;
+      const result = this.writeToTransport(id, transport, transportEntry);
+      if (result && typeof (result as Promise<void>).then === 'function') {
+        writePromises.push(result as Promise<void>);
+      }
+    }
+    const results = await Promise.allSettled(writePromises);
+    const failures = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
     if (failures.length > 0) {
-      const errors = failures.map((failure) => failure.reason);
+      const errors = failures.map((f) => f.reason);
       this.emit('error', new Error(`Transport write failures: ${errors.join(', ')}`), 'multiple');
     }
   }
 
-  private async writeToTransport(
+  private writeToTransport(
     id: string,
     transport: ITransport,
     entry: TransportLogEntry
-  ): Promise<void> {
+  ): void | Promise<void> {
     const startTime = Date.now();
     const metrics = this.metrics.get(id)!;
 
-    try {
-      await this._writeWithRetry(transport, entry);
-
-      // Update metrics (reuse startTime, avoid new Date() allocation)
+    const onSuccess = (): void => {
       const writeTime = Date.now() - startTime;
       metrics.logsWritten++;
       metrics.lastWrite = new Date(startTime);
-      // True cumulative mean: avg += (sample - avg) / n. The previous formula
-      // ((avg + sample) / 2) was an exponential decay that over-weighted the most
-      // recent write, so averageWriteTime never reflected the real average.
+      // True cumulative mean: avg += (sample - avg) / n.
       metrics.averageWriteTime += (writeTime - metrics.averageWriteTime) / metrics.logsWritten;
-
       this.emit('log', entry);
-    } catch (error) {
+    };
+    const onError = (error: unknown): never => {
       metrics.errors++;
       this.emit('error', error, id);
       throw error;
+    };
+
+    // Fast path: no retry config AND the transport write is synchronous → do the
+    // success bookkeeping inline with zero Promise allocation. Only fall back to
+    // the async path when retry is configured or the write returns a thenable.
+    if (!transport.retry || !transport.retry.maxRetries) {
+      let result: void | Promise<void>;
+      try {
+        result = transport.write(entry);
+      } catch (error) {
+        return onError(error);
+      }
+      if (result && typeof (result as Promise<void>).then === 'function') {
+        return (result as Promise<void>).then(onSuccess, onError);
+      }
+      onSuccess();
+      return;
     }
+
+    return this._writeWithRetry(transport, entry).then(onSuccess, onError);
   }
 
   /**
