@@ -119,10 +119,15 @@ export class KafkaTraceInterceptor implements NestInterceptor {
     };
 
     return new Observable((subscriber) => {
+      // Capture the inner subscription so it is torn down when the outer
+      // subscriber unsubscribes (consumer shutdown, upstream takeUntil/timeout).
+      // Without returning it, the handler subscription leaked and kept running
+      // after cancellation.
+      let inner: { unsubscribe(): void } | undefined;
       this.ctx.run(
         traceId!,
         () => {
-          next.handle().subscribe({
+          inner = next.handle().subscribe({
             next: (value) => subscriber.next(value),
             error: (err) => subscriber.error(err),
             complete: () => subscriber.complete(),
@@ -130,6 +135,7 @@ export class KafkaTraceInterceptor implements NestInterceptor {
         },
         kafkaContext
       );
+      return () => inner?.unsubscribe();
     });
   }
 }
