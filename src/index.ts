@@ -60,6 +60,10 @@ export {
   withWideEvent,
 } from './wide-events';
 
+// OTLP logs export transport (OpenTelemetry-native log emission)
+export type { OtlpLogTransportConfig } from './transports/otlp.transport';
+export { OtlpLogTransport, toOtelSeverity } from './transports/otlp.transport';
+
 // Search module exports
 export * from './search';
 
