@@ -16,6 +16,7 @@
  */
 
 import { AnalyticsTransport } from '../src/transports/analytics.transport';
+import { CloudWatchTransport } from '../src/transports/cloudwatch.transport';
 import type { AnalyticsTransportConfig, TransportLogEntry } from '../src/types/transport.types';
 
 class FakeProviderTransport extends AnalyticsTransport {
@@ -100,6 +101,29 @@ async function main() {
       'no log loss when provider fails then recovers on close',
       afterFail === 0 && t.received.length === 10 && new Set(t.received).size === 10,
       `afterFailedFlush=${afterFail}, afterClose=${t.received.length}`
+    );
+  }
+
+  // ── Scenario 4: cloud transport drains its whole batch + close() on shutdown ─
+  {
+    const t = new CloudWatchTransport({
+      logGroupName: '/verify',
+      batchSize: 10,
+      flushIntervalMs: 999_999,
+    });
+    const recorded: unknown[] = [];
+    // Stub the private network call so no real AWS request is made.
+    (t as unknown as { putLogEvents: (e: unknown[]) => Promise<void> }).putLogEvents = async (
+      events
+    ) => {
+      recorded.push(...events);
+    };
+    for (let i = 0; i < 95; i++) t.write(entry(i)); // 95 > batchSize → tail would be left by old flush()
+    await t.close(); // must drain ALL 95, not just one chunk, then stop the timer
+    check(
+      'cloud transport close() drains the whole batch on shutdown',
+      recorded.length === 95,
+      `delivered=${recorded.length}, expected=95`
     );
   }
 
