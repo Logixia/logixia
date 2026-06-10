@@ -113,20 +113,29 @@ export function getActiveOtelContext(opts: OtelBridgeOptions = {}): OtelSpanCont
   const api = tryLoadOtelApi();
   if (!api) return undefined;
 
-  const ctx = api.context.active();
-  const sc = api.trace.getSpanContext(ctx);
-  if (!sc || !api.trace.isSpanContextValid(sc)) return undefined;
+  // Wrap the whole OTel interaction: this runs on EVERY log call via the bridge,
+  // and a broken/mismatched OTel SDK whose context/trace methods throw would
+  // otherwise crash logging itself. The integration is meant to be silent — on
+  // any failure we just skip injection.
+  try {
+    const ctx = api.context.active();
+    const sc = api.trace.getSpanContext(ctx);
+    if (!sc || !api.trace.isSpanContextValid(sc)) return undefined;
 
-  const isSampled = (sc.traceFlags & api.trace.TraceFlags.SAMPLED) === api.trace.TraceFlags.SAMPLED;
+    const isSampled =
+      (sc.traceFlags & api.trace.TraceFlags.SAMPLED) === api.trace.TraceFlags.SAMPLED;
 
-  if (opts.sampledOnly && !isSampled) return undefined;
+    if (opts.sampledOnly && !isSampled) return undefined;
 
-  return {
-    traceId: sc.traceId,
-    spanId: sc.spanId,
-    traceFlags: sc.traceFlags,
-    isSampled,
-  };
+    return {
+      traceId: sc.traceId,
+      spanId: sc.spanId,
+      traceFlags: sc.traceFlags,
+      isSampled,
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 /**
