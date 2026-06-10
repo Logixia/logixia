@@ -36,7 +36,7 @@ function instrument(
 ) {
   const recorded: unknown[] = [];
   let sendCalls = 0;
-   
+
   (transport as any)[sendMethodName] = async (items: unknown[]) => {
     sendCalls += 1;
     if (sendCalls <= failTimes) throw new Error('simulated cloud outage');

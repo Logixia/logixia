@@ -710,3 +710,36 @@ describe('silent mode', () => {
     expect(out.joined()).toBe('');
   });
 });
+
+// ── Redaction — message string ────────────────────────────────────────────────
+
+describe('Redaction of secrets in the message string', () => {
+  it('redacts a pattern-matching secret embedded in the message, not just the payload', async () => {
+    const out = spyOutput();
+    const logger = new LogixiaLogger({
+      ...BASE_CONFIG,
+      levelOptions: { level: 'info' },
+      redact: { patterns: [/Bearer\s+\S+/gi], censor: '[REDACTED]' },
+    });
+
+    await logger.info('Auth header was Bearer abc123secrettoken456');
+    await logger.info('login', { auth: 'Bearer abc123secrettoken456' });
+    out.restore();
+
+    const joined = out.joined();
+    // The raw token must NOT appear anywhere in the output (message or payload).
+    expect(joined).not.toContain('abc123secrettoken456');
+    // The message itself was redacted.
+    expect(joined).toContain('Auth header was [REDACTED]');
+  });
+
+  it('leaves the message untouched when no redact patterns are configured', async () => {
+    const out = spyOutput();
+    const logger = new LogixiaLogger({ ...BASE_CONFIG, levelOptions: { level: 'info' } });
+
+    await logger.info('plain message Bearer token-stays');
+    out.restore();
+
+    expect(out.joined()).toContain('plain message Bearer token-stays');
+  });
+});
