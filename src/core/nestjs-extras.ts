@@ -95,8 +95,11 @@ export interface LogMethodOptions {
 /**
  * Method decorator that auto-logs entry, exit, duration, and errors.
  *
- * Works on both async and sync methods. Attaches to the logger found on the
- * class instance via a `logger` property (the conventional NestJS name).
+ * Preserves the original method's sync/async contract: a synchronous method
+ * stays synchronous (returns its value directly, with logs emitted
+ * fire-and-forget), and an async method is awaited so exit/error logs reflect
+ * the resolved result. Attaches to the logger found on the class instance via a
+ * `logger` property (the conventional NestJS name).
  *
  * @example
  * ```ts
@@ -124,10 +127,40 @@ export function LogMethod(options: LogMethodOptions = {}): MethodDecorator {
 
     let _warnedNoLogger = false;
 
-    descriptor.value = async function (
-      this: { logger?: LogixiaLoggerService },
-      ...args: unknown[]
-    ) {
+    // Surface logger failures on stderr instead of silently swallowing them.
+    const reportLogFailure = (phase: string, err: unknown): void => {
+      process.stderr.write(`[logixia] @LogMethod(${label}) ${phase} log failed: ${String(err)}\n`);
+    };
+
+    // Emit a log line fire-and-forget, routing transport failures to stderr.
+    const emit = (
+      logger: LogixiaLoggerService,
+      phase: string,
+      message: string,
+      data: Record<string, unknown>
+    ): void => {
+      const logFnRaw = (
+        logger as unknown as Record<
+          string,
+          (msg: string, data?: Record<string, unknown>) => Promise<void>
+        >
+      )[level];
+      const logFn = (typeof logFnRaw === 'function' ? logFnRaw : logger.debug).bind(logger);
+      const p = logFn(message, data);
+      if (p && typeof (p as Promise<void>).catch === 'function') {
+        (p as Promise<void>).catch((e: unknown) => reportLogFailure(phase, e));
+      }
+    };
+
+    const emitError = (logger: LogixiaLoggerService, error: unknown, start: number): void => {
+      const err = error instanceof Error ? error : new Error(String(error));
+      const errLog: unknown = logger.error(err, { method: label, durationMs: Date.now() - start });
+      if (errLog && typeof (errLog as Promise<void>).catch === 'function') {
+        (errLog as Promise<void>).catch((e: unknown) => reportLogFailure('error', e));
+      }
+    };
+
+    descriptor.value = function (this: { logger?: LogixiaLoggerService }, ...args: unknown[]) {
       // Prefer the instance's own logger; fall back to the global module logger.
       const logger: LogixiaLoggerService | undefined =
         this.logger ?? LogixiaLoggerModule._globalLogger ?? undefined;
@@ -142,82 +175,46 @@ export function LogMethod(options: LogMethodOptions = {}): MethodDecorator {
       }
 
       const start = Date.now();
-
       const entry: Record<string, unknown> = { method: label };
-      if (logArgs && args.length > 0) {
-        entry['args'] = args;
-      }
+      if (logArgs && args.length > 0) entry['args'] = args;
+      // Entry log is fire-and-forget so a SYNC method is not forced to become
+      // async just to await it.
+      if (logger) emit(logger, 'entry', `→ ${label}`, entry);
 
-      // Surface logger failures on stderr instead of silently swallowing them —
-      // a broken transport is an operator problem that must be observable.
-      // Uses a flat 2-arg helper (avoids curried `(phase) => (err) =>` nesting
-      // which trips the sonarjs no-nested-functions depth rule).
-      const reportLogFailure = (phase: string, err: unknown): void => {
-        process.stderr.write(
-          `[logixia] @LogMethod(${label}) ${phase} log failed: ${String(err)}\n`
-        );
+      const buildExit = (result: unknown): Record<string, unknown> => {
+        const exit: Record<string, unknown> = { method: label, durationMs: Date.now() - start };
+        if (logResult) exit['result'] = result;
+        return exit;
       };
 
-      if (logger) {
-        // Use logLevel (extended method) rather than the NestJS interface debug/info
-        // which only accepts (message: unknown, context?: string)
-        const logFnRaw = (
-          logger as unknown as Record<
-            string,
-            (msg: string, data?: Record<string, unknown>) => Promise<void>
-          >
-        )[level];
-        const logFn = (typeof logFnRaw === 'function' ? logFnRaw : logger.debug).bind(logger);
-        const entryPromise = (
-          logFn as (msg: string, data?: Record<string, unknown>) => Promise<void>
-        )(`→ ${label}`, entry);
-        await entryPromise.catch((e: unknown) => reportLogFailure('entry', e));
-      }
-
+      let result: unknown;
       try {
-        const result = await (originalMethod.apply(this, args) as Promise<unknown>);
-
-        const exit: Record<string, unknown> = {
-          method: label,
-          durationMs: Date.now() - start,
-        };
-        if (logResult) exit['result'] = result;
-
-        if (logger) {
-          const logFnRaw = (
-            logger as unknown as Record<
-              string,
-              (msg: string, data?: Record<string, unknown>) => Promise<void>
-            >
-          )[level];
-          const logFn = (typeof logFnRaw === 'function' ? logFnRaw : logger.debug).bind(logger);
-          const exitPromise = (
-            logFn as (msg: string, data?: Record<string, unknown>) => Promise<void>
-          )(`← ${label}`, exit);
-          await exitPromise.catch((e: unknown) => reportLogFailure('exit', e));
-        }
-
-        return result;
+        result = originalMethod.apply(this, args);
       } catch (error) {
-        if (logger && logErrors) {
-          const err = error instanceof Error ? error : new Error(String(error));
-          // Use the structured overload (Record<string, unknown>) so we get
-          // Promise<void> back and can attach a stderr fallback for transport
-          // failures — otherwise they'd become unhandled rejections.
-          const errLog: unknown = logger.error(err, {
-            method: label,
-            durationMs: Date.now() - start,
-          });
-          if (
-            errLog !== undefined &&
-            errLog !== null &&
-            typeof (errLog as Promise<void>).catch === 'function'
-          ) {
-            (errLog as Promise<void>).catch((e: unknown) => reportLogFailure('error', e));
-          }
-        }
+        // Synchronous throw.
+        if (logger && logErrors) emitError(logger, error, start);
         throw error;
       }
+
+      // Async method → await via the returned thenable so exit/error reflect the
+      // resolved outcome, and preserve the Promise return type.
+      if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
+        return (result as Promise<unknown>).then(
+          (resolved) => {
+            if (logger) emit(logger, 'exit', `← ${label}`, buildExit(resolved));
+            return resolved;
+          },
+          (error: unknown) => {
+            if (logger && logErrors) emitError(logger, error, start);
+            throw error;
+          }
+        );
+      }
+
+      // Synchronous method → log exit fire-and-forget and return the value as-is,
+      // preserving the original synchronous contract.
+      if (logger) emit(logger, 'exit', `← ${label}`, buildExit(result));
+      return result;
     };
 
     return descriptor;
