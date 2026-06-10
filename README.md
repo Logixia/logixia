@@ -196,24 +196,24 @@ logixia takes a different approach: **everything ships built-in, and nothing blo
 
 ## Performance
 
-logixia is async-first and built for the hot path: JSON output uses `fast-json-stringify` (a pre-compiled serializer), and the per-call work — level check, namespace resolution, redaction decision, formatting — runs off pre-built caches constructed once, not on every log. The result is **consistently low tail latency** (no p99 spikes) and a structured-logging throughput in the same class as pino, while beating winston and bunyan across the board.
+logixia is async-first and built for the hot path: a synchronous fast path for in-process transports (no Promise allocated when the write completes synchronously), a millisecond-cached timestamp, lazy formatting (each transport formats once — no wasted pre-format), and per-call work (level check, namespace resolution, redaction decision) served off pre-built caches. The result: logixia **beats pino on 5 of 6 real-world scenarios**, beats winston and bunyan across the board, and keeps **p99 latency at 1–3µs** with no tail spikes.
 
 Benchmarked against **pino, winston, and bunyan** — all writing to `/dev/null` (pure serialization + framework overhead, no disk/terminal cost). Node 20, Apple M-series; numbers are ops/sec, higher is better. Reproduce with `npm run benchmark`.
 
 | Scenario                       |      pino |   **logixia** |   winston |  bunyan |
 | ------------------------------ | --------: | ------------: | --------: | ------: |
-| Simple string log              | 3,235,000 |     1,175,000 | 1,606,000 | 731,000 |
-| Structured log (5 fields)      | 1,306,000 |       870,000 |   686,000 | 534,000 |
-| **Error object logging**       |   885,000 | **1,033,000** | 1,029,000 | 620,000 |
-| Child / per-request logger     | 1,165,000 |       812,000 |   482,000 | 378,000 |
-| Deep nested object             |   969,000 |       689,000 |   337,000 | 491,000 |
-| **High-cardinality (12 flds)** |   647,000 |   **710,000** |   340,000 | 386,000 |
+| Simple string log              | 3,220,000 |     2,769,000 | 1,577,000 | 707,000 |
+| **Structured log (5 fields)**  | 1,319,000 | **1,536,000** |   699,000 | 536,000 |
+| **Error object logging**       |   907,000 | **1,940,000** | 1,062,000 | 573,000 |
+| **Child / per-request logger** | 1,093,000 | **1,436,000** |   321,000 | 380,000 |
+| **Deep nested object**         |   891,000 | **1,040,000** |   435,000 | 442,000 |
+| **High-cardinality (12 flds)** |   651,000 | **1,027,000** |   316,000 | 404,000 |
 
 **What this means:**
 
-- ✅ **logixia is faster than pino on error logging (+17%)** and **high-cardinality structured logs (+10%)** — the shapes that dominate real production traffic.
-- ✅ **logixia beats winston and bunyan in every scenario**, often by 2×, and avoids their tail-latency spikes (winston hit **249µs p99** on deep objects, bunyan **60µs** on child loggers; logixia stays **1–3µs p99** throughout).
-- ⚖️ **pino leads on simple/plain-metadata logs** because it writes synchronously to `process.stdout` — fast in a microbenchmark, but it blocks the event loop under real I/O and is exactly the path behind pino's open [flush-on-exit log-loss bug](#graceful-shutdown). logixia trades a little raw speed there for non-blocking writes and guaranteed delivery.
+- ✅ **logixia is faster than pino on 5 of 6 scenarios** — including **+114% on error logging**, **+58% on high-cardinality**, **+31% on child loggers**, and **+16% on structured logs** — the shapes that dominate real production traffic.
+- ✅ **logixia beats winston and bunyan in every scenario**, often by 2–3×, and avoids their tail-latency spikes (winston hit **3,038µs p99** on high-cardinality and **412µs** on deep objects; logixia stays **1–3µs p99** throughout).
+- ⚖️ **pino still wins the trivial simple-string case** (−14%) because it writes synchronously straight to `process.stdout` — fast in a microbenchmark, but it blocks the event loop under real I/O and is exactly the path behind pino's open [flush-on-exit log-loss bug](#graceful-shutdown). logixia stays non-blocking and guarantees delivery, and pulls ahead the moment you log anything structured.
 
 **Distinctive-feature throughput** (no cross-library equivalent — `npm run benchmark:features`):
 

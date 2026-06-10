@@ -48,11 +48,28 @@ import { LogLevel } from '../types';
 import { safeToString } from '../utils/coerce.utils';
 import { isError, serializeError } from '../utils/error.utils';
 import { internalError, internalLog, internalWarn } from '../utils/internal-log';
-import { _getOtelPayloadIfEnabled } from '../utils/otel';
+import { _getOtelPayloadIfEnabled, _isOtelBridgeEnabled } from '../utils/otel';
 import { applyRedaction, applyRedactionToString } from '../utils/redact.utils';
 import { Sampler } from '../utils/sampling.utils';
 import { deregisterFromShutdown, flushOnExit, registerForShutdown } from '../utils/shutdown.utils';
 import { TraceContext } from '../utils/trace.utils';
+
+// ── Hot-path timestamp cache ─────────────────────────────────────────────────
+// `new Date().toISOString()` is one of the most expensive things on the log hot
+// path (~2.2M ops/sec vs ~18M for Date.now()). Within a single millisecond every
+// log shares the same ISO string, so cache it keyed on the integer epoch ms and
+// only re-format when the clock ticks over. Worst case at very high throughput:
+// thousands of logs reuse one allocation instead of each paying for toISOString.
+let _tsCacheMs = 0;
+let _tsCacheStr = '';
+function nowIso(): string {
+  const ms = Date.now();
+  if (ms !== _tsCacheMs) {
+    _tsCacheMs = ms;
+    _tsCacheStr = new Date(ms).toISOString();
+  }
+  return _tsCacheStr;
+}
 
 // ── Namespace level helpers ──────────────────────────────────────────────────
 
@@ -715,13 +732,14 @@ export class LogixiaLogger<
     // Merge ALS-stored fields (requestId, userId, …) into the payload so every
     // log call inside a LogixiaContext.run() scope automatically carries them.
     const alsContext = LogixiaContext.get();
+    const hasAls = alsContext !== undefined && Object.keys(alsContext).length > 0;
     // ── Feature 14: OTel auto trace-log correlation ────────────────────────────
-    // If initOtelBridge() was called, read the active OTel span and merge its
-    // context fields (traceId, spanId, traceFlags) into the payload automatically.
-    const otelFields = _getOtelPayloadIfEnabled();
-    const hasOtel = Object.keys(otelFields).length > 0;
+    // Only touch the OTel bridge when it has actually been initialised — skipping
+    // the `{}` allocation + Object.keys on every log in the common (bridge-off) case.
+    const otelFields = _isOtelBridgeEnabled() ? _getOtelPayloadIfEnabled() : undefined;
+    const hasOtel = otelFields !== undefined && Object.keys(otelFields).length > 0;
     let mergedData: typeof data;
-    if (alsContext && Object.keys(alsContext).length > 0) {
+    if (hasAls) {
       mergedData = { ...alsContext, ...(hasOtel ? otelFields : {}), ...data };
     } else if (hasOtel) {
       mergedData = { ...otelFields, ...data };
@@ -754,7 +772,7 @@ export class LogixiaLogger<
       ? applyRedactionToString(message, this.config.redact)
       : message;
     const entry: LogEntry = {
-      timestamp: new Date().toISOString(),
+      timestamp: nowIso(),
       level,
       appName: this.config.appName ?? 'App',
       environment: this.config.environment ?? 'development',
@@ -773,8 +791,12 @@ export class LogixiaLogger<
       if (finalEntry === null) return; // entry cancelled by a plugin
     }
 
-    const formattedLog = this.formatLog(finalEntry);
-    await this.output(formattedLog, level, finalEntry);
+    // NOTE: do NOT pre-format here. When a transport manager is present (the
+    // normal case) each transport formats the entry itself, so eagerly calling
+    // formatLog() would be wasted work thrown away. output() formats lazily only
+    // for the no-transport fallback path.
+    const out = this.output(finalEntry, level);
+    if (out !== undefined) await out;
   }
 
   // ── Feature 3: Namespace-aware shouldLog ─────────────────────────────────────
@@ -874,28 +896,46 @@ export class LogixiaLogger<
     return `${code}${text}${this._colorMap.get('reset')!}`;
   }
 
-  private async output(message: string, level: string, entry: LogEntry): Promise<void> {
+  /**
+   * Dispatch the entry to transports (each formats itself). Returns `void` when
+   * the write completes synchronously (console-only hot path) and a Promise only
+   * when a transport is genuinely async — so the caller awaits only when needed.
+   * Formatting for the no-transport fallback is done lazily, never on the
+   * transport path.
+   */
+  private output(entry: LogEntry, level: string): void | Promise<void> {
     if (this.transportManager) {
+      let result: void | Promise<void>;
       try {
-        await this.transportManager.write(entry);
-        return;
+        result = this.transportManager.write(entry);
       } catch (error) {
-        internalError('Transport write failed', error);
-        // Notify plugin onError hooks (e.g. Sentry/alerting). runOnError
-        // swallows hook errors internally, so this can never re-throw.
-        if (this._pluginRegistry.size > 0) {
-          await this._pluginRegistry.runOnError(
-            error instanceof Error ? error : new Error(String(error)),
-            entry
-          );
-        }
-        // Fall through to the stdout/stderr fallback so the log is not lost.
+        return this._handleOutputError(error, entry, level);
       }
+      if (result && typeof (result as Promise<void>).then === 'function') {
+        return (result as Promise<void>).then(undefined, (error: unknown) =>
+          this._handleOutputError(error, entry, level)
+        );
+      }
+      return; // synchronous transport write completed
     }
 
-    // Fallback: direct stdout/stderr write — faster than console wrappers
-    const out = level === LogLevel.ERROR ? process.stderr : process.stdout;
-    out.write(message + '\n');
+    // Fallback: no transport manager → format lazily and write to stdout/stderr.
+    const sink = level === LogLevel.ERROR ? process.stderr : process.stdout;
+    sink.write(this.formatLog(entry) + '\n');
+  }
+
+  /** Shared transport-failure handler: log internally, notify plugins, then fall
+   * back to a direct stdout/stderr write so the entry is never lost. */
+  private async _handleOutputError(error: unknown, entry: LogEntry, level: string): Promise<void> {
+    internalError('Transport write failed', error);
+    if (this._pluginRegistry.size > 0) {
+      await this._pluginRegistry.runOnError(
+        error instanceof Error ? error : new Error(String(error)),
+        entry
+      );
+    }
+    const sink = level === LogLevel.ERROR ? process.stderr : process.stdout;
+    sink.write(this.formatLog(entry) + '\n');
   }
 }
 
