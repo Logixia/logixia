@@ -14,8 +14,17 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
 
   protected config: AnalyticsTransportConfig;
   protected batch: TransportLogEntry[] = [];
-  protected batchTimer?: NodeJS.Timeout;
+  protected batchTimer?: NodeJS.Timeout | undefined;
   protected isReady: boolean = false;
+  /**
+   * The in-flight drain promise, or undefined when idle. addToBatch() fires
+   * flush() un-awaited on every Nth entry, so a synchronous burst can trigger
+   * many overlapping flushes. Every caller joins this single promise instead of
+   * starting its own drain, so a batch is never snapshotted and sent twice —
+   * the overlapping-flush duplication that turns N logs into N² delivered events
+   * (same class of bug fixed earlier in FileTransport / DatabaseTransport).
+   */
+  private flushPromise?: Promise<void> | undefined;
 
   constructor(name: string, config: AnalyticsTransportConfig) {
     this.name = name;
@@ -64,30 +73,70 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
   }
 
   async flush(): Promise<void> {
-    if (this.batch.length === 0) return;
-
-    const entriesToSend = [...this.batch];
-    this.batch = [];
-
     if (this.batchTimer) {
       clearTimeout(this.batchTimer);
-      delete this.batchTimer;
+      this.batchTimer = undefined;
     }
 
-    try {
-      await this.sendBatch(entriesToSend);
-    } catch (error) {
-      internalError(`Analytics transport ${this.name} flush failed`, error);
-      // Re-add failed entries to batch for retry
-      this.batch.unshift(...entriesToSend);
+    // Serialize concurrent flushes so overlapping un-awaited flushes (fired by
+    // addToBatch on every Nth entry) all join the SAME drain instead of each
+    // snapshotting the not-yet-cleared batch and sending it again.
+    if (!this.flushPromise) {
+      this.flushPromise = this.drain().finally(() => {
+        this.flushPromise = undefined;
+      });
+    }
+
+    await this.flushPromise;
+  }
+
+  /**
+   * Drains the batch to the provider one snapshot at a time. The batch is
+   * detached SYNCHRONOUSLY before awaiting sendBatch(), so entries appended by
+   * concurrent writes land in a fresh array and are never sent twice. On failure
+   * the snapshot is restored to the front of the batch for the next flush and
+   * the loop stops, so a failing provider does not hot-spin.
+   */
+  private async drain(): Promise<void> {
+    while (this.batch.length > 0) {
+      const entriesToSend = this.batch;
+      this.batch = [];
+
+      try {
+        await this.sendBatch(entriesToSend);
+      } catch (error) {
+        internalError(`Analytics transport ${this.name} flush failed`, error);
+        // Re-add failed entries to the front of the batch for retry, then stop.
+        this.batch.unshift(...entriesToSend);
+        return;
+      }
     }
   }
 
   async close(): Promise<void> {
-    await this.flush();
     if (this.batchTimer) {
       clearTimeout(this.batchTimer);
+      this.batchTimer = undefined;
     }
+
+    // Drain remaining entries on shutdown. A failed flush re-buffers its entries
+    // (see drain()), so retry a bounded number of times before giving up — this
+    // prevents the "last N seconds of logs lost on deploy" problem without
+    // hanging shutdown on a permanently-failing provider.
+    const MAX_CLOSE_FLUSH_ATTEMPTS = 3;
+    for (
+      let attempt = 0;
+      attempt < MAX_CLOSE_FLUSH_ATTEMPTS && this.batch.length > 0;
+      attempt += 1
+    ) {
+      await this.flush();
+    }
+    if (this.batch.length > 0) {
+      internalError(
+        `Analytics transport ${this.name} closing with ${this.batch.length} unflushed entr${this.batch.length === 1 ? 'y' : 'ies'} after ${MAX_CLOSE_FLUSH_ATTEMPTS} attempts`
+      );
+    }
+
     await this.cleanup();
   }
 
