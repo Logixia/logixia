@@ -3,6 +3,68 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.11.0](https://github.com/Logixia/logixia/compare/v1.10.3...v1.11.0) (2026-06-10)
+
+### ✨ Features
+
+* **runtime:** dynamic log-level reconfiguration without restart (R3+R4) ([ab5ad68](https://github.com/Logixia/logixia/commit/ab5ad6858e44c12e746919e655747b4de7ef4210)), closes [winston#1107](https://github.com/Logixia/winston/issues/1107) [206/#677](https://github.com/206/logixia/issues/677) [nestjs-pino#371](https://github.com/Logixia/nestjs-pino/issues/371)
+* **sampling:** adaptive anomaly-driven sampling (R6) ([b80505b](https://github.com/Logixia/logixia/commit/b80505baff2a4b76d3b7bc68e10e982de5115c67))
+* **transport:** OTLP Logs export — OpenTelemetry-native log emission (R2) ([6268ee7](https://github.com/Logixia/logixia/commit/6268ee738ccb0af775e4736298fd3a5716a1a6a8))
+* **utils:** robust serialization beyond [Circular] — BigInt + $ref decycle (R9) ([9526ac7](https://github.com/Logixia/logixia/commit/9526ac7aba61df7683b0c525a2283310d6c3b686))
+* **wide-events:** canonical log lines / wide events API (R1) ([86ad66a](https://github.com/Logixia/logixia/commit/86ad66a9daa21e599d2dc0c37825d6a3957c049a))
+
+### 📚 Documentation
+
+* document new roadmap features + flush-on-exit reliability guarantee (R5) ([0f4f372](https://github.com/Logixia/logixia/commit/0f4f3726b2654fb40130ed82577dbf420e837d7c)), closes [#1705](https://github.com/Logixia/logixia/issues/1705) [1889/#2054](https://github.com/1889/logixia/issues/2054)
+* **research:** logger improvement research + prioritized roadmap ([8859212](https://github.com/Logixia/logixia/commit/88592126876cf0ba8d0451c534fb95eba4fe91e4)), closes [#1705](https://github.com/Logixia/logixia/issues/1705) [#206](https://github.com/Logixia/logixia/issues/206)
+
+## [1.10.3](https://github.com/Logixia/logixia/compare/v1.10.2...v1.10.3) (2026-06-10)
+
+### 🐛 Bug Fixes
+
+* **browser:** drain whole batch and flush on destroy() to avoid log loss ([6bc9a85](https://github.com/Logixia/logixia/commit/6bc9a859c13d0e3b293e5f41c958555566ffefb5))
+* **cli:** render falsy-but-real table cells (0, false) instead of blanks ([13f8454](https://github.com/Logixia/logixia/commit/13f8454b2a53a5d625dad86293823ef6621509a6))
+* **formatters:** stop circular payloads from crashing JSON/text formatters ([69824eb](https://github.com/Logixia/logixia/commit/69824eb9eebe160afff33648fc6888f6f6ee112f))
+* **internal-log:** read silence flag per call, not once at import ([e1d8a1c](https://github.com/Logixia/logixia/commit/e1d8a1cb38952a1e4b4be1aded6251b585acc25f))
+* **middleware:** prevent duplicate request-completed logs from finish+close ([2f649f4](https://github.com/Logixia/logixia/commit/2f649f4d5ecbc90127c1054e265fb9f2aabab284))
+* **nest:** @LogMethod preserves the sync/async contract of the wrapped method ([1418ebd](https://github.com/Logixia/logixia/commit/1418ebd437ee7932106ca0a9f472c17256536f86))
+* **nest:** make formatMessage safe for circular and unserializable messages ([c5e0158](https://github.com/Logixia/logixia/commit/c5e0158e193ae91a5b77941c480ddd6c33ed3dfb))
+* **nest:** tear down inner handler subscription in trace interceptors ([23ec529](https://github.com/Logixia/logixia/commit/23ec5295f30a014635db950ab9373d45b13c2d22))
+* **otel,metrics:** harden OTel hot path and sanitize Prometheus names ([51cae52](https://github.com/Logixia/logixia/commit/51cae52ad1e1359fc3a2d458b1d94e99db5b9e89))
+* **plugin:** isolate synchronous throws in onInit/onError/onShutdown hooks ([e361bdd](https://github.com/Logixia/logixia/commit/e361bdd5d20152e9ab59c19bffc8bc854ef16422))
+* **redact:** actually commit the message-string redaction implementation ([55774a6](https://github.com/Logixia/logixia/commit/55774a6e9715fb6c7e6846442397d4b242dfe228))
+* **redact:** redact pattern-matching secrets in the log message string ([0e8f915](https://github.com/Logixia/logixia/commit/0e8f9153dbb9a88b0eebbdbac8a0b4d5840934de))
+* **sampling:** bound traceConsistent trace sets to prevent memory leak ([7b70f30](https://github.com/Logixia/logixia/commit/7b70f30ddf80db2c1e923fc29adc64938f064135))
+* **search:** circular-safe searchable text and bound the engine buffer ([020a243](https://github.com/Logixia/logixia/commit/020a243e693393029edad298a02932952a136e33))
+* **shutdown:** guard graceful-shutdown handler against concurrent signals ([85b1c56](https://github.com/Logixia/logixia/commit/85b1c56575033bce07745682d77f1499822e34f3))
+* **trace:** harden NestJS trace middleware response + ip handling ([ada641b](https://github.com/Logixia/logixia/commit/ada641b61944e383dcef306189733820fe97eff6))
+* **trace:** make createTraceMiddleware response-API agnostic ([f1e5625](https://github.com/Logixia/logixia/commit/f1e562581eb6c5a16967fbe102989a12a76bb28a))
+* **transport:** add close() and full-batch drain to cloud transports ([d2917c2](https://github.com/Logixia/logixia/commit/d2917c20d94df26e8edfd1c092f3eb5320acc9be))
+* **transport:** correct averageWriteTime metric and cover manager shutdown ([28049b2](https://github.com/Logixia/logixia/commit/28049b22ae7d83c7aace04f982b78c650fb1415b))
+* **transport:** give WorkerTransport a close() and stop restart leaks ([91471c9](https://github.com/Logixia/logixia/commit/91471c93d12ffbdb60d4203a97b383af715e047f))
+* **transport:** implement real gzip rotation and scope cleanup to own files ([f14a2e6](https://github.com/Logixia/logixia/commit/f14a2e614d67d9e3342a714becff8b6f97f9e02b))
+* **transport:** serialize analytics flushes and guarantee drain on close ([ef3b66f](https://github.com/Logixia/logixia/commit/ef3b66fc967b86a7f300e6762046bc3cd8cb0199))
+* **transport:** serialize database flushes and guarantee drain on close ([5f64995](https://github.com/Logixia/logixia/commit/5f64995f1b7ab2ea803198a39bcd2da8c7d43aeb))
+* **utils:** stop safeToString returning undefined and harden error cycle guard ([748e199](https://github.com/Logixia/logixia/commit/748e1992bac7aae73a002bd3cb7ed49eb5bb40d1))
+
+### ⚡ Performance
+
+* **search:** make BasicLogIndexer.getIndexStats O(1) ([09efe2e](https://github.com/Logixia/logixia/commit/09efe2eac96360a518c25e9ee0309117ab01e3fb))
+
+## [1.10.2](https://github.com/Logixia/logixia/compare/v1.10.1...v1.10.2) (2026-06-10)
+
+### 🐛 Bug Fixes
+
+* **console:** compact JSON, sanitize level for CWE-117, route warn to stderr ([c0108a9](https://github.com/Logixia/logixia/commit/c0108a942a242918e4050cc74ad523f5eb3b6181))
+* **logger:** merge child/context data into log payload ([bc776d6](https://github.com/Logixia/logixia/commit/bc776d6580ba4db182dba981e29d99d4029d0daa))
+* **plugins:** isolate throwing onLog and invoke onError on transport failure ([68be1bf](https://github.com/Logixia/logixia/commit/68be1bf1fa15609bde6cde9be7e92da4a9a80315))
+* **redact:** apply autoDetect rules when no explicit paths or patterns set ([6df0c2a](https://github.com/Logixia/logixia/commit/6df0c2a3941a9893cae58be4131d6d72c8c61368))
+* **redact:** make ** glob match zero segments so **.password redacts top-level keys ([e3ce30d](https://github.com/Logixia/logixia/commit/e3ce30dfe8fb8f8d2b72ee2f9934333dd6534555))
+* **sampling:** always emit WARN regardless of global rate ([a7fb7f9](https://github.com/Logixia/logixia/commit/a7fb7f9a4cf54eb15dde59da14b063d378ff61d9))
+* **shutdown:** register flush handler even when other signal listeners exist ([e30588d](https://github.com/Logixia/logixia/commit/e30588dea1cb1b473162ce6f100f20ecdf21b09c))
+* **trace:** parse W3C traceId out of the traceparent header ([c74ae42](https://github.com/Logixia/logixia/commit/c74ae42b247efe0625bd656f4d169a717fe51e60))
+* **transport:** prevent file log duplication from overlapping batch flushes ([a2fc846](https://github.com/Logixia/logixia/commit/a2fc84644b75b576299889390bffe5d2409846a9))
+
 ## [1.10.1](https://github.com/Logixia/logixia/compare/v1.10.0...v1.10.1) (2026-04-26)
 
 ### 📚 Documentation
