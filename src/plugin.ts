@@ -93,8 +93,15 @@ export class PluginRegistry {
     if (this._plugins.some((p) => p.name === plugin.name)) return;
     this._plugins.push(plugin);
     if (plugin.onInit) {
-      const result = plugin.onInit();
-      if (result instanceof Promise) result.catch(() => {});
+      // Isolate onInit: a synchronous throw must not propagate to the caller of
+      // register()/use() (the docs promise onInit errors are swallowed). The
+      // async branch is guarded with .catch for the same reason.
+      try {
+        const result = plugin.onInit();
+        if (result instanceof Promise) result.catch(() => {});
+      } catch {
+        /* swallow — a buggy onInit must not break registration */
+      }
     }
   }
 
@@ -144,8 +151,15 @@ export class PluginRegistry {
   async runOnError(error: Error, entry?: LogEntry): Promise<void> {
     for (const plugin of this._plugins) {
       if (plugin.onError) {
-        const r = plugin.onError(error, entry);
-        if (r instanceof Promise) await r.catch(() => {});
+        // Guard the SYNCHRONOUS call too — a sync throw here would otherwise
+        // propagate out of runOnError and turn a recoverable transport failure
+        // (the very thing onError exists to report) into a crash.
+        try {
+          const r = plugin.onError(error, entry);
+          if (r instanceof Promise) await r.catch(() => {});
+        } catch {
+          /* swallow — onError hooks must never crash error handling */
+        }
       }
     }
   }
@@ -156,8 +170,14 @@ export class PluginRegistry {
       this._plugins
         .filter((p) => Boolean(p.onShutdown))
         .map((p) => {
-          const r = p.onShutdown!();
-          return r instanceof Promise ? r.catch(() => {}) : Promise.resolve();
+          // Guard the synchronous call: a sync throw in onShutdown would reject
+          // this map and, via Promise.all, break graceful shutdown → log loss.
+          try {
+            const r = p.onShutdown!();
+            return r instanceof Promise ? r.catch(() => {}) : Promise.resolve();
+          } catch {
+            return Promise.resolve();
+          }
         })
     );
   }

@@ -70,11 +70,14 @@ export class WebSocketTraceInterceptor implements NestInterceptor {
 
     // Run the handler with trace ID context
     return new Observable((observer) => {
+      // Capture the inner subscription so it is torn down when the outer observer
+      // unsubscribes — otherwise the handler subscription leaks after the socket
+      // disconnects or an upstream operator cancels.
+      let inner: { unsubscribe(): void } | undefined;
       this.ctx.run(
         traceId!,
         () => {
-          const result = next.handle();
-          result.subscribe({
+          inner = next.handle().subscribe({
             next: (value) => observer.next(value),
             error: (err) => observer.error(err),
             complete: () => observer.complete(),
@@ -82,6 +85,7 @@ export class WebSocketTraceInterceptor implements NestInterceptor {
         },
         wsContextData
       );
+      return () => inner?.unsubscribe();
     });
   }
 }

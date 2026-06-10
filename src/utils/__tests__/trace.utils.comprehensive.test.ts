@@ -350,4 +350,50 @@ describe('createTraceMiddleware', () => {
       done();
     });
   });
+
+  // ── response-API robustness (Fastify / missing method / headers sent) ───────
+
+  it('uses reply.header() when setHeader is absent (Fastify-style reply)', (done) => {
+    const middleware = createTraceMiddleware({ enabled: true });
+    const req = { headers: {} };
+    const res = { header: jest.fn() }; // no setHeader
+    middleware(req, res, () => {
+      expect(res.header).toHaveBeenCalledWith('X-Trace-Id', expect.any(String));
+      done();
+    });
+  });
+
+  it('does not throw when the response has no header-setting method', (done) => {
+    const middleware = createTraceMiddleware({ enabled: true });
+    const req = { headers: {} };
+    const res = {}; // neither setHeader nor header
+    expect(() =>
+      middleware(req, res, () => {
+        // context still established despite no settable header
+        expect(typeof getCurrentTraceId()).toBe('string');
+        done();
+      })
+    ).not.toThrow();
+  });
+
+  it('skips setting the header when headers are already sent', (done) => {
+    const middleware = createTraceMiddleware({ enabled: true });
+    const req = { headers: {} };
+    const res = { setHeader: jest.fn(), headersSent: true };
+    middleware(req, res, () => {
+      expect(res.setHeader).not.toHaveBeenCalled();
+      done();
+    });
+  });
+
+  it('does not throw when setHeader itself throws (e.g. stream already closed)', (done) => {
+    const middleware = createTraceMiddleware({ enabled: true });
+    const req = { headers: {} };
+    const res = {
+      setHeader: () => {
+        throw new Error('Cannot set headers after they are sent');
+      },
+    };
+    expect(() => middleware(req, res, () => done())).not.toThrow();
+  });
 });

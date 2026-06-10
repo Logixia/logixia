@@ -10,7 +10,15 @@
  * the LOGIXIA_SILENT_INTERNAL=1 environment variable.
  */
 
-const silent = process.env.LOGIXIA_SILENT_INTERNAL === '1';
+/**
+ * Read the silence flag on each call rather than caching it at import time, so
+ * setting LOGIXIA_SILENT_INTERNAL=1 AFTER the module is first imported (e.g. in
+ * a test setup file) still takes effect — the documented test-silencing
+ * behavior was previously unreliable because the value was frozen at load.
+ */
+function isSilent(): boolean {
+  return process.env.LOGIXIA_SILENT_INTERNAL === '1';
+}
 
 /**
  * Emit an internal debug/info message to stderr.
@@ -18,7 +26,7 @@ const silent = process.env.LOGIXIA_SILENT_INTERNAL === '1';
  * during development but should not appear in production log streams.
  */
 export function internalLog(message: string): void {
-  if (!silent) {
+  if (!isSilent()) {
     process.stderr.write(`[logixia] ${message}\n`);
   }
 }
@@ -28,7 +36,7 @@ export function internalLog(message: string): void {
  * Use when something is misconfigured but logixia can continue operating.
  */
 export function internalWarn(message: string): void {
-  if (!silent) {
+  if (!isSilent()) {
     process.stderr.write(`[logixia:warn] ${message}\n`);
   }
 }
@@ -38,7 +46,7 @@ export function internalWarn(message: string): void {
  * Use when a transport write fails or a serious internal error occurs.
  */
 export function internalError(message: string, error?: unknown): void {
-  if (!silent) {
+  if (!isSilent()) {
     let errStr = '';
     if (error instanceof Error) {
       errStr = ` — ${error.message}`;

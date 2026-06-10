@@ -164,7 +164,10 @@ export class TextFormatter implements ILogFormatter {
             return `${key}=${value.toISOString()}`;
           }
           if (typeof value === 'object') {
-            return `${key}=${JSON.stringify(value)}`;
+            // safeToString is circular-safe (raw JSON.stringify throws on a cycle
+            // — e.g. an Express req/res — which would crash the log call) and the
+            // control-char strip keeps the CWE-117 guarantee for object values.
+            return `${key}=${stripControls(safeToString(value))}`;
           }
           return `${key}=${String(value)}`;
         })
@@ -172,7 +175,9 @@ export class TextFormatter implements ILogFormatter {
 
       return formatted;
     } catch {
-      return JSON.stringify(payload);
+      // Last-resort fallback must also be circular-safe — the previous
+      // JSON.stringify(payload) here threw again on the same cyclic payload.
+      return stripControls(safeToString(payload));
     }
   }
 

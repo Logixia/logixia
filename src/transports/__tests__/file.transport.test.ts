@@ -103,3 +103,59 @@ describe('FileTransport — batch flush', () => {
     expect(new Set(lines).size).toBe(50);
   });
 });
+
+describe('FileTransport — rotation', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'logixia-file-rotation-'));
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('gzip-compresses the rotated file and removes the original when compress is set', async () => {
+    const transport = new FileTransport({
+      dirname: dir,
+      filename: 'app.log',
+      batchSize: 1,
+      rotation: { interval: '1h', compress: true, maxFiles: 10 },
+    });
+
+    await transport.write(makeEntry(0));
+    await transport.flush();
+    // Force a rotation.
+    await (transport as unknown as { rotate(): Promise<void> }).rotate();
+    await transport.close();
+
+    const files = fs.readdirSync(dir);
+    // Exactly one compressed rotated file, and no uncompressed rotated original.
+    expect(files.some((f) => /^app-.*\.log\.gz$/.test(f))).toBe(true);
+    expect(files.some((f) => /^app-.*\.log$/.test(f))).toBe(false);
+  });
+
+  it('cleanup only deletes its own rotated files, not similarly-named ones', async () => {
+    // An unrelated file that shares the base prefix must survive cleanup.
+    const unrelated = path.join(dir, 'application.log');
+    fs.writeFileSync(unrelated, 'not a logixia rotated file');
+
+    const transport = new FileTransport({
+      dirname: dir,
+      filename: 'app.log',
+      batchSize: 1,
+      rotation: { interval: '1h', maxFiles: 1 },
+    });
+
+    // Create several rotated files so cleanup (maxFiles: 1) deletes the excess.
+    for (let i = 0; i < 3; i += 1) {
+      await transport.write(makeEntry(i));
+      await transport.flush();
+      await (transport as unknown as { rotate(): Promise<void> }).rotate();
+    }
+    await transport.close();
+
+    // The unrelated file must NOT have been deleted by cleanup.
+    expect(fs.existsSync(unrelated)).toBe(true);
+  });
+});

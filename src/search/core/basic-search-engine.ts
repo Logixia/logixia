@@ -3,6 +3,7 @@
  */
 
 import type { LogEntry } from '../../types';
+import { safeToString } from '../../utils/coerce.utils';
 import type {
   CorrelatedLogs,
   LogCorrelationSummary,
@@ -29,19 +30,31 @@ export class BasicSearchEngine implements ILogSearchEngine {
   private searchHistory: string[] = [];
   private suggestionCache: Map<string, SearchSuggestion[]> = new Map();
 
-  constructor(private options?: { maxHistorySize?: number; cacheSize?: number }) {
+  constructor(private options?: { maxHistorySize?: number; cacheSize?: number; maxLogs?: number }) {
     this.options = {
       maxHistorySize: 1000,
       cacheSize: 100,
+      maxLogs: 100_000,
       ...options,
     };
   }
 
   /**
-   * Add logs to the search index
+   * Add logs to the search index.
+   *
+   * Bounded to `maxLogs` (default 100k): the buffer previously grew without
+   * limit, leaking memory in any long-running process feeding it logs. When the
+   * cap is exceeded the oldest entries are dropped (FIFO). We also append with a
+   * loop rather than `push(...logs)` to avoid a RangeError from spreading a very
+   * large array onto the call stack.
    */
   public addLogs(logs: LogEntry[]): void {
-    this.logs.push(...logs);
+    for (const log of logs) this.logs.push(log);
+
+    const maxLogs = this.options?.maxLogs ?? 100_000;
+    if (this.logs.length > maxLogs) {
+      this.logs.splice(0, this.logs.length - maxLogs);
+    }
   }
 
   /**
@@ -450,7 +463,11 @@ export class BasicSearchEngine implements ILogSearchEngine {
   }
 
   private getSearchableText(log: LogEntry): string {
-    return [log.message, log.level, log.appName, log.context, JSON.stringify(log.payload)]
+    // safeToString is circular-safe — a stored log with a cyclic payload (an
+    // Express req/res, a DB handle) would otherwise make JSON.stringify throw and
+    // crash the ENTIRE search, since this runs for every candidate log.
+    const payloadText = log.payload ? safeToString(log.payload) : '';
+    return [log.message, log.level, log.appName, log.context, payloadText]
       .filter(Boolean)
       .join(' ');
   }
