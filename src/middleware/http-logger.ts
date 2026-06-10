@@ -180,7 +180,15 @@ export function createExpressMiddleware(
     // Hook into the response 'finish' event — fires after headers + body are sent.
     // This is what Morgan gets wrong for slow requests (it uses 'close' which may
     // fire before the status code is set on some Node versions).
+    //
+    // BOTH 'finish' and 'close' fire on a normal response, so guard against
+    // logging the completion twice (which would duplicate the completed entry and
+    // the slow-request warning).
+    let completed = false;
     const onFinish = (): void => {
+      if (completed) return;
+      completed = true;
+
       const duration = Date.now() - startMs;
       const status = res.statusCode ?? 0;
       const level = status >= 500 ? errorLevel : responseLevel;
@@ -202,10 +210,9 @@ export function createExpressMiddleware(
     };
 
     res.once?.('finish', onFinish);
-    // Fallback: also listen to 'close' (client disconnected before response finished)
-    res.once?.('close', () => {
-      if ((res.statusCode ?? 0) === 0) onFinish();
-    });
+    // Fallback: also covers a client that disconnects before 'finish' fires. The
+    // `completed` guard ensures a normal finish+close pair logs only once.
+    res.once?.('close', onFinish);
 
     next();
   };
