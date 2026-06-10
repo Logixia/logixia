@@ -41,6 +41,7 @@ import type {
   LoggerConfig,
   LoggerWithLevels,
   LogLevelString,
+  NamespaceLevels,
   TimingEntry,
 } from '../types';
 import { LogLevel } from '../types';
@@ -500,6 +501,38 @@ export class LogixiaLogger<
 
   getLevel(): LogLevelString {
     return (this.config.levelOptions?.level as LogLevelString) ?? LogLevel.INFO;
+  }
+
+  /**
+   * Replace the per-namespace level map at runtime — no restart needed.
+   *
+   * This is the runtime counterpart to the `namespaceLevels` config option and
+   * the most-requested logging feature across the Winston/Pino issue trackers
+   * (flip a module's verbosity live to chase a bug without raising global
+   * volume). The new map fully replaces the previous one.
+   *
+   * @example
+   * ```ts
+   * // Turn on debug for the DB layer only, live:
+   * logger.setNamespaceLevels({ 'db.*': 'debug', '*': 'info' });
+   * ```
+   */
+  setNamespaceLevels(levels: NamespaceLevels): void {
+    this.config.namespaceLevels = { ...levels };
+    // Re-resolve the effective level (which consults namespaceLevels) and rebuild
+    // the hot-path caches so the change takes effect on the very next log call.
+    this._buildPerfCaches();
+  }
+
+  /** Merge entries into the existing per-namespace level map at runtime. */
+  patchNamespaceLevels(levels: NamespaceLevels): void {
+    this.config.namespaceLevels = { ...this.config.namespaceLevels, ...levels };
+    this._buildPerfCaches();
+  }
+
+  /** Return a copy of the current per-namespace level map. */
+  getNamespaceLevels(): NamespaceLevels {
+    return { ...this.config.namespaceLevels };
   }
 
   setContext(context: string): void {

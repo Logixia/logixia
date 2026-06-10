@@ -33,6 +33,8 @@ export {
   initOtelBridge,
 } from './utils/otel';
 export { applyRedaction, redactObject } from './utils/redact.utils';
+export type { LevelSignalOptions, ReconfigurableLogger } from './utils/runtime-control';
+export { createLevelControlHandler, registerLevelSignal } from './utils/runtime-control';
 export * from './utils/shutdown.utils';
 export * from './utils/trace.utils';
 export type {
