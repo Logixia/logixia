@@ -1,6 +1,7 @@
 # logixia — current feature surface (as of audit)
 
 logixia ALREADY HAS these features (do NOT recommend adding what it already has):
+
 - Log levels (error/warn/info/debug/trace/verbose) + custom levels
 - Structured logging, child loggers
 - Adaptive log level (NODE_ENV/CI-based)
@@ -11,7 +12,7 @@ logixia ALREADY HAS these features (do NOT recommend adding what it already has)
 - NestJS integration: @LogMethod decorator, LogixiaExceptionFilter, DI module
 - Correlation ID propagation: Express/Fastify, outbound fetch + axios, Kafka/SQS/RabbitMQ helpers
 - Browser support (zero Node deps, remote transport with keepalive)
-- Log redaction: path-based (** globs) + regex patterns + auto-detect PII (conservative/aggressive), message-string redaction
+- Log redaction: path-based (\*\* globs) + regex patterns + auto-detect PII (conservative/aggressive), message-string redaction
 - Timer API (time/timeEnd)
 - Field management (enable/disable fields)
 - Per-transport level control + filter predicates
