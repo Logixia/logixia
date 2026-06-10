@@ -48,7 +48,7 @@ import { safeToString } from '../utils/coerce.utils';
 import { isError, serializeError } from '../utils/error.utils';
 import { internalError, internalLog, internalWarn } from '../utils/internal-log';
 import { _getOtelPayloadIfEnabled } from '../utils/otel';
-import { applyRedaction } from '../utils/redact.utils';
+import { applyRedaction, applyRedactionToString } from '../utils/redact.utils';
 import { Sampler } from '../utils/sampling.utils';
 import { deregisterFromShutdown, flushOnExit, registerForShutdown } from '../utils/shutdown.utils';
 import { TraceContext } from '../utils/trace.utils';
@@ -713,12 +713,19 @@ export class LogixiaLogger<
     const traceId = this.config.traceId
       ? (TraceContext.instance.getCurrentTraceId() ?? this.fallbackTraceId)
       : undefined;
+    // Pattern-based redaction also applies to the message string — a secret
+    // interpolated into the message (e.g. `Auth: Bearer ${token}`) would
+    // otherwise bypass redaction entirely and leak in plaintext. Path rules
+    // don't apply to a bare string, so only `patterns` run here.
+    const safeMessage = this._hasRedact
+      ? applyRedactionToString(message, this.config.redact)
+      : message;
     const entry: LogEntry = {
       timestamp: new Date().toISOString(),
       level,
       appName: this.config.appName ?? 'App',
       environment: this.config.environment ?? 'development',
-      message,
+      message: safeMessage,
     };
     if (this.context) entry.context = this.context;
     if (payload !== undefined) entry.payload = payload;

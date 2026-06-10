@@ -279,6 +279,24 @@ export function redactObject(
 }
 
 /**
+ * Apply pattern-based redaction to a single string (e.g. the log message).
+ *
+ * Path-based rules don't apply to a bare string — only the `patterns` are run.
+ * Returns the input unchanged when no patterns are configured, so the hot path
+ * stays allocation-free for the common no-redact case.
+ */
+export function applyRedactionToString(value: string, config: RedactConfig | undefined): string {
+  if (!config) return value;
+  const resolved = resolveConfig(config);
+  if (!resolved.patterns || resolved.patterns.length === 0) return value;
+  let redacted = value;
+  for (const pattern of resolved.patterns) {
+    redacted = redacted.replace(pattern, resolved.censor ?? DEFAULT_CENSOR);
+  }
+  return redacted;
+}
+
+/**
  * Apply redaction to a log payload (top-level call convenience wrapper).
  * Returns a new object — never mutates the input.
  */

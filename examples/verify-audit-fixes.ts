@@ -1,5 +1,5 @@
 /**
- * Verification example for the overlapping-batch-flush fix.
+ * Verification example for the audit fixes (flush duplication, log loss, redaction).
  *
  * Reproduces the production incident where a synchronous burst of logs (e.g. a
  * NestJS app replaying buffered bootstrap logs) caused a batching transport to
@@ -12,7 +12,7 @@
  *   - a failed batch is re-buffered and re-sent (no log loss)
  *   - close() drains everything on shutdown    (no loss on deploy)
  *
- * Run: npx ts-node examples/verify-flush-no-duplication.ts
+ * Run: npx ts-node examples/verify-audit-fixes.ts
  */
 
 import { AnalyticsTransport } from '../src/transports/analytics.transport';
@@ -124,6 +124,35 @@ async function main() {
       'cloud transport close() drains the whole batch on shutdown',
       recorded.length === 95,
       `delivered=${recorded.length}, expected=95`
+    );
+  }
+
+  // ── Scenario 5: secrets in the MESSAGE string are redacted (security) ───────
+  {
+    const { LogixiaLogger } = await import('../src/core/logitron-logger');
+    const captured: string[] = [];
+    const origWrite = process.stdout.write.bind(process.stdout);
+    (process.stdout as NodeJS.WriteStream).write = ((chunk: unknown) => {
+      captured.push(String(chunk ?? ''));
+      return true;
+    }) as typeof process.stdout.write;
+
+    const logger = new LogixiaLogger({
+      appName: 'verify',
+      outputs: ['console'],
+      format: { timestamp: false, colorize: false, json: false },
+      traceId: false,
+      redact: { patterns: [/Bearer\s+\S+/gi], censor: '[REDACTED]' },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- example config
+    } as any);
+    await logger.info('Auth header was Bearer abc123secrettoken456');
+    (process.stdout as NodeJS.WriteStream).write = origWrite;
+
+    const joined = captured.join('');
+    check(
+      'secret in the log MESSAGE string is redacted, not leaked',
+      !joined.includes('abc123secrettoken456') && joined.includes('[REDACTED]'),
+      joined.trim()
     );
   }
 

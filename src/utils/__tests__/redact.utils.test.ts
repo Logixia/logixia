@@ -6,7 +6,7 @@
  * arrays, nested objects, regex pattern redaction, and edge cases.
  */
 
-import { applyRedaction, redactObject } from '../redact.utils';
+import { applyRedaction, applyRedactionToString, redactObject } from '../redact.utils';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -318,6 +318,37 @@ describe('applyRedaction', () => {
     const obj = { name: 'Bob' };
     const result = applyRedaction(obj, { paths: ['password'] });
     expect(result!.name).toBe('Bob');
+  });
+});
+
+// ── applyRedactionToString — message-string redaction ────────────────────────
+
+describe('applyRedactionToString', () => {
+  it('redacts a secret embedded in a plain string via patterns', () => {
+    const out = applyRedactionToString('Auth header was Bearer abc123secrettoken', {
+      patterns: [/Bearer\s+\S+/gi],
+    });
+    expect(out).toBe('Auth header was [REDACTED]');
+  });
+
+  it('applies autoDetect patterns to strings (e.g. JWTs)', () => {
+    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc';
+    const out = applyRedactionToString(`token=${jwt}`, { autoDetect: true });
+    expect(out).toBe('token=[REDACTED]');
+  });
+
+  it('respects a custom censor', () => {
+    const out = applyRedactionToString('key sk-0123456789abcdef0123', {
+      patterns: [/sk-[a-z0-9]{16,}/gi],
+      censor: '***',
+    });
+    expect(out).toBe('key ***');
+  });
+
+  it('returns the input unchanged when no patterns are configured', () => {
+    const input = 'Bearer abc123 — nothing to redact without patterns';
+    expect(applyRedactionToString(input, { paths: ['password'] })).toBe(input);
+    expect(applyRedactionToString(input)).toBe(input);
   });
 });
 
