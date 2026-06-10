@@ -14,17 +14,21 @@
 
 ## TL;DR — The Roadmap (prioritized)
 
-| # | Recommendation | Type | Effort | Impact | Why now |
-|---|----------------|------|--------|--------|---------|
-| 1 | **Canonical Log Lines / Wide Events API** | 🟢 NET-NEW | M | ⭐⭐⭐ | The single biggest 2025-26 differentiator; logixia genuinely lacks it |
-| 2 | **OTLP Logs export (native OTel Logs bridge OUT)** | 🟠 IMPROVE | M | ⭐⭐⭐ | logixia *reads* OTel spans but can't *emit* OTLP LogRecords to a collector |
-| 3 | **Dynamic runtime reconfiguration** (level via signal/HTTP, no restart) | 🟢 NET-NEW | S–M | ⭐⭐⭐ | #1 most-requested feature across Winston AND Pino issue trackers |
-| 4 | **Per-module / per-namespace runtime level control** (`debug`-style) | 🟠 IMPROVE | S | ⭐⭐ | logixia has namespace levels at config; gap is *runtime* per-name toggling |
-| 5 | **Hard guarantee + documentation of flush-on-exit** (logixia's existing strength → make it a headline) | 🟠 IMPROVE | S | ⭐⭐⭐ | This is Pino's #1 unfixed bug; logixia already fixed it — *market it* |
-| 6 | **Adaptive / dynamic sampling** (raise rate on errors/spikes) | 🟠 IMPROVE | M | ⭐⭐ | logixia has static sampling; cost-control is a top-tier 2026 theme |
-| 7 | **Cross-runtime story: Deno / Bun / Cloudflare Workers** | 🟢 NET-NEW | M–L | ⭐⭐ | "Logging in 2026" HN threads show runtime portability is now table-stakes |
-| 8 | **Schema validation / typed-field enforcement for log fields** | 🟠 IMPROVE | S–M | ⭐ | logixia has typed-logger; gap is runtime schema + naming conventions |
-| 9 | **Richer error/serialization edge cases** (BigInt, true `$ref` decycle) | 🟠 IMPROVE | S | ⭐ | logixia already handles circular (audit fix); go one better than incumbents |
+> **Status:** Items 1, 2, 3, 4, 5, 6, 9 **IMPLEMENTED** on `research/logger-improvements`
+> (commits below, all with tests). Items 7 (cross-runtime) and 8 (schema validation)
+> remain as follow-ups.
+
+| # | Recommendation | Type | Effort | Impact | Status |
+|---|----------------|------|--------|--------|--------|
+| 1 | **Canonical Log Lines / Wide Events API** | 🟢 NET-NEW | M | ⭐⭐⭐ | ✅ `src/wide-events.ts` |
+| 2 | **OTLP Logs export (native OTel Logs bridge OUT)** | 🟠 IMPROVE | M | ⭐⭐⭐ | ✅ `src/transports/otlp.transport.ts` |
+| 3 | **Dynamic runtime reconfiguration** (level via signal/HTTP, no restart) | 🟢 NET-NEW | S–M | ⭐⭐⭐ | ✅ `src/utils/runtime-control.ts` |
+| 4 | **Per-module / per-namespace runtime level control** | 🟠 IMPROVE | S | ⭐⭐ | ✅ `logger.setNamespaceLevels()` |
+| 5 | **Document flush-on-exit reliability guarantee** | 🟠 IMPROVE | S | ⭐⭐⭐ | ✅ README "Reliability guarantee" |
+| 6 | **Adaptive / dynamic sampling** (raise rate on errors/spikes) | 🟠 IMPROVE | M | ⭐⭐ | ✅ `SamplingConfig.adaptive` |
+| 7 | **Cross-runtime story: Deno / Bun / Cloudflare Workers** | 🟢 NET-NEW | M–L | ⭐⭐ | ⏳ follow-up |
+| 8 | **Schema validation / typed-field enforcement for log fields** | 🟠 IMPROVE | S–M | ⭐ | ⏳ follow-up (partial: typed-logger exists) |
+| 9 | **Richer error/serialization edge cases** (BigInt, true `$ref` decycle) | 🟠 IMPROVE | S | ⭐ | ✅ `src/utils/safe-stringify.ts` |
 
 **The headline strategy:** logixia is already feature-rich. The highest-leverage moves are
 **(a) the Wide Events API** (a genuine category gap nobody in the Node ecosystem ships
