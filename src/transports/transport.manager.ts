@@ -215,7 +215,10 @@ export class TransportManager extends EventEmitter {
       const writeTime = Date.now() - startTime;
       metrics.logsWritten++;
       metrics.lastWrite = new Date(startTime);
-      metrics.averageWriteTime = (metrics.averageWriteTime + writeTime) / 2;
+      // True cumulative mean: avg += (sample - avg) / n. The previous formula
+      // ((avg + sample) / 2) was an exponential decay that over-weighted the most
+      // recent write, so averageWriteTime never reflected the real average.
+      metrics.averageWriteTime += (writeTime - metrics.averageWriteTime) / metrics.logsWritten;
 
       this.emit('log', entry);
     } catch (error) {
