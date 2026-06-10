@@ -48,6 +48,10 @@ export class Sampler {
   private _tokenBucket = 0;
   private _lastRefillMs = Date.now();
 
+  // Adaptive (anomaly-driven) sampling state — a sliding window of recent
+  // (timestamp, isError) samples used to compute the current error rate.
+  private readonly _adaptiveWindow: Array<{ t: number; err: boolean }> = [];
+
   // Stats
   private _stats: SamplingStats = {
     evaluated: 0,
@@ -89,6 +93,7 @@ export class Sampler {
   shouldEmit(level: string, traceId?: string): boolean {
     const lvl = level.toLowerCase();
     this._trackEvaluated(lvl);
+    if (this.config.adaptive) this._recordAdaptiveSample(lvl);
 
     // ── 1. Safety: error/fatal always pass (unless explicitly overridden) ─────
     if (ALWAYS_EMIT_LEVELS.has(lvl) && this.config.perLevel?.[lvl] === undefined) {
@@ -161,13 +166,55 @@ export class Sampler {
   // ── Private helpers ─────────────────────────────────────────────────────────
 
   private _sampleByRate(level: string): boolean {
-    const rate =
+    const baseRate =
       this.config.perLevel?.[level] ?? this.config.perLevel?.['*'] ?? this.config.rate ?? 1.0;
+
+    // Adaptive boost: during an error anomaly, lift the rate so the incident is
+    // captured in full, then relax back to the base rate in steady state.
+    const rate = Math.max(baseRate, this._adaptiveBoostRate());
 
     if (rate >= 1.0) return true;
     if (rate <= 0.0) return false;
     // eslint-disable-next-line sonarjs/pseudo-random -- probabilistic sampling, not security-sensitive
     return Math.random() < rate;
+  }
+
+  /**
+   * Record one evaluated sample into the adaptive sliding window and evict
+   * entries older than the window. Cheap O(evicted) amortized.
+   */
+  private _recordAdaptiveSample(level: string): void {
+    const now = Date.now();
+    const windowMs = this.config.adaptive?.windowMs ?? 10_000;
+    this._adaptiveWindow.push({ t: now, err: level === 'error' || level === 'fatal' });
+    const cutoff = now - windowMs;
+    while (this._adaptiveWindow.length > 0 && this._adaptiveWindow[0]!.t < cutoff) {
+      this._adaptiveWindow.shift();
+    }
+  }
+
+  /**
+   * Effective boost rate (0 = no boost). Returns the configured boostRate when
+   * the windowed error rate is at/above the threshold AND there are enough
+   * samples to trust it; otherwise 0.
+   */
+  private _adaptiveBoostRate(): number {
+    const cfg = this.config.adaptive;
+    if (!cfg) return 0;
+    const minSamples = cfg.minSamples ?? 20;
+    const total = this._adaptiveWindow.length;
+    if (total < minSamples) return 0;
+
+    let errors = 0;
+    for (const s of this._adaptiveWindow) if (s.err) errors += 1;
+    const errorRate = errors / total;
+    const threshold = cfg.errorRateThreshold ?? 0.05;
+    return errorRate >= threshold ? (cfg.boostRate ?? 1.0) : 0;
+  }
+
+  /** @internal Expose the current adaptive boost decision (tests / observability). */
+  isBoosting(): boolean {
+    return this._adaptiveBoostRate() > 0;
   }
 
   /**

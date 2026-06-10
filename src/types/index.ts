@@ -161,6 +161,37 @@ export interface SamplingConfig {
    * Set to 0 to disable. Default: 60_000 (60 s).
    */
   statsIntervalMs?: number;
+  /**
+   * Adaptive (anomaly-driven) sampling. When the error rate over a sliding
+   * window crosses a threshold, the effective sample rate is boosted toward 1.0
+   * so an incident is captured in full; in steady state it relaxes back to the
+   * base `rate`. This balances high-volume cost control with not-missing-logs
+   * exactly when they matter most.
+   *
+   * @example `{ adaptive: { errorRateThreshold: 0.05, boostRate: 1.0 } }`
+   */
+  adaptive?: AdaptiveSamplingConfig;
+}
+
+export interface AdaptiveSamplingConfig {
+  /**
+   * Fraction of evaluated entries that must be errors within the window to
+   * trigger a boost. e.g. 0.05 = boost once ≥5% of recent logs are errors.
+   * Default: 0.05.
+   */
+  errorRateThreshold?: number;
+  /**
+   * Sample rate to use while boosted (overrides base `rate`/`perLevel`).
+   * Default: 1.0 (keep everything during an incident).
+   */
+  boostRate?: number;
+  /** Sliding window size in ms over which the error rate is measured. Default: 10_000. */
+  windowMs?: number;
+  /**
+   * Minimum events in the window before the error rate is trusted (avoids
+   * boosting on a single error in a quiet system). Default: 20.
+   */
+  minSamples?: number;
 }
 
 // ── Namespace Levels ───────────────────────────────────────────────────────────

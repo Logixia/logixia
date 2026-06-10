@@ -33,6 +33,10 @@ export {
   initOtelBridge,
 } from './utils/otel';
 export { applyRedaction, redactObject } from './utils/redact.utils';
+export type { LevelSignalOptions, ReconfigurableLogger } from './utils/runtime-control';
+export { createLevelControlHandler, registerLevelSignal } from './utils/runtime-control';
+export type { SafeStringifyOptions } from './utils/safe-stringify';
+export { decycleValue, retrocycle, safeStringify } from './utils/safe-stringify';
 export * from './utils/shutdown.utils';
 export * from './utils/trace.utils';
 export type {
@@ -44,6 +48,23 @@ export type {
   TypedLogger,
 } from './utils/typed-logger';
 export { createTypedLogger, defineLogSchema } from './utils/typed-logger';
+export type {
+  WideEventFields,
+  WideEventLogger,
+  WideEventMiddlewareOptions,
+  WideEventOptions,
+} from './wide-events';
+export {
+  addEventFields,
+  getEventFields,
+  setEventField,
+  wideEventMiddleware,
+  withWideEvent,
+} from './wide-events';
+
+// OTLP logs export transport (OpenTelemetry-native log emission)
+export type { OtlpLogTransportConfig } from './transports/otlp.transport';
+export { OtlpLogTransport, toOtelSeverity } from './transports/otlp.transport';
 
 // Search module exports
 export * from './search';
