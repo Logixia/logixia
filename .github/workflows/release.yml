@@ -44,7 +44,11 @@ jobs:
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # No NPM_TOKEN — npm publish uses OIDC trusted publishing.
+          # @semantic-release/npm auto-detects the GitHub Actions OIDC token
+          # when id-token: write is granted (see permissions above) and no
+          # NPM_TOKEN is set, so no secret is needed. Requires a trusted
+          # publisher to be configured for this package on npmjs.com.
           NPM_CONFIG_PROVENANCE: true
           HUSKY: 0 # skip commit-msg / pre-commit hooks on the auto-generated release commit
         run: npx --yes -p semantic-release@25 -p @semantic-release/changelog@6 -p @semantic-release/git@10 -p conventional-changelog-conventionalcommits@8 semantic-release

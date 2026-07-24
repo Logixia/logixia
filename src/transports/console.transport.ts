@@ -58,7 +58,11 @@ export class ConsoleTransport implements ITransport {
     if (config.filter) this.filter = config.filter;
   }
 
-  write(entry: TransportLogEntry): Promise<void> {
+  // Synchronous write — returns void, NOT Promise.resolve(). Allocating a
+  // resolved Promise on every log is a measurable hot-path tax; the manager
+  // only awaits transports that actually return a thenable. The ITransport
+  // contract permits `void | Promise<void>`.
+  write(entry: TransportLogEntry): void {
     const formatted = this.formatEntry(entry) + '\n';
     // Use process.stderr for errors, stdout for everything else —
     // avoids the extra indirection that console.log/error add.
@@ -66,7 +70,6 @@ export class ConsoleTransport implements ITransport {
     // Per the class contract, error AND warn go to stderr; everything else stdout.
     const out = lvl === 'error' || lvl === 'warn' ? process.stderr : process.stdout;
     out.write(formatted);
-    return Promise.resolve();
   }
 
   private formatEntry(entry: TransportLogEntry): string {

@@ -137,6 +137,14 @@ export class WorkerTransport implements ITransport {
   private restarts = 0;
   private readonly maxRestarts: number;
   private readonly config: WorkerTransportConfig;
+  /** Pending restart-backoff timer, so close() can cancel a queued restart. */
+  private restartTimer: NodeJS.Timeout | null = null;
+  /** Set once close() begins, so a worker 'exit' no longer triggers a restart. */
+  private closing = false;
+  /** Max time to wait for the worker's 'flushed' ack before giving up. */
+  private readonly FLUSH_TIMEOUT_MS = 5000;
+  /** Max time to wait for a graceful worker exit before force-terminating. */
+  private readonly SHUTDOWN_TIMEOUT_MS = 5000;
 
   constructor(config: WorkerTransportConfig) {
     this.config = config;
@@ -185,11 +193,20 @@ export class WorkerTransport implements ITransport {
 
   private handleWorkerExit(): void {
     this.ready = false;
+    // Don't resurrect a worker we're intentionally shutting down — close() sets
+    // `closing` and nulls the worker, so a late 'exit'/'error' event must not
+    // queue a restart (which would spawn a fresh leaked thread post-shutdown).
+    if (this.closing) return;
     if (this.restarts < this.maxRestarts) {
       this.restarts++;
       internalWarn(`WorkerTransport restarting (attempt ${this.restarts}/${this.maxRestarts})`);
-      // Small backoff before restart
-      setTimeout(() => this.startWorker(), 500 * this.restarts);
+      // Small backoff before restart. unref() so a perpetually-failing worker's
+      // pending restart never keeps the process alive on its own.
+      this.restartTimer = setTimeout(() => {
+        this.restartTimer = null;
+        this.startWorker();
+      }, 500 * this.restarts);
+      if (this.restartTimer.unref) this.restartTimer.unref();
     } else {
       internalError(
         `WorkerTransport exhausted ${this.maxRestarts} restart attempts — transport disabled`
@@ -220,25 +237,79 @@ export class WorkerTransport implements ITransport {
 
   async flush(): Promise<void> {
     if (!this.ready || !this.worker) return;
+    const worker = this.worker;
     return new Promise<void>((resolve) => {
+      // Time-box the flush: if the worker dies or restarts before answering,
+      // the 'flushed' message would never arrive and this promise would hang
+      // forever, blocking shutdown until the force-exit timer kills the process
+      // (losing everything). Resolve on timeout so close() can still terminate.
+      const timer = setTimeout(() => {
+        worker.off('message', handler);
+        resolve();
+      }, this.FLUSH_TIMEOUT_MS);
+      if (timer.unref) timer.unref();
+
       const handler = (msg: { type: string }) => {
         if (msg.type === 'flushed') {
-          this.worker?.off('message', handler);
+          clearTimeout(timer);
+          worker.off('message', handler);
           resolve();
         }
       };
-      this.worker!.on('message', handler);
-      this.worker!.postMessage({ type: 'flush' });
+      worker.on('message', handler);
+      worker.postMessage({ type: 'flush' });
     });
   }
 
-  async shutdown(): Promise<void> {
-    if (this.worker) {
-      this.worker.postMessage({ type: 'shutdown' });
-      await new Promise<void>((resolve) => {
-        this.worker!.once('exit', () => resolve());
+  /**
+   * Flush the worker's buffer and terminate the thread on shutdown.
+   *
+   * This MUST be named close() — TransportManager.close() invokes
+   * transport.close(), so a method named only shutdown() was never called on
+   * graceful exit, leaking the worker thread and dropping its buffered logs.
+   */
+  async close(): Promise<void> {
+    // Stop the restart loop first: cancel any queued backoff restart and flag
+    // that further worker exits are expected (so handleWorkerExit no-ops).
+    this.closing = true;
+    if (this.restartTimer) {
+      clearTimeout(this.restartTimer);
+      this.restartTimer = null;
+    }
+
+    if (!this.worker) return;
+    const worker = this.worker;
+    this.worker = null;
+
+    // First push any locally-buffered (pre-ready) entries to the worker so they
+    // are not lost, then ask it to flush+exit. The worker script flushes its own
+    // transport before exiting on the 'shutdown' message.
+    if (this.ready) this.drainBufferTo(worker);
+    worker.postMessage({ type: 'shutdown' });
+
+    await new Promise<void>((resolve) => {
+      // Don't wait forever for a wedged worker — terminate() it after a timeout.
+      const timer = setTimeout(() => {
+        worker.terminate().finally(() => resolve());
+      }, this.SHUTDOWN_TIMEOUT_MS);
+      if (timer.unref) timer.unref();
+
+      worker.once('exit', () => {
+        clearTimeout(timer);
+        resolve();
       });
-      this.worker = null;
+    });
+  }
+
+  /** Back-compat alias — prefer close(). */
+  async shutdown(): Promise<void> {
+    await this.close();
+  }
+
+  private drainBufferTo(worker: Worker): void {
+    while (this.buffer.length > 0) {
+      const entry = this.buffer.shift();
+      if (entry) worker.postMessage({ type: 'write', entry });
     }
   }
 }

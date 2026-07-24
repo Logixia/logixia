@@ -162,7 +162,9 @@ function buildLabelKey(config: MetricConfig, entry: LogEntry): string {
   const payload = entry.payload ?? {};
   for (const name of labelNames) {
     const raw = name === 'level' ? entry.level : payload[name];
-    pairs[name] = raw !== undefined && raw !== null ? String(raw) : '';
+    // Sanitize the label NAME (the value is escaped at render time) so a label
+    // like 'status code' can't emit unparseable Prometheus output.
+    pairs[sanitizePromName(name)] = raw !== undefined && raw !== null ? String(raw) : '';
   }
   return JSON.stringify(pairs);
 }
@@ -176,6 +178,19 @@ function renderLabels(labelKey: string): string {
 
 function escapeLabel(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+}
+
+/**
+ * Coerce an arbitrary string into a valid Prometheus metric or label name
+ * (`[a-zA-Z_][a-zA-Z0-9_]*`). Invalid characters become underscores and a
+ * leading digit is prefixed with `_`. Without this, a user-supplied name like
+ * `my-metric` or a label like `status code` would emit output Prometheus cannot
+ * parse, breaking the ENTIRE scrape endpoint, not just that metric.
+ */
+function sanitizePromName(name: string): string {
+  let safe = name.replace(/\W/g, '_');
+  if (safe.length > 0 && /\d/.test(safe[0]!)) safe = `_${safe}`;
+  return safe.length > 0 ? safe : '_';
 }
 
 // ── MetricsPlugin ─────────────────────────────────────────────────────────────
@@ -283,7 +298,7 @@ export class MetricsPlugin implements LogixiaPlugin {
     const lines: string[] = [];
 
     for (const [rawName, config] of Object.entries(this.map)) {
-      const metricName = `logixia_${rawName}`;
+      const metricName = `logixia_${sanitizePromName(rawName)}`;
       const state = this.metricState.get(rawName);
       if (!state) continue;
 

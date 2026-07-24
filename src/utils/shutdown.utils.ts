@@ -22,6 +22,10 @@ type Closeable = { close(): Promise<void> };
 /** Module-level registry of all logger instances that have opted into graceful shutdown */
 const registry = new Set<Closeable>();
 let shutdownHandlerRegistered = false;
+/** Guards the handler against re-entrancy: a second signal (e.g. SIGINT after
+ * SIGTERM, or an impatient double Ctrl+C) must not start a second concurrent
+ * flush+exit, which could exit the process and truncate the first flush mid-write. */
+let shutdownInProgress = false;
 /** Our own handler + the signals we attached it to, so reset() can detach exactly it. */
 let activeHandler: ((signal: NodeJS.Signals) => void | Promise<void>) | undefined;
 let activeSignals: NodeJS.Signals[] = [];
@@ -58,6 +62,12 @@ export function flushOnExit(options: FlushOnExitOptions = {}): void {
   const { timeout = 5000, signals = ['SIGTERM', 'SIGINT'], beforeFlush, afterFlush } = options;
 
   const handler = async (signal: NodeJS.Signals) => {
+    // Re-entrancy guard: a flush is already running from an earlier signal.
+    // Starting a second one would race two close()/exit() sequences and could
+    // truncate the in-flight flush — exactly the log loss we are preventing.
+    if (shutdownInProgress) return;
+    shutdownInProgress = true;
+
     // Force-exit safety net — if flushing hangs, don't block the process forever
     const forceExitTimer = setTimeout(() => {
       process.stderr.write(
@@ -105,4 +115,5 @@ export function resetShutdownHandlers(): void {
   activeHandler = undefined;
   activeSignals = [];
   shutdownHandlerRegistered = false;
+  shutdownInProgress = false;
 }

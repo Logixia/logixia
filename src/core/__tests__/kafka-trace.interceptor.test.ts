@@ -11,7 +11,7 @@
  */
 
 import type { CallHandler, ExecutionContext } from '@nestjs/common';
-import { firstValueFrom, of } from 'rxjs';
+import { firstValueFrom, Observable, of } from 'rxjs';
 
 import { TraceContext } from '../../utils/trace.utils';
 import { KafkaTraceInterceptor } from '../kafka-trace.interceptor';
@@ -149,6 +149,37 @@ describe('KafkaTraceInterceptor — resolves traceId from body', () => {
 
       expect(observedInHandler).toBe('header-trace-2');
       expect(KafkaTraceInterceptor.metrics.accepted).toBe(1);
+    });
+  });
+});
+
+// ── subscription teardown (leak guard) ───────────────────────────────────────
+
+describe('KafkaTraceInterceptor — unsubscribe propagation', () => {
+  it('tears down the inner handler subscription when the outer is unsubscribed', async () => {
+    await runInEmptyAls(async () => {
+      let torndown = false;
+      // A handler that never completes and records when it is unsubscribed.
+      const handler: CallHandler = {
+        handle: () =>
+          new Observable<string>(() => {
+            return () => {
+              torndown = true;
+            };
+          }),
+      };
+
+      const interceptor = new KafkaTraceInterceptor(undefined, false);
+      const result$ = interceptor.intercept(
+        makeRpcContext({ traceId: 'leak-trace' }, { topic: 't', headers: {} }),
+        handler
+      );
+
+      const sub = result$.subscribe();
+      // Before the fix, unsubscribing the outer left the inner running forever.
+      sub.unsubscribe();
+
+      expect(torndown).toBe(true);
     });
   });
 });

@@ -126,14 +126,40 @@ export class CloudWatchTransport implements IAsyncTransport {
   }
 
   async flush(): Promise<void> {
-    if (this.batch.length === 0) return;
-    const events = this.batch.splice(0, this.batchSize);
-    try {
-      await this.putLogEvents(events);
-    } catch (err) {
-      internalError('CloudWatchTransport flush error', err);
-      // Re-queue on failure
-      this.batch.unshift(...events);
+    // Drain the WHOLE batch, not just one batchSize chunk — splice() detaches
+    // synchronously so concurrent writes are never sent twice, and looping means
+    // a flush during shutdown empties everything rather than leaving a tail.
+    while (this.batch.length > 0) {
+      const events = this.batch.splice(0, this.batchSize);
+      try {
+        await this.putLogEvents(events);
+      } catch (err) {
+        internalError('CloudWatchTransport flush error', err);
+        // Re-queue on failure at the front and stop so we don't hot-spin.
+        this.batch.unshift(...events);
+        return;
+      }
+    }
+  }
+
+  /**
+   * Flush remaining events and stop the interval timer on shutdown. Without this
+   * the manager's close() skips the transport (close was undefined) and any
+   * buffered events were lost on deploy. Retries a bounded number of times so a
+   * transient CloudWatch outage does not drop logs.
+   */
+  async close(): Promise<void> {
+    if (this.flushTimer) {
+      clearInterval(this.flushTimer);
+      this.flushTimer = null;
+    }
+    for (let attempt = 0; attempt < 3 && this.batch.length > 0; attempt += 1) {
+      await this.flush();
+    }
+    if (this.batch.length > 0) {
+      internalError(
+        `CloudWatchTransport closing with ${this.batch.length} unflushed event(s) after 3 attempts`
+      );
     }
   }
 

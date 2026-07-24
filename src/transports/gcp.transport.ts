@@ -141,13 +141,39 @@ export class GCPTransport implements IAsyncTransport {
   }
 
   async flush(): Promise<void> {
-    if (this.batch.length === 0) return;
-    const entries = this.batch.splice(0, this.batchSize);
-    try {
-      await this.writeEntries(entries);
-    } catch (err) {
-      internalError('GCPTransport flush error', err);
-      this.batch.unshift(...entries);
+    // Drain the WHOLE batch, not just one batchSize chunk — splice() detaches
+    // synchronously so concurrent writes are never sent twice, and looping means
+    // a flush during shutdown empties everything rather than leaving a tail.
+    while (this.batch.length > 0) {
+      const entries = this.batch.splice(0, this.batchSize);
+      try {
+        await this.writeEntries(entries);
+      } catch (err) {
+        internalError('GCPTransport flush error', err);
+        this.batch.unshift(...entries);
+        return;
+      }
+    }
+  }
+
+  /**
+   * Flush remaining entries and stop the interval timer on shutdown. Without
+   * this the manager's close() skipped the transport (close was undefined) and
+   * buffered entries were lost on deploy. Retries a bounded number of times so a
+   * transient outage does not drop logs.
+   */
+  async close(): Promise<void> {
+    if (this.flushTimer) {
+      clearInterval(this.flushTimer);
+      this.flushTimer = null;
+    }
+    for (let attempt = 0; attempt < 3 && this.batch.length > 0; attempt += 1) {
+      await this.flush();
+    }
+    if (this.batch.length > 0) {
+      internalError(
+        `GCPTransport closing with ${this.batch.length} unflushed entr${this.batch.length === 1 ? 'y' : 'ies'} after 3 attempts`
+      );
     }
   }
 

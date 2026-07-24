@@ -444,7 +444,10 @@ export class LogixiaLoggerService implements LoggerService {
 
   private formatMessage(message: unknown): string {
     if (typeof message === 'string') return message;
-    if (typeof message === 'object') return JSON.stringify(message);
-    return String(message);
+    // Use safeToString rather than raw JSON.stringify: NestJS passes arbitrary
+    // values here, and JSON.stringify both THROWS on circular structures (which
+    // would crash the log call) and RETURNS undefined for some inputs (e.g. a
+    // toJSON returning undefined). safeToString handles both safely.
+    return safeToString(message);
   }
 }

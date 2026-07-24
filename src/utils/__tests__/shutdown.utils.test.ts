@@ -422,3 +422,45 @@ describe('flushOnExit — force-exit timeout', () => {
     stderrSpy.mockRestore();
   }, 5000);
 });
+
+// ── re-entrancy guard ─────────────────────────────────────────────────────────
+
+describe('flushOnExit — concurrent signal re-entrancy', () => {
+  it('flushes each logger only once when a second signal arrives mid-shutdown', async () => {
+    // close() resolves on a delay so the first shutdown is still in flight when
+    // the second signal arrives — the guard must drop the second one.
+    let resolveClose: () => void = () => {};
+    const slow = makeFakeLogger(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveClose = resolve;
+        })
+    );
+    registerForShutdown(slow);
+    flushOnExit({ timeout: 1000 });
+
+    // Fire SIGTERM, then SIGINT before the first close() resolves.
+    process.emit('SIGTERM', 'SIGTERM');
+    process.emit('SIGINT', 'SIGINT');
+    await new Promise((r) => setImmediate(r));
+
+    // Only the first signal started a shutdown → close() called exactly once.
+    expect(slow.close).toHaveBeenCalledTimes(1);
+
+    resolveClose();
+    await new Promise((r) => setImmediate(r));
+  });
+
+  it('does not call process.exit twice for two concurrent signals', async () => {
+    const logger = makeFakeLogger();
+    registerForShutdown(logger);
+    flushOnExit({ timeout: 1000 });
+
+    process.emit('SIGTERM', 'SIGTERM');
+    process.emit('SIGTERM', 'SIGTERM');
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+
+    expect(exitSpy).toHaveBeenCalledTimes(1);
+  });
+});

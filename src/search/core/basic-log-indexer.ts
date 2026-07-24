@@ -14,6 +14,15 @@ export class BasicLogIndexer implements ILogIndexer {
   private fieldIndices: Map<string, Map<string, Set<string>>> = new Map();
   private semanticIndex: SemanticIndex | undefined;
   private lastOptimized?: Date;
+  /**
+   * Running estimate of the serialized index size in bytes, maintained
+   * incrementally. The previous implementation JSON.stringify'd EVERY log on
+   * each getIndexStats() call — O(n) per call, which for the default 1M-entry
+   * cap means stringifying a million objects and blocking the event loop.
+   * We keep a per-log byte estimate so the lookup is O(1).
+   */
+  private indexSizeBytes = 0;
+  private readonly logSizeById = new Map<string, number>();
 
   constructor(
     private options?: {
@@ -40,7 +49,7 @@ export class BasicLogIndexer implements ILogIndexer {
     const logId = this.generateLogId(log);
 
     // Add to main index
-    this.index.set(logId, log);
+    this.trackInsert(logId, log);
 
     // Update field indices
     this.updateFieldIndices(logId, log);
@@ -65,7 +74,7 @@ export class BasicLogIndexer implements ILogIndexer {
   async indexBatch(logs: LogEntry[]): Promise<void> {
     for (const log of logs) {
       const logId = this.generateLogId(log);
-      this.index.set(logId, log);
+      this.trackInsert(logId, log);
       this.updateFieldIndices(logId, log);
     }
 
@@ -130,6 +139,8 @@ export class BasicLogIndexer implements ILogIndexer {
     this.index.clear();
     this.fieldIndices.clear();
     this.semanticIndex = undefined;
+    this.indexSizeBytes = 0;
+    this.logSizeById.clear();
     this.initializeFieldIndices();
   }
 
@@ -158,7 +169,7 @@ export class BasicLogIndexer implements ILogIndexer {
     for (const [logId, log] of this.index.entries()) {
       const logTime = new Date(log.timestamp).getTime();
       if (logTime < cutoffTime) {
-        this.index.delete(logId);
+        this.trackDelete(logId);
         this.removeFromFieldIndices(logId);
         removedCount++;
       }
@@ -248,14 +259,31 @@ export class BasicLogIndexer implements ILogIndexer {
   }
 
   private calculateIndexSize(): number {
-    // Rough estimate of index size in bytes
-    let size = 0;
+    // O(1): return the incrementally-maintained running total instead of
+    // re-stringifying every entry on each call.
+    return this.indexSizeBytes;
+  }
 
-    for (const log of this.index.values()) {
-      size += JSON.stringify(log).length;
+  /** Insert into the main index and update the running size estimate. */
+  private trackInsert(logId: string, log: LogEntry): void {
+    // If this id somehow already exists, subtract its old size first.
+    const existing = this.logSizeById.get(logId);
+    if (existing !== undefined) this.indexSizeBytes -= existing;
+
+    const size = JSON.stringify(log).length;
+    this.index.set(logId, log);
+    this.logSizeById.set(logId, size);
+    this.indexSizeBytes += size;
+  }
+
+  /** Delete from the main index and update the running size estimate. */
+  private trackDelete(logId: string): void {
+    const size = this.logSizeById.get(logId);
+    if (size !== undefined) {
+      this.indexSizeBytes -= size;
+      this.logSizeById.delete(logId);
     }
-
-    return size;
+    this.index.delete(logId);
   }
 
   private async removeOldestLogs(count: number): Promise<void> {
@@ -264,7 +292,7 @@ export class BasicLogIndexer implements ILogIndexer {
       .slice(0, count);
 
     for (const [logId] of logs) {
-      this.index.delete(logId);
+      this.trackDelete(logId);
       this.removeFromFieldIndices(logId);
     }
   }

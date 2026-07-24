@@ -416,4 +416,29 @@ describe('serializeError — serializeValue branch coverage', () => {
     const result = serializeError(err);
     expect(result.data).toBeNull();
   });
+
+  it('does not infinitely recurse when an error is cross-referenced via own props', () => {
+    // a.related → b, and b.back → a. The shared seen-guard must catch the cycle
+    // rather than relying solely on the depth limit.
+    const a = new Error('A') as Error & { related?: unknown };
+    const b = new Error('B') as Error & { back?: unknown };
+    a.related = b;
+    b.back = a;
+
+    let result: Record<string, unknown> | undefined;
+    expect(() => {
+      result = serializeError(a);
+    }).not.toThrow();
+
+    const related = result!.related as Record<string, unknown>;
+    expect(related.message).toBe('B');
+    expect(related.back).toMatchObject({ _circular: true });
+  });
+
+  it('flags a self-referencing own property as circular', () => {
+    const err = new Error('self') as Error & { selfRef?: unknown };
+    err.selfRef = err;
+    const result = serializeError(err);
+    expect(result.selfRef).toMatchObject({ _circular: true });
+  });
 });

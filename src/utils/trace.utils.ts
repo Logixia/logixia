@@ -310,7 +310,26 @@ export function createTraceMiddleware(config: TraceIdConfig) {
     }
 
     (req as Record<string, unknown>).traceId = traceId;
-    (res as { setHeader: (k: string, v: string) => void }).setHeader('X-Trace-Id', traceId);
+    // Echo the trace ID back on the response, tolerating different response APIs:
+    // Express/Node use res.setHeader(), Fastify replies use reply.header(). Guard
+    // both and never let a missing/!function method (or already-sent headers)
+    // crash the request — the trace ID is still propagated via async context.
+    const resObj = res as {
+      setHeader?: (k: string, v: string) => void;
+      header?: (k: string, v: string) => void;
+      headersSent?: boolean;
+    };
+    if (!resObj.headersSent) {
+      try {
+        if (typeof resObj.setHeader === 'function') {
+          resObj.setHeader('X-Trace-Id', traceId);
+        } else if (typeof resObj.header === 'function') {
+          resObj.header('X-Trace-Id', traceId);
+        }
+      } catch {
+        /* response not in a header-settable state — context propagation still works */
+      }
+    }
 
     runWithTraceId(traceId, () => next());
   };

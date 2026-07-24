@@ -300,6 +300,41 @@ describe('Sampler', () => {
     });
   });
 
+  // ── bounded trace tracking (memory leak guard) ──────────────────────────────
+
+  describe('traceConsistent — bounded memory', () => {
+    it('does not grow the sampled-trace set without limit when no stats timer resets it', () => {
+      // rate 1.0 → every unique trace is remembered as "sampled". Without a bound
+      // this Set would grow one entry per traceId forever (the leak). The cap
+      // clears it on overflow, so its size stays bounded.
+      const s = new Sampler({ rate: 1.0, traceConsistent: true });
+      const internals = s as unknown as {
+        sampledTraces: Set<string>;
+        maxTrackedTraces: number;
+      };
+      const cap = internals.maxTrackedTraces;
+
+      for (let i = 0; i < cap + 50; i += 1) {
+        s.shouldEmit('info', `trace-${i}`);
+      }
+
+      // Never exceeds the cap (it clears and refills rather than growing forever).
+      expect(internals.sampledTraces.size).toBeLessThanOrEqual(cap);
+      s.destroy();
+    });
+
+    it('still emits correctly after a trace-set overflow clear', () => {
+      const s = new Sampler({ rate: 1.0, traceConsistent: true });
+      const internals = s as unknown as { maxTrackedTraces: number };
+      for (let i = 0; i < internals.maxTrackedTraces + 10; i += 1) {
+        s.shouldEmit('info', `t-${i}`);
+      }
+      // A fresh trace after overflow still gets a correct (emit) decision.
+      expect(s.shouldEmit('info', 'fresh-trace')).toBe(true);
+      s.destroy();
+    });
+  });
+
   // ── destroy ───────────────────────────────────────────────────────────────
 
   describe('destroy', () => {
@@ -370,6 +405,79 @@ describe('Sampler', () => {
       jest.useRealTimers();
       // lastStats used for side-effect only
       expect(lastStats).toBeDefined();
+    });
+  });
+
+  // ── adaptive (anomaly-driven) sampling ──────────────────────────────────────
+
+  describe('adaptive sampling', () => {
+    it('does not boost in steady state (error rate below threshold)', () => {
+      const s = new Sampler({
+        rate: 0,
+        adaptive: { errorRateThreshold: 0.5, minSamples: 10, boostRate: 1.0 },
+      });
+      // 20 info logs, no errors → 0% error rate → no boost.
+      for (let i = 0; i < 20; i += 1) s.shouldEmit('info', `t${i}`);
+      expect(s.isBoosting()).toBe(false);
+      // With rate 0 and no boost, a fresh info log is dropped.
+      expect(s.shouldEmit('info', 'x')).toBe(false);
+      s.destroy();
+    });
+
+    it('boosts the sample rate once the windowed error rate crosses the threshold', () => {
+      const s = new Sampler({
+        rate: 0, // base: drop everything…
+        adaptive: { errorRateThreshold: 0.3, minSamples: 10, boostRate: 1.0 },
+        // perLevel keeps error from short-circuiting so it counts as an evaluated sample
+        perLevel: { error: 1.0 },
+      });
+      // Feed a burst where >30% are errors.
+      for (let i = 0; i < 7; i += 1) s.shouldEmit('info', `i${i}`);
+      for (let i = 0; i < 5; i += 1) s.shouldEmit('error', `e${i}`);
+
+      expect(s.isBoosting()).toBe(true);
+      // While boosted, even a debug at base-rate-0 is now kept (boost rate 1.0).
+      expect(s.shouldEmit('debug', 'd1')).toBe(true);
+      s.destroy();
+    });
+
+    it('does not boost before minSamples is reached', () => {
+      const s = new Sampler({
+        rate: 0,
+        adaptive: { errorRateThreshold: 0.1, minSamples: 50, boostRate: 1.0 },
+        perLevel: { error: 1.0 },
+      });
+      // 100% errors but only a handful of samples → not enough to trust.
+      for (let i = 0; i < 5; i += 1) s.shouldEmit('error', `e${i}`);
+      expect(s.isBoosting()).toBe(false);
+      s.destroy();
+    });
+
+    it('relaxes the boost as old errors age out of the window', () => {
+      jest.useFakeTimers();
+      try {
+        const s = new Sampler({
+          rate: 0,
+          adaptive: {
+            errorRateThreshold: 0.3,
+            minSamples: 10,
+            boostRate: 1.0,
+            windowMs: 1000,
+          },
+          perLevel: { error: 1.0 },
+        });
+        for (let i = 0; i < 7; i += 1) s.shouldEmit('info', `i${i}`);
+        for (let i = 0; i < 5; i += 1) s.shouldEmit('error', `e${i}`);
+        expect(s.isBoosting()).toBe(true);
+
+        // Advance past the window and add only info samples — errors age out.
+        jest.advanceTimersByTime(1100);
+        for (let i = 0; i < 15; i += 1) s.shouldEmit('info', `j${i}`);
+        expect(s.isBoosting()).toBe(false);
+        s.destroy();
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 });

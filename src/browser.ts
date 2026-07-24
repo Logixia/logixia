@@ -273,18 +273,23 @@ export class BrowserRemoteTransport implements IBrowserTransport {
   }
 
   async flush(): Promise<void> {
-    if (this.batch.length === 0) return;
-    const entries = this.batch.splice(0, this.batchSize);
-    try {
-      await fetch(this.url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...this.headers },
-        body: JSON.stringify(entries),
-        keepalive: true, // survives page unload
-      });
-    } catch {
-      // Silently restore on failure — best effort in browser
-      this.batch.unshift(...entries);
+    // Drain the WHOLE batch (not just one chunk) so a flush during page unload
+    // empties everything. splice() detaches synchronously, so entries added
+    // concurrently land in a fresh slice and are never sent twice.
+    while (this.batch.length > 0) {
+      const entries = this.batch.splice(0, this.batchSize);
+      try {
+        await fetch(this.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...this.headers },
+          body: JSON.stringify(entries),
+          keepalive: true, // survives page unload
+        });
+      } catch {
+        // Silently restore on failure and stop — best effort in browser.
+        this.batch.unshift(...entries);
+        return;
+      }
     }
   }
 
@@ -299,8 +304,17 @@ export class BrowserRemoteTransport implements IBrowserTransport {
     }
   }
 
+  /**
+   * Stop the flush timer and flush remaining entries. Without the final flush,
+   * any buffered logs were lost on page unload / teardown — the browser
+   * equivalent of the "last N seconds of logs lost on deploy" problem.
+   */
   destroy(): void {
-    if (this.timer !== null) clearInterval(this.timer);
+    if (this.timer !== null) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+    this.flush().catch(() => {});
   }
 }
 

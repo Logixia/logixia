@@ -1,7 +1,9 @@
 import type { WriteStream } from 'node:fs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
+import { createGzip } from 'node:zlib';
 
 import type {
   FileTransportConfig,
@@ -280,10 +282,27 @@ export class FileTransport implements ITransport, IBatchTransport {
     }
   }
 
-  private async compressFile(_filePath: string): Promise<void> {
-    // Simple gzip compression implementation would go here
-    // For now, just rename with .gz extension
-    // In a real implementation, you'd use zlib
+  /**
+   * Gzip the rotated file to `<file>.gz` and remove the original. Streams the
+   * data so large log files don't have to be buffered in memory. Best-effort:
+   * any failure is logged and leaves the original file intact rather than
+   * throwing out of the rotation path.
+   */
+  private async compressFile(filePath: string): Promise<void> {
+    const gzPath = `${filePath}.gz`;
+    try {
+      await pipeline(fs.createReadStream(filePath), createGzip(), fs.createWriteStream(gzPath));
+      // Only delete the source once the compressed copy is fully written.
+      await unlink(filePath);
+    } catch (error) {
+      internalError('Failed to compress rotated log file', error);
+      // Clean up a partial .gz so a later cleanup pass doesn't keep a corrupt file.
+      try {
+        await unlink(gzPath);
+      } catch {
+        /* nothing to clean up */
+      }
+    }
   }
 
   private async cleanupOldFiles(): Promise<void> {
@@ -292,15 +311,20 @@ export class FileTransport implements ITransport, IBatchTransport {
     try {
       const dir = this.resolveDir();
       const files = await readdir(dir);
-      const base = path.basename(this.config.filename, path.extname(this.config.filename));
+      const ext = path.extname(this.config.filename);
+      const base = path.basename(this.config.filename, ext);
 
-      const logFiles = files
-        .filter((file) => file.startsWith(base))
-        .map(async (file) => {
-          const filePath = path.join(dir, file);
-          const stats = await stat(filePath);
-          return { path: filePath, mtime: stats.mtime };
-        });
+      // Match ONLY this transport's own rotated files: `${base}-<timestamp>${ext}`
+      // (optionally `.gz`). A loose `startsWith(base)` would also match unrelated
+      // files like `application.log` when base is `app`, and could delete them.
+      const isOwnRotatedFile = (file: string): boolean =>
+        file.startsWith(`${base}-`) && (file.endsWith(ext) || file.endsWith(`${ext}.gz`));
+
+      const logFiles = files.filter(isOwnRotatedFile).map(async (file) => {
+        const filePath = path.join(dir, file);
+        const stats = await stat(filePath);
+        return { path: filePath, mtime: stats.mtime };
+      });
 
       const fileStats = await Promise.all(logFiles);
       const sortedFiles = fileStats.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());

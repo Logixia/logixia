@@ -32,11 +32,16 @@ export function safeToString(value: unknown): string {
   // value is now narrowed to object — JSON-stringify, falling back to a
   // constructor-name tag for circular refs / throwing toJSON.
   try {
-    return JSON.stringify(value);
+    const json = JSON.stringify(value);
+    // JSON.stringify returns undefined for values it can't represent (e.g. an
+    // object whose toJSON() returns undefined). Returning that would defeat the
+    // whole point of this helper — a downstream .replace() on `undefined` throws.
+    if (json !== undefined) return json;
   } catch {
-    const ctor = (value as { constructor?: { name?: string } }).constructor?.name;
-    return `[${ctor ?? 'object'}]`;
+    /* fall through to the constructor-name tag below */
   }
+  const ctor = (value as { constructor?: { name?: string } }).constructor?.name;
+  return `[${ctor ?? 'object'}]`;
 }
 
 /**

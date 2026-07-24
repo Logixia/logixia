@@ -151,6 +151,20 @@ describe('LogixiaLoggerService — NestJS adapter', () => {
     service.verbose('v', { foo: 'bar' });
     expect(service.getContext()).toBe('Initial');
   });
+
+  it('does not throw when logging a circular object as the message', async () => {
+    const service = new LogixiaLoggerService({
+      appName: 'NestApp',
+      format: { json: false, colorize: false, timestamp: false },
+    });
+    const circular: Record<string, unknown> = { a: 1 };
+    circular.self = circular;
+
+    // formatMessage previously did JSON.stringify(message), which throws on a
+    // circular structure — crashing the log call. It must now be safe.
+    expect(() => service.log(circular as unknown as string)).not.toThrow();
+    await expect(service.info(circular as unknown as string)).resolves.toBeUndefined();
+  });
 });
 
 describe('AsyncLocalStorage interplay', () => {

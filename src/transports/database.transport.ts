@@ -37,12 +37,19 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
   public readonly filter?: (entry: TransportLogEntry) => boolean;
 
   private batch: TransportLogEntry[] = [];
-  private flushTimer?: NodeJS.Timeout;
-  private isFlushing = false;
+  private flushTimer?: NodeJS.Timeout | undefined;
+  /**
+   * The in-flight drain promise, or undefined when idle. Concurrent flush()
+   * calls (the un-awaited threshold flush write() fires, plus the interval
+   * timer) all await this single promise instead of starting their own drain,
+   * so a batch is never snapshotted and written twice. Mirrors the FileTransport
+   * fix for the overlapping-batch-flush duplication bug.
+   */
+  private flushPromise?: Promise<void> | undefined;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic database driver connection object
   private connection: any;
   private isConnected = false;
-  private connectionPromise?: Promise<void>;
+  private connectionPromise?: Promise<void> | undefined;
 
   constructor(private config: DatabaseTransportConfig) {
     this.batchSize = config.batchSize || 100;
@@ -72,39 +79,60 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
   }
 
   async flush(): Promise<void> {
-    if (this.batch.length === 0) return;
-    // Guard: skip if a flush is already in flight — entries will be picked up
-    // by the next flush cycle triggered by the timer or the next write.
-    if (this.isFlushing) return;
+    // Serialize concurrent flushes. write() fires flush() un-awaited once the
+    // batch crosses batchSize, and the interval timer fires it too, so a burst
+    // of writes can trigger many overlapping flushes. Every caller joins the
+    // SAME in-flight drain, so a batch is never snapshotted and written twice —
+    // the same overlapping-flush duplication that turned N file logs into N²
+    // lines (see FileTransport fix). Awaiters still see the batch fully drained
+    // because they await the shared drain promise.
+    if (!this.flushPromise) {
+      this.flushPromise = this.drain().finally(() => {
+        this.flushPromise = undefined;
+      });
+    }
 
-    this.isFlushing = true;
-    const entriesToFlush = [...this.batch];
-    this.batch = [];
+    await this.flushPromise;
+  }
 
-    try {
-      switch (this.config.type) {
-        case 'mongodb':
-          await this.flushToMongoDB(entriesToFlush);
-          break;
-        case 'postgresql':
-          await this.flushToPostgreSQL(entriesToFlush);
-          break;
-        case 'mysql':
-          await this.flushToMySQL(entriesToFlush);
-          break;
-        case 'sqlite':
-          await this.flushToSQLite(entriesToFlush);
-          break;
-        default:
-          throw new Error(`Unsupported database type: ${this.config.type}`);
+  /**
+   * Drains the batch to the database one snapshot at a time. The current batch
+   * is detached SYNCHRONOUSLY before awaiting the write, so entries appended by
+   * concurrent write() calls land in a fresh array and are never written twice.
+   * On write failure the snapshot is restored to the front of the batch for the
+   * next flush cycle and the loop stops, so a persistently failing DB does not
+   * hot-spin retrying the same entries.
+   */
+  private async drain(): Promise<void> {
+    while (this.batch.length > 0) {
+      const entriesToFlush = this.batch;
+      this.batch = [];
+
+      try {
+        switch (this.config.type) {
+          case 'mongodb':
+            await this.flushToMongoDB(entriesToFlush);
+            break;
+          case 'postgresql':
+            await this.flushToPostgreSQL(entriesToFlush);
+            break;
+          case 'mysql':
+            await this.flushToMySQL(entriesToFlush);
+            break;
+          case 'sqlite':
+            await this.flushToSQLite(entriesToFlush);
+            break;
+          default:
+            throw new Error(`Unsupported database type: ${this.config.type}`);
+        }
+      } catch (error) {
+        internalError('Database flush error', error);
+        // Restore failed entries to the front of the batch (ahead of anything
+        // appended while the write was in flight) so ordering is preserved and
+        // they retry on the next flush. Stop draining to avoid a tight retry loop.
+        this.batch.unshift(...entriesToFlush);
+        throw error;
       }
-    } catch (error) {
-      internalError('Database flush error', error);
-      // Restore failed entries to the front of the batch for retry
-      this.batch.unshift(...entriesToFlush);
-      throw error;
-    } finally {
-      this.isFlushing = false;
     }
   }
 
@@ -124,7 +152,13 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       return this.connectionPromise;
     }
 
-    this.connectionPromise = this.establishConnection();
+    // Clear the memoized promise on failure so a transient startup error does
+    // not permanently wedge the transport — the next write() retries the connect
+    // instead of re-awaiting a forever-rejected promise.
+    this.connectionPromise = this.establishConnection().catch((error: unknown) => {
+      this.connectionPromise = undefined;
+      throw error;
+    });
     return this.connectionPromise;
   }
 
@@ -441,10 +475,36 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
   async close(): Promise<void> {
     if (this.flushTimer) {
       clearInterval(this.flushTimer);
+      this.flushTimer = undefined;
     }
 
-    // Flush remaining entries
-    await this.flush();
+    // Drain remaining entries before closing the connection. This is the
+    // shutdown path — losing buffered logs here is exactly the "last N seconds
+    // of logs lost on deploy" problem the library promises to avoid, so we must
+    // NOT let a single failed flush abort with entries still buffered.
+    //
+    // Retry a bounded number of times: each attempt flushes the current batch,
+    // and a failed flush re-buffers its entries (see drain()) so the next
+    // attempt picks them up. We stop early once the batch is empty, and cap the
+    // attempts so a permanently-dead DB can't hang shutdown forever (the
+    // flushOnExit force-exit timer is the outer backstop).
+    const MAX_CLOSE_FLUSH_ATTEMPTS = 3;
+    for (
+      let attempt = 0;
+      attempt < MAX_CLOSE_FLUSH_ATTEMPTS && this.batch.length > 0;
+      attempt += 1
+    ) {
+      try {
+        await this.flush();
+      } catch (error) {
+        internalError('Database flush during close failed; entries remain buffered', error);
+      }
+    }
+    if (this.batch.length > 0) {
+      internalError(
+        `Database transport closing with ${this.batch.length} unflushed log entr${this.batch.length === 1 ? 'y' : 'ies'} after ${MAX_CLOSE_FLUSH_ATTEMPTS} attempts`
+      );
+    }
 
     // Close connection
     if (this.connection) {
@@ -494,7 +554,10 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
         case 'sqlite': {
           const tableName = this.config.table || 'logs';
           const result = await this.connection.query(`SELECT COUNT(*) as count FROM ${tableName}`);
-          return result.rows?.[0]?.count || result[0]?.count || 0;
+          // pg returns bigint COUNT as a string and mysql2 as a string too, so
+          // coerce to a number — the declared return type is Promise<number>.
+          const rawCount = result.rows?.[0]?.count ?? result[0]?.count ?? 0;
+          return Number(rawCount) || 0;
         }
 
         default:

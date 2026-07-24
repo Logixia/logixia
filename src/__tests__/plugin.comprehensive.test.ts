@@ -97,6 +97,20 @@ describe('PluginRegistry', () => {
       }
     });
 
+    it('swallows a SYNCHRONOUS throw from onInit (does not break register)', () => {
+      // A buggy plugin whose onInit throws synchronously must not propagate out
+      // of register() — registration still succeeds and the plugin is tracked.
+      expect(() =>
+        registry.register({
+          name: 'bad-sync-init',
+          onInit() {
+            throw new Error('sync init failed');
+          },
+        })
+      ).not.toThrow();
+      expect(registry.has('bad-sync-init')).toBe(true);
+    });
+
     it('can register multiple distinct plugins', () => {
       registry.register({ name: 'p1' });
       registry.register({ name: 'p2' });
@@ -330,6 +344,25 @@ describe('PluginRegistry', () => {
       await expect(registry.runOnError(new Error('original'))).resolves.not.toThrow();
     });
 
+    it('swallows a SYNCHRONOUS throw inside onError (no crash on transport failure)', async () => {
+      registry.register({
+        name: 'sync-bad-error-handler',
+        onError() {
+          throw new Error('sync handler blew up');
+        },
+      });
+      // A later well-behaved hook must still run despite the earlier sync throw.
+      let laterRan = false;
+      registry.register({
+        name: 'good-error-handler',
+        onError() {
+          laterRan = true;
+        },
+      });
+      await expect(registry.runOnError(new Error('original'))).resolves.not.toThrow();
+      expect(laterRan).toBe(true);
+    });
+
     it('passes the log entry to onError hooks', async () => {
       const captured: LogEntry[] = [];
       registry.register({
@@ -375,6 +408,24 @@ describe('PluginRegistry', () => {
         },
       });
       await expect(registry.runOnShutdown()).resolves.not.toThrow();
+    });
+
+    it('swallows a SYNCHRONOUS throw inside onShutdown (graceful shutdown not broken)', async () => {
+      let goodRan = false;
+      registry.register({
+        name: 'sync-bad-shutdown',
+        onShutdown() {
+          throw new Error('sync shutdown blew up');
+        },
+      });
+      registry.register({
+        name: 'good-shutdown',
+        onShutdown() {
+          goodRan = true;
+        },
+      });
+      await expect(registry.runOnShutdown()).resolves.not.toThrow();
+      expect(goodRan).toBe(true);
     });
 
     it('runs all shutdown hooks concurrently', async () => {

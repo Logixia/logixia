@@ -5,6 +5,22 @@
 import type { ILogFormatter, LogEntry } from '../types';
 import { serializeError } from '../utils/error.utils';
 
+/**
+ * Build a JSON.stringify replacer that replaces circular references with the
+ * string '[Circular]' instead of throwing. A fresh replacer must be created per
+ * stringify call because it holds per-serialization state (the seen set).
+ */
+function createCircularReplacer(): (key: string, value: unknown) => unknown {
+  const seen = new WeakSet<object>();
+  return function (this: unknown, _key: string, value: unknown): unknown {
+    if (typeof value === 'object' && value !== null) {
+      if (seen.has(value)) return '[Circular]';
+      seen.add(value);
+    }
+    return value;
+  };
+}
+
 export class JsonFormatter implements ILogFormatter {
   private includeTimestamp: boolean;
   private includeLevel: boolean;
@@ -80,7 +96,13 @@ export class JsonFormatter implements ILogFormatter {
       version: process.version,
     };
 
-    return this.prettyPrint ? JSON.stringify(formatted, null, 2) : JSON.stringify(formatted);
+    // Use a circular-safe replacer: a payload containing a cycle (e.g. an Express
+    // req/res, a DB connection, a Mongoose doc) would otherwise make JSON.stringify
+    // throw and crash the entire log/transport path.
+    const replacer = createCircularReplacer();
+    return this.prettyPrint
+      ? JSON.stringify(formatted, replacer, 2)
+      : JSON.stringify(formatted, replacer);
   }
 
   private serializePayload(payload: Record<string, unknown>): Record<string, unknown> {
