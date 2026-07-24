@@ -90,6 +90,20 @@ export interface RedactConfig {
    */
   paths?: string[];
   /**
+   * Dot-notation field paths exempt from `patterns` / `autoDetect` value-pattern
+   * scanning. Use this for internal identifiers whose *value* happens to look
+   * like PII to a pattern (e.g. a vendor reference id embedding an epoch
+   * timestamp digit-run that the aggressive phone-number pattern matches).
+   *
+   * Checked before pattern-based redaction (step 3): a matched field's value
+   * is passed through untouched, skipping the pattern scan entirely. This does
+   * NOT override `paths` — if a field matches both `paths` and `excludePaths`,
+   * `paths` wins (censored), since `paths` is checked first.
+   *
+   * @example `['**.vendorRefId', '**.traceId', '**.interactionId']`
+   */
+  excludePaths?: string[];
+  /**
    * Regex patterns applied to string values — replaces matches with the censor string.
    * @example `[/Bearer\s+\S+/gi, /sk-[a-z0-9]{32,}/gi]`
    */

@@ -201,7 +201,7 @@ export class FileTransport implements ITransport, IBatchTransport {
   }
 
   private parseInterval(interval: string): number {
-    // eslint-disable-next-line sonarjs/slow-regex -- simple bounded pattern for interval parsing
+    // eslint-disable-next-line sonarjs/super-linear-regex -- simple bounded pattern for interval parsing
     const match = new RegExp(/(\d+)([hdwmy])/i).exec(interval);
     if (!match) return 24 * 60 * 60 * 1000; // Default 1 day
 

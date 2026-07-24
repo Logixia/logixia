@@ -103,28 +103,16 @@ afterEach(() => {
 // ── Feature 5: Adaptive log level ────────────────────────────────────────────
 
 describe('Feature 5 — Adaptive log level', () => {
-  it('uses DEBUG level when NODE_ENV=development and no config level set', () => {
-    process.env['NODE_ENV'] = 'development';
+  test.each([
+    ['debug', 'development'],
+    ['warn', 'test'],
+    ['info', 'production'],
+  ])('uses %s level when NODE_ENV=%s and no config level set', (expectedLevel, nodeEnv) => {
+    process.env['NODE_ENV'] = nodeEnv;
     delete process.env['LOGIXIA_LEVEL'];
 
     const logger = new LogixiaLogger({ ...BASE_CONFIG, levelOptions: undefined });
-    expect(logger.getLevel()).toBe('debug');
-  });
-
-  it('uses WARN level when NODE_ENV=test', () => {
-    process.env['NODE_ENV'] = 'test';
-    delete process.env['LOGIXIA_LEVEL'];
-
-    const logger = new LogixiaLogger({ ...BASE_CONFIG, levelOptions: undefined });
-    expect(logger.getLevel()).toBe('warn');
-  });
-
-  it('uses INFO level when NODE_ENV=production', () => {
-    process.env['NODE_ENV'] = 'production';
-    delete process.env['LOGIXIA_LEVEL'];
-
-    const logger = new LogixiaLogger({ ...BASE_CONFIG, levelOptions: undefined });
-    expect(logger.getLevel()).toBe('info');
+    expect(logger.getLevel()).toBe(expectedLevel);
   });
 
   it('uses INFO level when CI=true and no NODE_ENV', () => {

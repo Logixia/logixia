@@ -153,7 +153,7 @@ export class NLPSearchEngine extends BasicSearchEngine {
       ['user_id', /user\s+(?:id\s+)?['"]?(\w+)['"]?/i],
       ['trace_id', /trace\s+(?:id\s+)?['"]?([\w-]+)['"]?/i],
       ['time', /(?:last|past|previous)\s+(\d+)\s+(second|minute|hour|day|week)s?/i],
-      // eslint-disable-next-line sonarjs/slow-regex -- bounded pattern, DoS risk is acceptable for log search
+      // eslint-disable-next-line sonarjs/super-linear-regex -- bounded pattern, DoS risk is acceptable for log search
       ['error_type', /(\w+Error|\w+Exception)/i],
     ]);
   }

@@ -21,9 +21,7 @@ const engine = new BasicSearchEngine({ maxIndexSize: 500_000 });
 
 // Seed 100k entries
 for (let i = 0; i < 100_000; i++) {
-  engine.indexLog({
-    /* ... */
-  });
+  engine.indexLog({/* ... */});
 }
 
 console.time('search-100k');

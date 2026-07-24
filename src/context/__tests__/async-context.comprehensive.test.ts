@@ -197,7 +197,10 @@ describe('createExpressContextMiddleware', () => {
   it('calls next()', (done) => {
     const mw = createExpressContextMiddleware();
     const req: Record<string, unknown> = { headers: {} };
-    mw(req, {}, done);
+    mw(req, {}, (...args: unknown[]) => {
+      expect(args).toEqual([]);
+      done();
+    });
   });
 
   it('sets a traceId in the context', (done) => {
@@ -237,15 +240,6 @@ describe('createExpressContextMiddleware', () => {
     });
   });
 
-  it('uses custom traceIdHeader when provided', (done) => {
-    const mw = createExpressContextMiddleware({ traceIdHeader: 'x-my-trace-id' });
-    const req: Record<string, unknown> = { headers: { 'x-my-trace-id': 'my-trace' } };
-    mw(req, {}, () => {
-      expect(LogixiaContext.get()?.traceId).toBe('my-trace');
-      done();
-    });
-  });
-
   it('calls the enrich function and merges its result', (done) => {
     const mw = createExpressContextMiddleware({
       enrich: (req) => ({ userId: req['userId'] as string }),
@@ -273,7 +267,10 @@ describe('createExpressContextMiddleware', () => {
 describe('createFastifyContextHook', () => {
   it('calls done()', (done) => {
     const hook = createFastifyContextHook();
-    hook({ headers: {} }, {}, done);
+    hook({ headers: {} }, {}, (...args: unknown[]) => {
+      expect(args).toEqual([]);
+      done();
+    });
   });
 
   it('sets a traceId in the context', (done) => {

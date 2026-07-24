@@ -203,6 +203,59 @@ describe('redactObject — pattern-based redaction', () => {
   });
 });
 
+// ── redactObject — excludePaths ───────────────────────────────────────────────
+
+describe('redactObject — excludePaths', () => {
+  const PHONE_PATTERN = /\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g;
+
+  it('skips pattern scanning for a field matched by excludePaths', () => {
+    const obj = { vendorRefId: 'N101-D1-1784797594.4885' };
+    const result = redactObject(obj, {
+      patterns: [PHONE_PATTERN],
+      excludePaths: ['**.vendorRefId'],
+    });
+    expect(result.vendorRefId).toBe('N101-D1-1784797594.4885');
+  });
+
+  it('still applies pattern scanning to fields not matched by excludePaths', () => {
+    const obj = { vendorRefId: 'N101-D1-1784797594.4885', callerNumber: '4155552671' };
+    const result = redactObject(obj, {
+      patterns: [PHONE_PATTERN],
+      excludePaths: ['**.vendorRefId'],
+    });
+    expect(result.vendorRefId).toBe('N101-D1-1784797594.4885');
+    expect(result.callerNumber).toBe(CENSOR);
+  });
+
+  it('excludePaths does not exempt a field also matched by paths', () => {
+    const obj = { vendorRefId: 'N101-D1-1784797594.4885' };
+    const result = redactObject(obj, {
+      paths: ['**.vendorRefId'],
+      excludePaths: ['**.vendorRefId'],
+      patterns: [PHONE_PATTERN],
+    });
+    expect(result.vendorRefId).toBe(CENSOR);
+  });
+
+  it('excludePaths applies inside nested objects', () => {
+    const obj = { call: { vendorRefId: 'N101-D1-1784797594.4885' } };
+    const result = redactObject(obj, {
+      patterns: [PHONE_PATTERN],
+      excludePaths: ['**.vendorRefId'],
+    });
+    expect((result.call as Record<string, unknown>).vendorRefId).toBe('N101-D1-1784797594.4885');
+  });
+
+  it('excludePaths applies to string array items', () => {
+    const obj = { vendorRefIds: ['N101-D1-1784797594.4885', 'N101-D1-1784798000.4886'] };
+    const result = redactObject(obj, {
+      patterns: [PHONE_PATTERN],
+      excludePaths: ['**.vendorRefIds'],
+    });
+    expect(result.vendorRefIds).toEqual(['N101-D1-1784797594.4885', 'N101-D1-1784798000.4886']);
+  });
+});
+
 // ── redactObject — array handling ─────────────────────────────────────────────
 
 describe('redactObject — array handling', () => {

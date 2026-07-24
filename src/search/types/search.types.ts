@@ -179,12 +179,7 @@ export interface SearchSuggestion {
  * Suggestion type
  */
 export type SuggestionType =
-  | 'field'
-  | 'value'
-  | 'operator'
-  | 'query_history'
-  | 'pattern'
-  | 'filter';
+  'field' | 'value' | 'operator' | 'query_history' | 'pattern' | 'filter';
 
 /**
  * Search statistics
@@ -284,13 +279,7 @@ export interface QueryEntity {
  * Entity type
  */
 export type EntityType =
-  | 'level'
-  | 'service'
-  | 'user_id'
-  | 'trace_id'
-  | 'time'
-  | 'error_type'
-  | 'field_value';
+  'level' | 'service' | 'user_id' | 'trace_id' | 'time' | 'error_type' | 'field_value';
 
 /**
  * Search preset for saving common searches

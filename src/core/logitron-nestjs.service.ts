@@ -32,14 +32,7 @@ import { LogLevel } from '../types';
  * duplicate / conflicting signatures.
  */
 type _ServiceBuiltinLevels =
-  | 'error'
-  | 'warn'
-  | 'info'
-  | 'debug'
-  | 'verbose'
-  | 'trace'
-  | 'log'
-  | 'logLevel';
+  'error' | 'warn' | 'info' | 'debug' | 'verbose' | 'trace' | 'log' | 'logLevel';
 
 /**
  * Mapped type that adds one method per *custom* level (i.e. every key in TLevels
@@ -112,12 +105,9 @@ type _ExtractCustomLevelNames<T> = T extends { levelOptions?: { levels?: infer L
  */
 export type LogixiaServiceWith<T extends string | Record<string, unknown>> =
   LogixiaLoggerService & {
-    readonly [K in T extends string
-      ? Exclude<T, _ServiceBuiltinLevels>
-      : _ExtractCustomLevelNames<T>]: (
-      message: string,
-      data?: Record<string, unknown>
-    ) => Promise<void>;
+    readonly [
+      K in T extends string ? Exclude<T, _ServiceBuiltinLevels> : _ExtractCustomLevelNames<T>
+    ]: (message: string, data?: Record<string, unknown>) => Promise<void>;
   };
 import { safeToString } from '../utils/coerce.utils';
 import { internalError } from '../utils/internal-log';

@@ -346,8 +346,7 @@ export function childFromRequest<TLogger extends { child(ctx: Record<string, unk
   const ip =
     (headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ??
     ((req['socket'] as Record<string, unknown> | undefined)?.['remoteAddress'] as
-      | string
-      | undefined);
+      string | undefined);
 
   return logger.child({
     correlationId,
@@ -393,8 +392,7 @@ export function extractMessageCorrelationId(message: Record<string, unknown>): s
 
   // SQS: message.MessageAttributes
   const sqsAttrs = message['MessageAttributes'] as
-    | Record<string, { StringValue?: string }>
-    | undefined;
+    Record<string, { StringValue?: string }> | undefined;
   if (sqsAttrs) {
     return (
       sqsAttrs['x-correlation-id']?.StringValue ??

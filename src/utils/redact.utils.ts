@@ -213,6 +213,54 @@ function matchesPath(fullPath: string, pattern: string): boolean {
   return re.test(fullPath);
 }
 
+function applyPatterns(value: string, patterns: readonly RegExp[], censor: string): string {
+  let redacted = value;
+  for (const pattern of patterns) {
+    redacted = redacted.replace(pattern, censor);
+  }
+  return redacted;
+}
+
+function redactArrayItem(
+  item: unknown,
+  config: RedactConfig,
+  fullPath: string,
+  skipPatternScan: boolean
+): unknown {
+  if (isPlainObject(item)) {
+    return redactObject(item as Record<string, unknown>, config, fullPath);
+  }
+  const { patterns = [], censor = DEFAULT_CENSOR } = config;
+  if (!skipPatternScan && typeof item === 'string' && patterns.length > 0) {
+    return applyPatterns(item, patterns, censor);
+  }
+  return item;
+}
+
+function redactField(value: unknown, config: RedactConfig, fullPath: string): unknown {
+  const { paths = [], excludePaths = [], patterns = [], censor = DEFAULT_CENSOR } = config;
+
+  if (paths.some((p) => matchesPath(fullPath, p))) {
+    return censor;
+  }
+
+  if (isPlainObject(value)) {
+    return redactObject(value as Record<string, unknown>, config, fullPath);
+  }
+
+  const skipPatternScan = excludePaths.some((p) => matchesPath(fullPath, p));
+
+  if (!skipPatternScan && typeof value === 'string' && patterns.length > 0) {
+    return applyPatterns(value, patterns, censor);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => redactArrayItem(item, config, fullPath, skipPatternScan));
+  }
+
+  return value;
+}
+
 /**
  * Deep-clone and redact an object according to the given RedactConfig.
  * Non-objects are returned as-is (with pattern replacement on strings).
@@ -224,7 +272,6 @@ export function redactObject(
   config: RedactConfig,
   _currentPath = ''
 ): Record<string, unknown> {
-  const { paths = [], patterns = [], censor = DEFAULT_CENSOR } = config;
   const result: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(obj)) {
@@ -235,44 +282,7 @@ export function redactObject(
     }
     const fullPath = _currentPath ? `${_currentPath}.${key}` : key;
 
-    // ── 1. Path-based redaction ──────────────────────────────────────────────
-    if (paths.length > 0 && paths.some((p) => matchesPath(fullPath, p))) {
-      result[key] = censor;
-      continue;
-    }
-
-    // ── 2. Recurse into plain objects ────────────────────────────────────────
-    if (isPlainObject(value)) {
-      result[key] = redactObject(value as Record<string, unknown>, config, fullPath);
-      continue;
-    }
-
-    // ── 3. Pattern-based redaction on string values ──────────────────────────
-    if (typeof value === 'string' && patterns.length > 0) {
-      let redacted = value;
-      for (const pattern of patterns) {
-        redacted = redacted.replace(pattern, censor);
-      }
-      result[key] = redacted;
-      continue;
-    }
-
-    // ── 4. Recurse into arrays ───────────────────────────────────────────────
-    if (Array.isArray(value)) {
-      result[key] = value.map((item) => {
-        if (isPlainObject(item)) {
-          return redactObject(item as Record<string, unknown>, config, fullPath);
-        }
-        if (typeof item === 'string' && patterns.length > 0) {
-          return patterns.reduce((s, p) => s.replace(p, censor), item);
-        }
-        return item;
-      });
-      continue;
-    }
-
-    // ── 5. Pass-through ──────────────────────────────────────────────────────
-    result[key] = value;
+    result[key] = redactField(value, config, fullPath);
   }
 
   return result;

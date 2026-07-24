@@ -49,34 +49,19 @@ describe('formatTime', () => {
 
   test('truncates and pads non-ISO strings', () => {
     const result = formatTime('not-a-date');
-    expect(result.length).toBe(12);
+    expect(result).toHaveLength(12);
   });
 });
 
 // ── syntaxColorJson ───────────────────────────────────────────────────────────
 
 describe('syntaxColorJson', () => {
-  test('strips ANSI and leaves structure intact', () => {
-    const line = '  "level": "error",';
-    const result = syntaxColorJson(line);
-    expect(strip(result)).toBe(line);
-  });
-
-  test('preserves numeric values in output', () => {
-    const line = '  "duration": 142,';
-    const result = syntaxColorJson(line);
-    // The plain-text content must be unchanged after stripping ANSI
-    expect(strip(result)).toBe(line);
-  });
-
-  test('preserves boolean values in output', () => {
-    const line = '  "active": true';
-    const result = syntaxColorJson(line);
-    expect(strip(result)).toBe(line);
-  });
-
-  test('handles null values', () => {
-    const line = '  "value": null';
+  test.each([
+    ['string value', '  "level": "error",'],
+    ['numeric value', '  "duration": 142,'],
+    ['boolean value', '  "active": true'],
+    ['null value', '  "value": null'],
+  ])('preserves plain-text content after stripping ANSI: %s', (_label, line) => {
     const result = syntaxColorJson(line);
     expect(strip(result)).toBe(line);
   });

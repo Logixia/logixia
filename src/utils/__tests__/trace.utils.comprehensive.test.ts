@@ -283,7 +283,10 @@ describe('createTraceMiddleware', () => {
     const middleware = createTraceMiddleware({ enabled: true });
     const req = { headers: {} };
     const res = { setHeader: jest.fn() };
-    middleware(req, res, done);
+    middleware(req, res, (...args: unknown[]) => {
+      expect(args).toEqual([]);
+      done();
+    });
   });
 
   it('sets X-Trace-Id response header', (done) => {

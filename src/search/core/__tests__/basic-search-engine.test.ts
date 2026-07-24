@@ -43,7 +43,7 @@ describe('BasicSearchEngine — search', () => {
         results = await eng.search('message');
       })()
     ).resolves.toBeUndefined();
-    expect(results.length).toBe(2);
+    expect(results).toHaveLength(2);
   });
 
   it('correlates logs by trace id, sorted by timestamp', async () => {

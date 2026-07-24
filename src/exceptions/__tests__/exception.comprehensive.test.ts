@@ -26,12 +26,12 @@ describe('LogixiaException — construction', () => {
 
   it('is an instance of Error', () => {
     const ex = new LogixiaException(baseOptions);
-    expect(ex instanceof Error).toBe(true);
+    expect(ex).toBeInstanceOf(Error);
   });
 
   it('is an instance of LogixiaException', () => {
     const ex = new LogixiaException(baseOptions);
-    expect(ex instanceof LogixiaException).toBe(true);
+    expect(ex).toBeInstanceOf(LogixiaException);
   });
 
   it('has name "LogixiaException"', () => {
@@ -107,7 +107,7 @@ describe('LogixiaException — optional fields', () => {
       details,
     });
     expect(ex.details).toEqual(details);
-    expect(ex.details!.length).toBe(2);
+    expect(ex.details!).toHaveLength(2);
     expect(ex.details![0].field).toBe('email');
     expect(ex.details![1].code).toBe('required');
   });
