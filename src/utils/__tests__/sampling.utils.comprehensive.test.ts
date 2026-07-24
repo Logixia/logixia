@@ -50,15 +50,9 @@ describe('Sampler', () => {
       s.destroy();
     });
 
-    it('still emits error entries (safety override)', () => {
+    test.each(['error', 'fatal'] as const)('still emits %s entries (safety override)', (level) => {
       const s = new Sampler({ rate: 0.0 });
-      expect(s.shouldEmit('error')).toBe(true);
-      s.destroy();
-    });
-
-    it('still emits fatal entries (safety override)', () => {
-      const s = new Sampler({ rate: 0.0 });
-      expect(s.shouldEmit('fatal')).toBe(true);
+      expect(s.shouldEmit(level)).toBe(true);
       s.destroy();
     });
   });
@@ -66,24 +60,11 @@ describe('Sampler', () => {
   // ── Error/fatal safety bypass ──────────────────────────────────────────────
 
   describe('error / fatal safety bypass', () => {
-    it('error always passes with any global rate', () => {
+    test.each(['error', 'fatal'] as const)('%s always passes with any global rate', (level) => {
       const s = new Sampler({ rate: 0.001 });
       let allPass = true;
       for (let i = 0; i < 50; i++) {
-        if (!s.shouldEmit('error')) {
-          allPass = false;
-          break;
-        }
-      }
-      expect(allPass).toBe(true);
-      s.destroy();
-    });
-
-    it('fatal always passes with any global rate', () => {
-      const s = new Sampler({ rate: 0.001 });
-      let allPass = true;
-      for (let i = 0; i < 50; i++) {
-        if (!s.shouldEmit('fatal')) {
+        if (!s.shouldEmit(level)) {
           allPass = false;
           break;
         }

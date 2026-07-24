@@ -76,18 +76,25 @@ describe('PluginRegistry', () => {
     it('swallows errors thrown by async onInit (fire and forget)', async () => {
       // Synchronous throws from onInit ARE propagated (it's called synchronously).
       // Only async onInit errors are swallowed. Verify async path.
-      const rejected = false;
-      registry.register({
-        name: 'bad-async-init',
-        onInit: async () => {
-          await Promise.resolve();
-          throw new Error('async init failed');
-        },
-      });
-      await Promise.resolve();
-      await Promise.resolve();
-      // No unhandled rejection — error was swallowed
-      expect(rejected).toBe(false);
+      let rejected = false;
+      const onUnhandledRejection = () => {
+        rejected = true;
+      };
+      process.on('unhandledRejection', onUnhandledRejection);
+      try {
+        registry.register({
+          name: 'bad-async-init',
+          onInit: async () => {
+            await Promise.resolve();
+            throw new Error('async init failed');
+          },
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(rejected).toBe(false);
+      } finally {
+        process.off('unhandledRejection', onUnhandledRejection);
+      }
     });
 
     it('can register multiple distinct plugins', () => {

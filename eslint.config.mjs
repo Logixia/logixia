@@ -53,6 +53,11 @@ export default [
       // search utility functions (highest observed: transport.manager = 49).
       'sonarjs/cognitive-complexity': ['warn', 55],
       'sonarjs/todo-tag': 'off',
+      // With `exactOptionalPropertyTypes: true` (tsconfig.json), `?: T` and
+      // `?: T | undefined` are NOT equivalent — the latter permits explicitly
+      // assigning `undefined`, which callers throughout this codebase rely on.
+      // This rule is purely syntactic and doesn't account for that tsconfig flag.
+      'sonarjs/no-redundant-optional': 'off',
     },
   },
 

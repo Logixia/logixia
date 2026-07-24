@@ -266,19 +266,19 @@ describe('normalizeError', () => {
 
   it('wraps a string into an Error', () => {
     const result = normalizeError('something bad');
-    expect(result instanceof Error).toBe(true);
+    expect(result).toBeInstanceOf(Error);
     expect(result.message).toBe('something bad');
   });
 
   it('wraps an object with a message field', () => {
     const result = normalizeError({ message: 'obj error' });
-    expect(result instanceof Error).toBe(true);
+    expect(result).toBeInstanceOf(Error);
     expect(result.message).toBe('obj error');
   });
 
   it('wraps an object without message as "Unknown error"', () => {
     const result = normalizeError({ code: 'ERR' });
-    expect(result instanceof Error).toBe(true);
+    expect(result).toBeInstanceOf(Error);
     expect(result.message).toBe('Unknown error');
   });
 
