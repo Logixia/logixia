@@ -3,6 +3,12 @@
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.12.0](https://github.com/Logixia/logixia/compare/v1.11.1...v1.12.0) (2026-07-24)
+
+### ✨ Features
+
+* **redact:** add excludePaths to exempt fields from pattern scanning ([b80f4d0](https://github.com/Logixia/logixia/commit/b80f4d0d85ed25d80e216134f16b0e8d841a9966))
+
 ## [1.11.1](https://github.com/Logixia/logixia/compare/v1.11.0...v1.11.1) (2026-06-10)
 
 ### ⚡ Performance
