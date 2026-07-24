@@ -22,7 +22,7 @@
  * ```
  */
 
-/* eslint-disable sonarjs/void-use -- intentional fire-and-forget in sync middleware callbacks */
+ 
 import type { IBaseLogger } from '../types';
 
 // ── Shared types ─────────────────────────────────────────────────────────────
