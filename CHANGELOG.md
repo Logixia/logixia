@@ -1,5 +1,7 @@
 # Changelog
 
+Release notes from 1.12.1 onward are published on [GitHub Releases](https://github.com/Logixia/logixia/releases). This file covers earlier versions.
+
 All notable changes to **logixia** will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org).
 

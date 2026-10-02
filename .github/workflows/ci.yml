@@ -40,6 +40,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
           ref: ${{ github.head_ref || github.ref_name }}
           fetch-depth: 0
 
@@ -60,13 +61,23 @@ jobs:
 
       # Only commit fixes back on PRs — pushing to main here would make
       # origin/main advance past github.sha and break the release job.
-      - name: Commit auto-fixes (PRs only)
-        if: github.event_name == 'pull_request'
+      - name: Commit auto-fixes (PRs from this repo only)
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: 'style: auto-fix formatting and lint [skip ci]'
           commit_user_name: 'github-actions[bot]'
           commit_user_email: 'github-actions[bot]@users.noreply.github.com'
+
+      # Forks can't receive the auto-fix commit, so fail with instructions instead.
+      - name: Check formatting (forks)
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          if ! git diff --quiet; then
+            git diff --stat
+            echo "::error::Formatting or lint fixes needed. Run 'npm run format && npm run lint:fix' and push."
+            exit 1
+          fi
 
       # ── Hard gates: errors that can't be auto-fixed ──────────────────
       - name: Lint (errors only)
@@ -212,4 +223,4 @@ jobs:
           # publisher to be configured for this package on npmjs.com.
           NPM_CONFIG_PROVENANCE: true
           HUSKY: 0 # skip commit-msg / pre-commit hooks on the auto-generated release commit
-        run: npx --yes -p semantic-release@25 -p @semantic-release/changelog@6 -p @semantic-release/git@10 -p conventional-changelog-conventionalcommits@8 semantic-release
+        run: npx --yes -p semantic-release@25 -p conventional-changelog-conventionalcommits@8 semantic-release
