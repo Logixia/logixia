@@ -17,6 +17,15 @@ function makeEntry(i: number): BrowserLogEntry {
   return { timestamp: '2026-01-01T00:00:00.000Z', level: 'info', appName: 'a', message: `b-${i}` };
 }
 
+function makeBigEntry(i: number): BrowserLogEntry {
+  return {
+    timestamp: '2026-01-01T00:00:00.000Z',
+    level: 'info',
+    appName: 'a',
+    message: `${'x'.repeat(2000)}-${i}`,
+  };
+}
+
 describe('BrowserRemoteTransport', () => {
   let fetchMock: jest.Mock;
   let originalFetch: typeof globalThis.fetch | undefined;
@@ -82,5 +91,78 @@ describe('BrowserRemoteTransport', () => {
 
   it('rejects a non-http(s) url scheme', () => {
     expect(() => new BrowserRemoteTransport({ url: 'javascript:alert(1)' })).toThrow();
+  });
+
+  it('re-buffers on 5xx and drops on permanent 4xx', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 500 });
+    const t = new BrowserRemoteTransport({ url: 'https://logs.example/ingest', batchSize: 1000 });
+    for (let i = 0; i < 3; i += 1) t.write(makeEntry(i));
+
+    await t.flush(); // 500 → transient, re-buffered
+    expect(t.dropped).toBe(0);
+
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 400 });
+    await t.flush(); // 400 → permanent, dropped
+    expect(t.dropped).toBe(3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    t.destroy();
+  });
+
+  it('re-buffers on 429 (rate limit)', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 429 });
+    const t = new BrowserRemoteTransport({ url: 'https://logs.example/ingest', batchSize: 1000 });
+    t.write(makeEntry(1));
+
+    await t.flush(); // 429 → transient, re-buffered
+    expect(t.dropped).toBe(0);
+
+    fetchMock.mockResolvedValueOnce({ ok: true });
+    await t.flush(); // succeeds on retry
+    expect(t.dropped).toBe(0);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    t.destroy();
+  });
+
+  it('drops oldest entries and counts them when over maxBufferSize', () => {
+    const t = new BrowserRemoteTransport({
+      url: 'https://logs.example/ingest',
+      batchSize: 1000,
+      maxBufferSize: 3,
+    });
+    for (let i = 0; i < 5; i += 1) t.write(makeEntry(i));
+
+    expect(t.dropped).toBe(2); // the two oldest entries were evicted
+    t.destroy();
+  });
+
+  it('sets keepalive for small bodies', async () => {
+    const t = new BrowserRemoteTransport({ url: 'https://logs.example/ingest', batchSize: 1000 });
+    t.write(makeEntry(1));
+
+    await t.flush();
+
+    expect(fetchMock.mock.calls[0]![1].keepalive).toBe(true);
+    t.destroy();
+  });
+
+  it('disables keepalive for bodies at the 64KB limit', async () => {
+    const t = new BrowserRemoteTransport({ url: 'https://logs.example/ingest', batchSize: 1000 });
+    for (let i = 0; i < 40; i += 1) t.write(makeBigEntry(i)); // ~80KB serialised
+
+    await t.flush();
+
+    expect(fetchMock.mock.calls[0]![1].keepalive).toBe(false);
+    t.destroy();
+  });
+
+  it('does not schedule a timer when flushIntervalMs is 0', () => {
+    jest.useFakeTimers();
+    const t = new BrowserRemoteTransport({
+      url: 'https://logs.example/ingest',
+      flushIntervalMs: 0,
+    });
+    expect(jest.getTimerCount()).toBe(0);
+    t.destroy();
+    jest.useRealTimers();
   });
 });

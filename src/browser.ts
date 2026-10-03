@@ -218,6 +218,15 @@ function validateRemoteUrl(raw: string): string {
 }
 
 /**
+ * UTF-8 byte length of `s` — the measure browsers use for the keepalive
+ * body-size limit. `TextEncoder` is a standard Web API (browsers, workers,
+ * Node >= 11); it needs no Node import.
+ */
+function byteLength(s: string): number {
+  return new TextEncoder().encode(s).length;
+}
+
+/**
  * Browser transport that batches log entries and sends them to a remote
  * HTTP endpoint via `fetch` (available in all modern browsers and Edge runtimes).
  *
@@ -241,10 +250,12 @@ export class BrowserRemoteTransport implements IBrowserTransport {
   private readonly url: string;
   private readonly batchSize: number;
   private readonly flushIntervalMs: number;
+  private readonly maxBufferSize: number;
   private readonly headers: Record<string, string>;
 
   private batch: BrowserLogEntry[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private droppedEntries = 0;
 
   constructor(options: {
     /** Endpoint URL to POST batched log entries to. */
@@ -253,20 +264,45 @@ export class BrowserRemoteTransport implements IBrowserTransport {
     headers?: Record<string, string>;
     /** Max entries per batch. @default 100 */
     batchSize?: number;
-    /** Auto-flush interval in milliseconds. @default 5000 */
+    /**
+     * Auto-flush interval in milliseconds. @default 5000
+     * Set to `0` to disable the timer — flushing is then manual (`flush()`)
+     * or size-triggered (when the batch reaches `batchSize`).
+     */
     flushIntervalMs?: number;
+    /**
+     * Upper bound on buffered entries. When the buffer exceeds this, the
+     * oldest entries are dropped and counted in `dropped`. @default 1000
+     */
+    maxBufferSize?: number;
     level?: BrowserLogLevel;
   }) {
     this.url = validateRemoteUrl(options.url);
     this.headers = options.headers ?? {};
     this.batchSize = options.batchSize ?? 100;
     this.flushIntervalMs = options.flushIntervalMs ?? 5000;
+    this.maxBufferSize = options.maxBufferSize ?? 1000;
     if (options.level !== undefined) this.level = options.level;
     this.scheduleFlush();
   }
 
+  /**
+   * Number of entries dropped without delivery — either because the buffer
+   * exceeded `maxBufferSize` (oldest first) or because a POST failed with a
+   * non-retryable HTTP status (a 4xx other than 429).
+   */
+  get dropped(): number {
+    return this.droppedEntries;
+  }
+
   write(entry: BrowserLogEntry): void {
     this.batch.push(entry);
+    // Enforce the buffer cap so a down endpoint cannot grow the buffer
+    // without bound in the user's tab.
+    while (this.batch.length > this.maxBufferSize) {
+      this.batch.shift();
+      this.droppedEntries += 1;
+    }
     if (this.batch.length >= this.batchSize) {
       this.flush();
     }
@@ -278,22 +314,38 @@ export class BrowserRemoteTransport implements IBrowserTransport {
     // concurrently land in a fresh slice and are never sent twice.
     while (this.batch.length > 0) {
       const entries = this.batch.splice(0, this.batchSize);
+      const body = JSON.stringify(entries);
+      // keepalive only survives bodies under 64 KB; a large batch would
+      // otherwise throw on every attempt and be retried forever.
+      const keepalive = byteLength(body) < 60_000;
+      let res: Response;
       try {
-        await fetch(this.url, {
+        res = await fetch(this.url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...this.headers },
-          body: JSON.stringify(entries),
-          keepalive: true, // survives page unload
+          body,
+          keepalive,
         });
       } catch {
-        // Silently restore on failure and stop — best effort in browser.
+        // Network failure: restore and stop — best effort in browser.
         this.batch.unshift(...entries);
+        return;
+      }
+      if (!res.ok) {
+        if (res.status >= 500 || res.status === 429) {
+          // Transient server error / rate limit — retry on a later flush.
+          this.batch.unshift(...entries);
+        } else {
+          // Permanent client error — retrying won't help, drop the batch.
+          this.droppedEntries += entries.length;
+        }
         return;
       }
     }
   }
 
   private scheduleFlush(): void {
+    if (this.flushIntervalMs <= 0) return; // timer disabled — manual/size-triggered only
     if (
       typeof globalThis !== 'undefined' &&
       typeof (globalThis as Record<string, unknown>)['setInterval'] === 'function'
