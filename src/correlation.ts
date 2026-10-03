@@ -51,6 +51,8 @@
  * ```
  */
 
+import { randomUUID } from 'node:crypto';
+
 import { LogixiaContext } from './context/async-context';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -94,14 +96,18 @@ export interface CorrelationMiddlewareOptions {
 /**
  * Generate a new correlation ID using `crypto.randomUUID()` (available in
  * Node.js 14.17+, all modern browsers, and Edge runtimes).
+ *
+ * When the Web Crypto global is unavailable (e.g. Node 18 without
+ * `--experimental-global-webcrypto`), fall back to `node:crypto`'s
+ * `randomUUID`, which returns a proper UUID v4 — matching the shape this
+ * function's JSDoc and README promise. `logixia/correlation` is Node-only
+ * (it builds on `AsyncLocalStorage`), so importing `node:crypto` is safe here.
  */
 export function generateCorrelationId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
-  // Fallback for very old Node.js builds (pseudo-random is acceptable for a correlation ID)
-  // eslint-disable-next-line sonarjs/pseudo-random
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 11)}`;
+  return randomUUID();
 }
 
 // ── Context helpers ───────────────────────────────────────────────────────────
