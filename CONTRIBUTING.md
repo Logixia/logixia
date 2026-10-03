@@ -189,22 +189,24 @@ We use ESLint and Prettier to maintain code quality and consistency:
 
 ## Pull Request Process
 
-1. **Create a feature branch**: `git checkout -b feature/amazing-feature`
-2. **Make your changes**: Follow the coding standards
-3. **Add tests**: Ensure your code is well tested
-4. **Update docs**: Update relevant documentation
-5. **Run tests**: `npm test` and `npm run lint`
-6. **Commit changes**: Use clear commit messages
-7. **Push to branch**: `git push origin feature/amazing-feature`
-8. **Open Pull Request**: Provide a clear description
+1. Comment on the issue you want to work on so it can be assigned to you. Issues labelled `good first issue` are a good place to start.
+2. Fork the repo and create a branch from `main`: `git checkout -b fix/short-description`
+3. Make your change, with tests.
+4. Run `npm run typecheck && npm run lint && npm test` before pushing.
+5. Open a pull request against `main` and fill in the template.
+
+### What happens next
+
+- `main` is protected. Every change goes through a pull request with at least one approving review and passing CI (lint, typecheck, tests on Node 18/20/22, build).
+- CI on a first-time contributor's PR waits for a maintainer to approve the run. That's a GitHub safety measure, not a judgement on your PR.
+- PRs are squash-merged, so the **PR title** becomes the commit on `main`. It must follow [Conventional Commits](https://www.conventionalcommits.org): `feat: ...`, `fix(transport): ...`, `docs: ...`, `test: ...`. A check enforces this. `feat` and `fix` trigger a release; `test`, `chore`, `ci` and `style` don't.
+- Resolve review conversations before merge; pushing new commits dismisses earlier approvals.
 
 ### Pull Request Guidelines
 
-- **Title**: Use a clear, descriptive title
-- **Description**: Explain what changes you made and why
-- **Testing**: Describe how you tested your changes
-- **Breaking Changes**: Clearly mark any breaking changes
-- **Related Issues**: Link to related issues if applicable
+- Keep a PR to one issue. Small PRs get reviewed faster.
+- Explain what changed and why, and link the issue with `Closes #123`.
+- Mark breaking changes with `!` in the title (`feat!: ...`) and describe the migration.
 
 ## Feature Requests
 

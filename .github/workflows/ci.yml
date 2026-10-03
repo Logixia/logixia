@@ -35,13 +35,10 @@ jobs:
     name: Quality (lint · typecheck · format)
     runs-on: ubuntu-latest
     permissions:
-      contents: write # needed for git-auto-commit-action on PRs
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -54,22 +51,13 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # ── Auto-fix: format + lint ──────────────────────────────────────
-      - name: Auto-fix formatting & lint
-        run: npm run format && npm run lint:fix
+      # Check only, never commit back: a bot commit wouldn't trigger CI, so
+      # required checks would never report on it. Fix locally with
+      # `npm run format && npm run lint:fix`.
+      - name: Format
+        run: npm run format:check
 
-      # Only commit fixes back on PRs — pushing to main here would make
-      # origin/main advance past github.sha and break the release job.
-      - name: Commit auto-fixes (PRs only)
-        if: github.event_name == 'pull_request'
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: 'style: auto-fix formatting and lint [skip ci]'
-          commit_user_name: 'github-actions[bot]'
-          commit_user_email: 'github-actions[bot]@users.noreply.github.com'
-
-      # ── Hard gates: errors that can't be auto-fixed ──────────────────
-      - name: Lint (errors only)
+      - name: Lint
         run: npm run lint:check
 
       - name: Type check
@@ -212,4 +200,4 @@ jobs:
           # publisher to be configured for this package on npmjs.com.
           NPM_CONFIG_PROVENANCE: true
           HUSKY: 0 # skip commit-msg / pre-commit hooks on the auto-generated release commit
-        run: npx --yes -p semantic-release@25 -p @semantic-release/changelog@6 -p @semantic-release/git@10 -p conventional-changelog-conventionalcommits@8 semantic-release
+        run: npx --yes -p semantic-release@25 -p conventional-changelog-conventionalcommits@8 semantic-release

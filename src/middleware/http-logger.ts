@@ -22,7 +22,6 @@
  * ```
  */
 
- 
 import type { IBaseLogger } from '../types';
 
 // ── Shared types ─────────────────────────────────────────────────────────────
