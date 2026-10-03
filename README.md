@@ -2597,6 +2597,8 @@ interface LoggerConfig {
 
 ## Contributing
 
+> **Correlation options note:** the correlation middleware/hook read the incoming header case-insensitively. Use the `generate` option (not `generateId`); `trustIncoming` does not exist, and only the configured `header` is read.
+
 ```bash
 git clone https://github.com/Logixia/logixia.git
 cd logixia
