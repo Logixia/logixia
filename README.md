@@ -700,6 +700,32 @@ transports: {
 },
 ```
 
+### Slack
+
+A built-in Slack incoming-webhook transport forwards error-level (configurable) logs to a Slack channel — no extra packages, dependency-free over the global `fetch`. Entries are rate-limited and batched into a single message per interval:
+
+```typescript
+import { SlackTransport } from 'logixia/transports';
+
+const logger = createLogger({
+  appName: 'api',
+  environment: 'production',
+  transports: {
+    custom: [
+      new SlackTransport({
+        webhookUrl: 'https://hooks.slack.com/services/T/B/Q',
+        level: 'error', // default — avoids flooding a channel
+        username: 'logixia',
+        iconEmoji: ':warning:',
+        minIntervalMs: 1000, // batch entries inside this window into one message
+      }),
+    ],
+  },
+});
+```
+
+Slack messages use a plain-text `text` fallback plus Block Kit blocks: a header with the level and message, a context block with `appName` / `environment` / `traceId`, and a JSON code block for structured `data`.
+
 ### Multiple transports simultaneously
 
 All configured transports receive every log entry concurrently — no sequential bottleneck:
