@@ -223,6 +223,15 @@ export interface FastifyInstance {
   addHook: (name: string, fn: (req: unknown, reply: unknown, done: () => void) => void) => void;
 }
 
+// `fastify-plugin` compatibility markers. Fastify encapsulates plugins: hooks
+// added with `fastify.addHook` inside a plugin only apply to routes registered
+// inside that same plugin. Marking the function with the `skip-override` symbol
+// (what the `fastify-plugin` package does) tells Fastify to apply the hooks to
+// the instance `register` was called on, so routes declared after `register` on
+// the root instance are logged too.
+const SKIP_OVERRIDE = Symbol.for('skip-override');
+const DISPLAY_NAME = Symbol.for('fastify.display-name');
+
 /**
  * Create a Fastify plugin (a function you pass to `fastify.register()`).
  *
@@ -241,7 +250,7 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
     slowRequestThresholdMs = 1000,
   } = options;
 
-  return function logixiaFastifyPlugin(
+  function logixiaFastifyPlugin(
     fastify: FastifyInstance,
     _opts: unknown,
     done: () => void
@@ -269,8 +278,15 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
 
     fastify.addHook('onResponse', (request: unknown, reply: unknown, hookDone: () => void) => {
       const req = request as IncomingRequest & { _logixiaStart?: number; _logixiaId?: string };
+      // A skipped request never has `_logixiaStart` set by the onRequest hook,
+      // so skip the completion log too (mirrors the Express middleware, which
+      // returns before attaching any response hooks when `skip` matches).
+      if (req._logixiaStart === undefined) {
+        hookDone();
+        return;
+      }
       const rep = reply as { statusCode?: number };
-      const duration = Date.now() - (req._logixiaStart ?? Date.now());
+      const duration = Date.now() - req._logixiaStart;
       const status = rep.statusCode ?? 0;
       const traceId = req._logixiaId ?? shortId();
       const level = status >= 500 ? errorLevel : responseLevel;
@@ -295,7 +311,12 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
     });
 
     done();
-  };
+  }
+
+  return Object.assign(logixiaFastifyPlugin, {
+    [SKIP_OVERRIDE]: true,
+    [DISPLAY_NAME]: 'logixia',
+  });
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
