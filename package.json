@@ -269,6 +269,10 @@
     {
       "type": "github",
       "url": "https://github.com/sponsors/webcoderspeed"
+    },
+    {
+      "type": "paypal",
+      "url": "https://paypal.me/Sniperspeed"
     }
   ],
   "peerDependencies": {

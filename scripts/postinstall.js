@@ -48,6 +48,7 @@ try {
     line('docs', pkg.homepage, pc.cyan),
     line('issues', pkg.bugs.url, pc.yellow),
     line('sponsor', 'https://github.com/sponsors/webcoderspeed', pc.magenta),
+    line('paypal', 'https://paypal.me/Sniperspeed', pc.magenta),
     border,
     `  ${pc.dim('│')}  ${pc.bold(pc.green('❤'))}  ${pc.dim('Enjoying logixia? Sponsor to keep it alive!')}`,
     border,

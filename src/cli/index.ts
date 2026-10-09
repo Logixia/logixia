@@ -22,11 +22,15 @@ try {
   pkg = { version: '0.0.0' };
 }
 
-const program = new Command();
+export const program = new Command();
 program
   .name('logixia')
   .description('Logixia CLI for log management and analysis')
-  .version(pkg.version || '0.0.0');
+  .version(pkg.version || '0.0.0')
+  .addHelpText(
+    'after',
+    `\n${pc.dim('Sponsor logixia:')} https://github.com/sponsors/webcoderspeed · https://paypal.me/Sniperspeed`
+  );
 
 program.addCommand(analyzeCommand);
 program.addCommand(tailCommand);

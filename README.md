@@ -1,6 +1,10 @@
 # logixia
 
 <p align="center">
+  <img src="https://raw.githubusercontent.com/Logixia/logixia/main/.github/assets/logixia-banner.png" alt="logixia: the async-first TypeScript logger. One install, every transport, never blocks the event loop." width="100%"/>
+</p>
+
+<p align="center">
   <strong>The async-first TypeScript logger that ships complete.</strong><br/>
   Wide events &middot; OpenTelemetry (OTLP) &middot; Runtime log levels &middot; Redaction &middot; Adaptive sampling<br/>
   NestJS &middot; Express &middot; Fastify &middot; Database &middot; Cloud &middot; Tracing &middot; Prometheus &middot; Browser
@@ -14,6 +18,7 @@
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT"/></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.0%2B-blue" alt="TypeScript"/></a>
   <a href="https://logixia.github.io/logixia/"><img src="https://img.shields.io/badge/website-logixia.github.io-a855f7" alt="website"/></a>
+  <a href="#sponsor"><img src="https://img.shields.io/badge/sponsor-%E2%99%A5-a855f7" alt="sponsor"/></a>
 </p>
 
 <p align="center">
@@ -130,6 +135,7 @@ await logger.info('Server started', { port: 3000 });
 - [CLI tool](#cli-tool)
   - [explore — Visual TUI log explorer](#explore--visual-tui-log-explorer)
 - [Configuration reference](#configuration-reference)
+- [Sponsor](#sponsor)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -2592,6 +2598,17 @@ interface LoggerConfig {
   };
 }
 ```
+
+---
+
+## Sponsor
+
+logixia is free and MIT-licensed, and it is built and maintained by one person. If it saves you time, sponsoring keeps it moving:
+
+- [GitHub Sponsors](https://github.com/sponsors/webcoderspeed)
+- [PayPal](https://paypal.me/Sniperspeed)
+
+`npm fund logixia` prints the same links.
 
 ---
 
