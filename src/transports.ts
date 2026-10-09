@@ -9,6 +9,8 @@ export { AnalyticsTransport } from './transports/analytics.transport';
 export { ConsoleTransport } from './transports/console.transport';
 export { DatabaseTransport } from './transports/database.transport';
 export { DataDogTransport } from './transports/datadog.transport';
+export type { DiscordTransportConfig } from './transports/discord.transport';
+export { DiscordTransport } from './transports/discord.transport';
 export { FileTransport } from './transports/file.transport';
 export { GoogleAnalyticsTransport } from './transports/google-analytics.transport';
 export { MixpanelTransport } from './transports/mixpanel.transport';
