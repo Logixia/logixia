@@ -12,7 +12,8 @@ import { queryCommand } from './commands/query';
 import { searchCommand } from './commands/search';
 import { statsCommand } from './commands/stats';
 import { tailCommand } from './commands/tail';
-const pkgPath = path.resolve(__dirname, '../../..', 'package.json');
+// Built to dist/cli/index.js, so the package root is two levels up.
+const pkgPath = path.resolve(__dirname, '../..', 'package.json');
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let pkg: any;
 try {
@@ -43,6 +44,16 @@ program.on('command:*', () => {
   process.exit(1);
 });
 
-if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+export function isDirectRun(argv1: string | undefined, file: string): boolean {
+  if (!argv1) return false;
+  try {
+    // npm runs bins through a symlink in node_modules/.bin, so compare real paths.
+    return fs.realpathSync(argv1) === fs.realpathSync(file);
+  } catch {
+    return false;
+  }
+}
+
+if (isDirectRun(process.argv[1], __filename)) {
   program.parse(process.argv);
 }

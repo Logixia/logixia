@@ -136,8 +136,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsdown",
-    "cli:build": "tsc -p tsconfig.json --outDir dist/cli && cp -R src/cli/templates dist/cli 2>/dev/null || true",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsdown",
     "cli:dev": "ts-node src/cli/index.ts",
     "build:watch": "tsc --watch",
     "clean": "rm -rf dist",

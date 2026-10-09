@@ -32,21 +32,34 @@ const OPTIONAL_RUNTIME_DEPS = [
   'socket.io',
 ];
 
-export default defineConfig({
-  entry: [
-    'src/index.ts',
-    'src/nest.ts',
-    'src/transports.ts',
-    'src/search.ts',
-    'src/testing.ts',
-    'src/middleware.ts',
-  ],
-  outDir: 'dist',
-  format: ['cjs', 'esm'],
-  dts: true,
-  clean: true,
-  sourcemap: true,
-  target: 'node16',
-  platform: 'node',
-  external: OPTIONAL_RUNTIME_DEPS,
-});
+export default defineConfig([
+  {
+    entry: [
+      'src/index.ts',
+      'src/nest.ts',
+      'src/transports.ts',
+      'src/search.ts',
+      'src/testing.ts',
+      'src/middleware.ts',
+    ],
+    outDir: 'dist',
+    format: ['cjs', 'esm'],
+    dts: true,
+    clean: false,
+    sourcemap: true,
+    target: 'node16',
+    platform: 'node',
+    external: OPTIONAL_RUNTIME_DEPS,
+  },
+  // The `logixia` bin (package.json "bin" -> dist/cli/index.js).
+  {
+    entry: { 'cli/index': 'src/cli/index.ts' },
+    outDir: 'dist',
+    format: ['cjs'],
+    dts: false,
+    clean: false,
+    target: 'node16',
+    platform: 'node',
+    external: OPTIONAL_RUNTIME_DEPS,
+  },
+]);
