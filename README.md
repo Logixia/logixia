@@ -1820,9 +1820,7 @@ const logger = createLogger({
     timeout: 10_000, // wait up to 10 s; force-exits after
     signals: ['SIGTERM', 'SIGINT', 'SIGHUP'],
   },
-  transports: {
-    /* ... */
-  },
+  transports: {/* ... */},
 });
 ```
 
@@ -1914,9 +1912,7 @@ import { usePlugin } from 'logixia';
 usePlugin(myPlugin);
 
 // All loggers created from this point forward will run myPlugin.
-const logger = createLogger({
-  /* ... */
-});
+const logger = createLogger({/* ... */});
 ```
 
 ### Per-logger plugins
