@@ -148,11 +148,10 @@ npm run cli:dev
 npx ts-node src/cli/index.ts --help
 ```
 
-- Build the CLI (compiles to `dist/cli`):
+- Build the CLI (part of the normal build, output is `dist/cli/index.js`):
 
   ```bash
-  npm run cli:build
-  npx tsc -p tsconfig.json --outDir dist --rootDir src
+  npm run build
   ```
 
 - After building, run the compiled CLI (help):

@@ -221,8 +221,8 @@ logixia search examples/sample.log --query "user_id:123" --format table
 # Run in dev mode
 npm run cli:dev -- --help
 
-# Build CLI
-npm run cli:build
+# Build (the CLI is part of the normal build)
+npm run build
 
 # Test compiled version
 node dist/cli/index.js --help
