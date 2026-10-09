@@ -14,6 +14,7 @@
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT"/></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.0%2B-blue" alt="TypeScript"/></a>
   <a href="https://logixia.github.io/logixia/"><img src="https://img.shields.io/badge/website-logixia.github.io-a855f7" alt="website"/></a>
+  <a href="#sponsor"><img src="https://img.shields.io/badge/sponsor-%E2%99%A5-a855f7" alt="sponsor"/></a>
 </p>
 
 <p align="center">
@@ -130,6 +131,7 @@ await logger.info('Server started', { port: 3000 });
 - [CLI tool](#cli-tool)
   - [explore — Visual TUI log explorer](#explore--visual-tui-log-explorer)
 - [Configuration reference](#configuration-reference)
+- [Sponsor](#sponsor)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -1814,7 +1816,9 @@ const logger = createLogger({
     timeout: 10_000, // wait up to 10 s; force-exits after
     signals: ['SIGTERM', 'SIGINT', 'SIGHUP'],
   },
-  transports: {/* ... */},
+  transports: {
+    /* ... */
+  },
 });
 ```
 
@@ -1906,7 +1910,9 @@ import { usePlugin } from 'logixia';
 usePlugin(myPlugin);
 
 // All loggers created from this point forward will run myPlugin.
-const logger = createLogger({/* ... */});
+const logger = createLogger({
+  /* ... */
+});
 ```
 
 ### Per-logger plugins
@@ -2592,6 +2598,17 @@ interface LoggerConfig {
   };
 }
 ```
+
+---
+
+## Sponsor
+
+logixia is free and MIT-licensed, and it is built and maintained by one person. If it saves you time, sponsoring keeps it moving:
+
+- [GitHub Sponsors](https://github.com/sponsors/webcoderspeed)
+- [PayPal](https://paypal.me/Sniperspeed)
+
+`npm fund logixia` prints the same links.
 
 ---
 
