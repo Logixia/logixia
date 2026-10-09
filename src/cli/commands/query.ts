@@ -108,11 +108,12 @@ interface Conjunction {
   conditions: (Condition | Conjunction)[];
 }
 
+/** A WHERE clause, parsed into a tree: a single condition or AND/OR of them. */
+type WhereNode = Condition | Conjunction;
+
 interface ParsedQuery {
   select: string[] | '*';
-  where: Condition[] | null;
-  /** Raw WHERE conjunction tree (AND / OR) */
-  conjunction: Conjunction | null;
+  where: WhereNode | null;
   aggregation: {
     fn: 'COUNT' | 'AVG' | 'SUM' | 'MIN' | 'MAX' | 'GROUP' | null;
     field: string | null;
@@ -126,7 +127,6 @@ function parseSQL(sql: string): ParsedQuery {
   const result: ParsedQuery = {
     select: '*',
     where: null,
-    conjunction: null,
     aggregation: null,
     orderBy: null,
     limit: null,
@@ -213,31 +213,82 @@ function parseSQL(sql: string): ParsedQuery {
   return result;
 }
 
-function parseWhereClause(clause: string): Condition[] {
-  // Split on AND using indexOf to avoid regex quantifiers that could cause backtracking.
-  // Collapse runs of whitespace first so ' AND ' is a reliable separator.
-  const normalized = clause.replace(/\s+/g, ' ').trim();
-  const upper = normalized.toUpperCase();
+/**
+ * Split `clause` on a top-level ` AND ` / ` OR ` keyword, ignoring the keyword
+ * inside quoted values (e.g. `message LIKE 'foo OR bar'`). Scans with a
+ * bounded index walk rather than a regex quantifier so the parser stays
+ * ReDoS-safe.
+ */
+function splitTopLevel(clause: string, keyword: 'AND' | 'OR'): string[] {
+  const separator = ` ${keyword} `;
+  const upper = clause.toUpperCase();
   const parts: string[] = [];
-  let start = 0;
-  let idx = upper.indexOf(' AND ');
-  while (idx !== -1) {
-    parts.push(normalized.slice(start, idx).trim());
-    start = idx + 5; // ' AND '.length === 5
-    idx = upper.indexOf(' AND ', start);
+  let current = '';
+  let quote: string | null = null;
+  let i = 0;
+  while (i < clause.length) {
+    const ch = clause[i]!;
+    if (quote !== null) {
+      current += ch;
+      if (ch === quote) quote = null;
+      i += 1;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      current += ch;
+      i += 1;
+      continue;
+    }
+    if (upper.startsWith(separator, i)) {
+      parts.push(current.trim());
+      current = '';
+      i += separator.length;
+      continue;
+    }
+    current += ch;
+    i += 1;
   }
-  parts.push(normalized.slice(start).trim());
+  parts.push(current.trim());
+  return parts.filter(Boolean);
+}
 
-  const conditions: Condition[] = [];
-  for (const part of parts.filter(Boolean)) {
-    const cond = parseCondition(part);
-    if (cond) conditions.push(cond);
-  }
-  return conditions;
+/**
+ * Parse a WHERE clause into an AND/OR tree. AND binds tighter than OR, so the
+ * clause is first split on top-level `OR`, then each OR branch on top-level
+ * `AND`. A single top-level condition is returned unwrapped.
+ */
+function parseWhereClause(clause: string): WhereNode {
+  const normalized = clause.replace(/\s+/g, ' ').trim();
+
+  const orBranches = splitTopLevel(normalized, 'OR').map((orPart) => {
+    const andParts = splitTopLevel(orPart, 'AND');
+    const conditions = andParts
+      .map((part) => parseCondition(part))
+      .filter((cond): cond is Condition => cond !== null);
+    if (conditions.length === 1) return conditions[0]!;
+    return { type: 'AND' as const, conditions };
+  });
+
+  if (orBranches.length === 0) return { type: 'AND' as const, conditions: [] };
+  if (orBranches.length === 1) return orBranches[0]!;
+  return { type: 'OR' as const, conditions: orBranches };
 }
 
 /** Longest operators first so `>=` / `<=` / `!=` are matched before `>` / `<` / `=`. */
 const COMPARISON_OPS: ReadonlyArray<Operator> = ['>=', '<=', '!=', '>', '<', '='];
+
+/** Strip a single matching pair of surrounding single or double quotes. */
+function stripQuotes(value: string): string {
+  if (value.length >= 2) {
+    const first = value[0];
+    const last = value[value.length - 1];
+    if ((first === "'" && last === "'") || (first === '"' && last === '"')) {
+      return value.slice(1, -1);
+    }
+  }
+  return value;
+}
 
 function parseCondition(expr: string): Condition | null {
   const trimmed = expr.trim();
@@ -259,7 +310,7 @@ function parseCondition(expr: string): Condition | null {
     return {
       field,
       op: 'NOT LIKE',
-      value: rest.slice(notLikePrefix[0].length).trim(),
+      value: stripQuotes(rest.slice(notLikePrefix[0].length).trim()),
       caseless: true,
     };
   }
@@ -267,7 +318,12 @@ function parseCondition(expr: string): Condition | null {
   // LIKE
   const likePrefix = /^LIKE\s+/i.exec(rest);
   if (likePrefix) {
-    return { field, op: 'LIKE', value: rest.slice(likePrefix[0].length).trim(), caseless: true };
+    return {
+      field,
+      op: 'LIKE',
+      value: stripQuotes(rest.slice(likePrefix[0].length).trim()),
+      caseless: true,
+    };
   }
 
   // NOT IN ( ... )
@@ -339,9 +395,21 @@ function matchesCondition(row: Record<string, any>, cond: Condition): boolean {
   }
 }
 
-function matchesWhere(row: Record<string, any>, conditions: Condition[] | null): boolean {
-  if (!conditions || conditions.length === 0) return true;
-  return conditions.every((c) => matchesCondition(row, c));
+function matchesWhere(row: Record<string, any>, where: WhereNode | null): boolean {
+  if (!where) return true;
+  return matchesNode(row, where);
+}
+
+/** Evaluate a WHERE tree: AND over its children, OR over its children. */
+function matchesNode(row: Record<string, any>, node: WhereNode): boolean {
+  if ('op' in node) {
+    return matchesCondition(row, node);
+  }
+  const children = node.conditions;
+  if (children.length === 0) return true;
+  return node.type === 'AND'
+    ? children.every((child) => matchesNode(row, child))
+    : children.some((child) => matchesNode(row, child));
 }
 
 // ── Aggregation engine ────────────────────────────────────────────────────────
@@ -474,7 +542,6 @@ export function executeQuery(
     : {
         select: '*' as const,
         where: null,
-        conjunction: null,
         aggregation: null,
         orderBy: null,
         limit: null,
