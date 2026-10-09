@@ -163,8 +163,8 @@ export function correlationMiddleware(options: CorrelationMiddlewareOptions = {}
   ): void {
     const headers = (req['headers'] ?? {}) as Record<string, string | undefined>;
 
-    const correlationId = headers[header] ?? generate();
-    const originService = headers[originServiceHeader];
+    const correlationId = headers[header.toLowerCase()] ?? generate();
+    const originService = headers[originServiceHeader.toLowerCase()];
 
     if (setResponseHeader) {
       const setHeader = res['setHeader'] as ((name: string, value: string) => void) | undefined;
