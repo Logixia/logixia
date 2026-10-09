@@ -74,6 +74,7 @@ const logixiaJson = createLogger({
   format: { json: true, timestamp: true, colorize: false },
 });
 const logixiaChild = logixia.child('request-42');
+const logixiaJsonChild = logixiaJson.child('request-42');
 
 // ── Payloads ─────────────────────────────────────────────────────────────────
 const META = { requestId: 'abc-123-xyz', userId: 42, action: 'login', ip: '127.0.0.1', latency: 14 };
@@ -150,24 +151,28 @@ const suites = [
     winston: () => winstonLogger.error('Request failed', { error: ERR.message }),
     bunyan: () => bunyanLogger.error({ err: ERR }, 'Request failed'),
     logixia: async () => logixia.error('Request failed', ERR),
+    logixiaJson: async () => logixiaJson.error('Request failed', ERR),
   }),
   suite('Child / per-request logger', {
     pino: () => pinoLogger.child({ reqId: 'r-42' }).info(META, 'handled'),
     winston: () => winstonLogger.child({ reqId: 'r-42' }).info('handled', META),
     bunyan: () => bunyanLogger.child({ reqId: 'r-42' }).info(META, 'handled'),
     logixia: async () => logixiaChild.info('handled', META),
+    logixiaJson: async () => logixiaJsonChild.info('handled', META),
   }),
   suite('Deep nested object', {
     pino: () => pinoLogger.info(DEEP, 'request'),
     winston: () => winstonLogger.info('request', DEEP),
     bunyan: () => bunyanLogger.info(DEEP, 'request'),
     logixia: async () => logixia.info('request', DEEP),
+    logixiaJson: async () => logixiaJson.info('request', DEEP),
   }),
   suite('High-cardinality metadata (12 fields)', {
     pino: () => pinoLogger.info(WIDE_META, 'event'),
     winston: () => winstonLogger.info('event', WIDE_META),
     bunyan: () => bunyanLogger.info(WIDE_META, 'event'),
     logixia: async () => logixia.info('event', WIDE_META),
+    logixiaJson: async () => logixiaJson.info('event', WIDE_META),
   }),
 ];
 
@@ -211,9 +216,10 @@ async function run() {
 
   // Head-to-head summary (logixia default vs pino).
   console.log('='.repeat(72));
-  console.log('logixia vs pino — head-to-head:\n');
+  // Same output format on both sides: logixia JSON mode vs pino's JSON.
+  console.log('logixia (json) vs pino — head-to-head:\n');
   for (const [suiteName, rows] of Object.entries(allResults)) {
-    const l = rows.find((r) => r.Library === 'logixia');
+    const l = rows.find((r) => r.Library === 'logixia (json)');
     const p = rows.find((r) => r.Library === 'pino');
     if (!l || !p) continue;
     const lOps = Number.parseInt(l['ops/sec'].replace(/,/g, ''), 10);
