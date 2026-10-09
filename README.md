@@ -1,6 +1,10 @@
 # logixia
 
 <p align="center">
+  <img src="https://raw.githubusercontent.com/Logixia/logixia/main/.github/assets/logixia-banner.png" alt="logixia: the async-first TypeScript logger. One install, every transport, never blocks the event loop." width="100%"/>
+</p>
+
+<p align="center">
   <strong>The async-first TypeScript logger that ships complete.</strong><br/>
   Wide events &middot; OpenTelemetry (OTLP) &middot; Runtime log levels &middot; Redaction &middot; Adaptive sampling<br/>
   NestJS &middot; Express &middot; Fastify &middot; Database &middot; Cloud &middot; Tracing &middot; Prometheus &middot; Browser
