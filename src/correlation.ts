@@ -51,6 +51,8 @@
  * ```
  */
 
+import { randomUUID } from 'node:crypto';
+
 import { LogixiaContext } from './context/async-context';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -94,14 +96,18 @@ export interface CorrelationMiddlewareOptions {
 /**
  * Generate a new correlation ID using `crypto.randomUUID()` (available in
  * Node.js 14.17+, all modern browsers, and Edge runtimes).
+ *
+ * When the Web Crypto global is unavailable (e.g. Node 18 without
+ * `--experimental-global-webcrypto`), fall back to `node:crypto`'s
+ * `randomUUID`, which returns a proper UUID v4 — matching the shape this
+ * function's JSDoc and README promise. `logixia/correlation` is Node-only
+ * (it builds on `AsyncLocalStorage`), so importing `node:crypto` is safe here.
  */
 export function generateCorrelationId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
-  // Fallback for very old Node.js builds (pseudo-random is acceptable for a correlation ID)
-  // eslint-disable-next-line sonarjs/pseudo-random
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 11)}`;
+  return randomUUID();
 }
 
 // ── Context helpers ───────────────────────────────────────────────────────────
@@ -248,27 +254,33 @@ export function correlationFastifyHook(options: CorrelationMiddlewareOptions = {
  * ```
  */
 export async function correlationFetch(
-  input: string | URL,
-  init: Record<string, unknown> = {},
+  input: string | URL | Request,
+  init: RequestInit = {},
   options: { header?: string } = {}
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Promise<any> {
+): Promise<Response> {
   const header = options.header ?? 'x-correlation-id';
   const correlationId = getCurrentCorrelationId();
 
-  // Build merged headers as a plain object
-  const existingHeaders: Record<string, string> =
-    init['headers'] && typeof init['headers'] === 'object'
-      ? (init['headers'] as Record<string, string>)
-      : {};
-
-  const headers: Record<string, string> = { ...existingHeaders };
-  if (correlationId && !headers[header]) {
-    headers[header] = correlationId;
+  // `init.headers` can be a plain object, a `Headers` instance, or an array of
+  // `[name, value]` tuples. Spreading it into a plain object loses everything
+  // but the object form: a `Headers` instance has no own enumerable properties,
+  // and an array spread yields numeric indices. `Headers` accepts all three, is
+  // case-insensitive, and is the shape `fetch` expects back.
+  //
+  // A `Request` carries headers of its own, and `fetch(request, { headers })`
+  // replaces them rather than merging them, so they are seeded first and the
+  // caller's `init.headers` is applied on top. Without this, accepting a
+  // `Request` here would drop its headers, which is the same defect one input
+  // shape over.
+  const headers = new Headers(input instanceof Request ? input.headers : undefined);
+  for (const [name, value] of new Headers(init.headers)) {
+    headers.set(name, value);
+  }
+  if (correlationId && !headers.has(header)) {
+    headers.set(header, correlationId);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (globalThis as any)['fetch'](input, { ...init, headers });
+  return globalThis.fetch(input, { ...init, headers });
 }
 
 // ── Axios interceptor factory ─────────────────────────────────────────────────

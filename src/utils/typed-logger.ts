@@ -169,7 +169,14 @@ export function createTypedLogger<TFields extends Record<string, unknown>>(
   return {
     raw: logger,
     error(messageOrError: string | Error, data?: Partial<TFields>): Promise<void> {
-      return logger.error(messageOrError as string, data as Record<string, unknown> | undefined);
+      if (schema && data) {
+        const warnings = schema.validate(data);
+        const display = messageOrError instanceof Error ? messageOrError.message : messageOrError;
+        for (const w of warnings) {
+          internalWarn(`[logixia/schema] ${w} — level=error message="${display}"`);
+        }
+      }
+      return logger.error(messageOrError, data as Record<string, unknown> | undefined);
     },
     warn: (m, d) => withValidation('warn', logger.warn.bind(logger), m, d),
     info: (m, d) => withValidation('info', logger.info.bind(logger), m, d),
