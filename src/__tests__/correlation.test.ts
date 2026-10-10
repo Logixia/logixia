@@ -17,7 +17,7 @@ describe('generateCorrelationId', () => {
     const id = generateCorrelationId();
     expect(typeof id).toBe('string');
     expect(id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
     );
   });
 
@@ -56,7 +56,7 @@ describe('getCurrentCorrelationId and withCorrelationId', () => {
 
     expect(typeof observedInside).toBe('string');
     expect(observedInside).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
     );
   });
 
@@ -447,12 +447,12 @@ describe('correlationFetch', () => {
       await correlationFetch('https://example.com/api', { method: 'GET' });
     });
 
-    expect(fetchMock).toHaveBeenCalledWith('https://example.com/api', {
-      method: 'GET',
-      headers: {
-        'x-correlation-id': 'fetch-corr-id',
-      },
-    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://example.com/api');
+    expect(init?.method).toBe('GET');
+    const headers = new Headers(init?.headers);
+    expect(headers.get('x-correlation-id')).toBe('fetch-corr-id');
   });
 
   it('preserves existing header when caller already provided it', async () => {
@@ -465,10 +465,10 @@ describe('correlationFetch', () => {
       });
     });
 
-    expect(fetchMock).toHaveBeenCalledWith('https://example.com/api', {
-      headers: {
-        'x-correlation-id': 'pre-existing-id',
-      },
-    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://example.com/api');
+    const headers = new Headers(init?.headers);
+    expect(headers.get('x-correlation-id')).toBe('pre-existing-id');
   });
 });
