@@ -13,4 +13,6 @@ export { FileTransport } from './transports/file.transport';
 export { GoogleAnalyticsTransport } from './transports/google-analytics.transport';
 export { MixpanelTransport } from './transports/mixpanel.transport';
 export { SegmentTransport } from './transports/segment.transport';
+export type { SlackTransportConfig } from './transports/slack.transport';
+export { SlackTransport } from './transports/slack.transport';
 export { TransportManager } from './transports/transport.manager';
