@@ -20,7 +20,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Dependency Review
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
         with:
           # Block PRs that introduce HIGH or CRITICAL vulnerabilities.
           # Change to 'critical' if you want to allow high-severity through.
