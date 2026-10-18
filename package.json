@@ -345,7 +345,7 @@
     "access": "public"
   },
   "dependencies": {
-    "commander": "^11.1.0",
+    "commander": "^15.0.0",
     "fast-json-stringify": "^7.0.1",
     "picocolors": "^1.1.1"
   },
