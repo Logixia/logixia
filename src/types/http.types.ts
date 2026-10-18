@@ -1,5 +1,5 @@
 /**
- * HTTP-related type definitions for Logitron
+ * HTTP-related type definitions for Logixia
  */
 
 export interface HttpRequest {

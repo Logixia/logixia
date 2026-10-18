@@ -1,5 +1,5 @@
 /**
- * Core type definitions for Logitron Logger
+ * Core type definitions for Logixia Logger
  */
 
 import type { HttpRequest, HttpResponse } from './http.types';
