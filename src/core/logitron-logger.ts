@@ -128,10 +128,26 @@ export const _nsCacheInternal = {
 
 // ── Feature 5: Adaptive level resolution ────────────────────────────────────
 
+/**
+ * Map a level name onto a known level key: exact match first (so custom levels
+ * keep their declared casing), then lower case (so `DEBUG` → `debug`).
+ */
+function canonicalLevel(level: unknown, known: { has(key: string): boolean }): string | undefined {
+  if (typeof level !== 'string') return undefined;
+  if (known.has(level)) return level;
+  const lower = level.toLowerCase();
+  return known.has(lower) ? lower : undefined;
+}
+
 function resolveInitialLevel(config: LoggerConfig): LogLevelString {
-  // 1. Hard env override
+  // 1. Hard env override — an unknown value is skipped here so the configured level
+  //    still applies; resolveEffectiveLevel() reports it.
   const envLevel = process.env['LOGIXIA_LEVEL'];
-  if (envLevel) return envLevel as LogLevelString;
+  const knownLevels = new Set<string>([
+    ...Object.values(LogLevel),
+    ...Object.keys(config.levelOptions?.levels ?? {}),
+  ]);
+  if (envLevel && canonicalLevel(envLevel, knownLevels)) return envLevel as LogLevelString;
 
   // 2. Explicit config value
   if (config.levelOptions?.level) return config.levelOptions.level as LogLevelString;
@@ -171,6 +187,8 @@ export class LogixiaLogger<
   private _levelValues: Map<string, number> = new Map();
   /** Numeric threshold for the currently active log level. */
   private _minLevelValue = 2;
+  /** `source=value` pairs already reported as unknown levels — warn once per logger. */
+  private readonly _warnedInvalidLevels = new Set<string>();
   /** Pre-built ANSI color codes to avoid recreating the object in colorize(). */
   private _colorMap: Map<string, string> = new Map();
   /** Pre-computed field-enabled booleans so isFieldEnabled() isn't called per log. */
@@ -332,6 +350,11 @@ export class LogixiaLogger<
       [LogLevel.VERBOSE, 5],
       ...customLevelEntries,
     ]);
+    // Validate the configured level against the real map (built-ins + custom levels)
+    // and store it in canonical form so getLevel() reports what is actually in effect.
+    this.config.levelOptions = this.config.levelOptions ?? {};
+    this.config.levelOptions.level =
+      this._validLevel(this.config.levelOptions.level, 'levelOptions.level') ?? LogLevel.INFO;
     const effectiveLevel = this.resolveEffectiveLevel();
     this._minLevelValue = this._levelValues.get(effectiveLevel) ?? 2;
 
@@ -508,16 +531,49 @@ export class LogixiaLogger<
   // ── Level & context management ───────────────────────────────────────────────
 
   setLevel(level: LogLevelString): void {
+    const canonical = canonicalLevel(level, this._levelValues);
+    if (canonical === undefined) {
+      // Refuse unknown levels so getLevel() and the active threshold stay unchanged
+      internalWarn(
+        `setLevel: unknown log level '${String(level)}' ignored; valid levels: ${this._validLevelList()}. ` +
+          `Keeping '${this.getLevel()}'.`
+      );
+      return;
+    }
     this.config.levelOptions = this.config.levelOptions ?? {};
-    this.config.levelOptions.level = level;
+    this.config.levelOptions.level = canonical;
     // Refresh the cached numeric threshold so shouldLog() stays accurate
-    this._minLevelValue = this._levelValues.get(level) ?? this._minLevelValue;
+    this._minLevelValue = this._levelValues.get(canonical) ?? this._minLevelValue;
     // Rebuild level string cache in case colours are keyed per-level
     this._buildPerfCaches();
   }
 
   getLevel(): LogLevelString {
     return (this.config.levelOptions?.level as LogLevelString) ?? LogLevel.INFO;
+  }
+
+  private _validLevelList(): string {
+    return [...this._levelValues.keys()].join(', ');
+  }
+
+  /**
+   * Canonicalise a level from config/ENV. Unknown values return undefined so the
+   * caller falls through to the next source, and warn once per logger per source.
+   */
+  private _validLevel(level: unknown, source: string): string | undefined {
+    if (level === undefined || level === '') return undefined;
+    const canonical = canonicalLevel(level, this._levelValues);
+    if (canonical === undefined) {
+      const key = `${source}=${String(level)}`;
+      if (!this._warnedInvalidLevels.has(key)) {
+        this._warnedInvalidLevels.add(key);
+        internalWarn(
+          `Unknown log level '${String(level)}' from ${source}; valid levels: ${this._validLevelList()}. ` +
+            `Falling back to the next level source (default '${LogLevel.INFO}').`
+        );
+      }
+    }
+    return canonical;
   }
 
   /**
@@ -825,8 +881,11 @@ export class LogixiaLogger<
     if (ns) {
       // 1. ENV namespace override: LOGIXIA_LEVEL_DB → context "db" or "db.queries"
       const nsKey = ns.split('.')[0]!.toUpperCase();
-      const envNsLevel = process.env[`LOGIXIA_LEVEL_${nsKey}`];
-      if (envNsLevel) return envNsLevel as LogLevelString;
+      const envNsLevel = this._validLevel(
+        process.env[`LOGIXIA_LEVEL_${nsKey}`],
+        `LOGIXIA_LEVEL_${nsKey}`
+      );
+      if (envNsLevel) return envNsLevel;
 
       // 2. namespaceLevels config
       const namespaceLevels = this.config.namespaceLevels;
@@ -834,15 +893,19 @@ export class LogixiaLogger<
         const sortedPatterns = Object.keys(namespaceLevels).sort((a, b) => b.length - a.length);
         for (const pattern of sortedPatterns) {
           if (matchesNamespacePattern(ns, pattern)) {
-            return namespaceLevels[pattern]!;
+            const nsLevel = this._validLevel(
+              namespaceLevels[pattern],
+              `namespaceLevels['${pattern}']`
+            );
+            if (nsLevel) return nsLevel;
           }
         }
       }
     }
 
     // 3. Global ENV override
-    const globalEnv = process.env['LOGIXIA_LEVEL'];
-    if (globalEnv) return globalEnv as LogLevelString;
+    const globalEnv = this._validLevel(process.env['LOGIXIA_LEVEL'], 'LOGIXIA_LEVEL');
+    if (globalEnv) return globalEnv;
 
     // 4. Config-resolved level
     return this.getLevel();
