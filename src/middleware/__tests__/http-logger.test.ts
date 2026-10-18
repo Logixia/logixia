@@ -7,9 +7,13 @@
  * single-logging plus the request-start / skip / status-level behavior.
  */
 
+import type { FastifyInstance as FastifyApp } from 'fastify';
+import Fastify from 'fastify';
+
 import type { IBaseLogger } from '../../types';
 import {
   createExpressMiddleware,
+  createFastifyPlugin,
   type IncomingRequest,
   type OutgoingResponse,
 } from '../http-logger';
@@ -17,7 +21,7 @@ import {
 interface LogCall {
   level: string;
   message: string;
-  data?: Record<string, unknown>;
+  data?: Record<string, unknown> | undefined;
 }
 
 function makeLogger(): { logger: IBaseLogger; calls: LogCall[] } {
@@ -118,5 +122,144 @@ describe('createExpressMiddleware', () => {
 
     expect(nextCalled).toBe(true);
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe('createFastifyPlugin', () => {
+  let app: FastifyApp;
+
+  beforeEach(() => {
+    app = Fastify();
+  });
+
+  afterEach(async () => {
+    await app.close();
+    jest.restoreAllMocks();
+  });
+
+  it('logs a root route registered after the plugin', async () => {
+    const { logger, calls } = makeLogger();
+    await app.register(createFastifyPlugin(logger));
+    app.get('/orders', async () => ({ orders: [] }));
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/orders',
+      headers: {
+        'x-trace-id': 'orders-trace',
+        authorization: 'Bearer test-secret',
+        'x-visible': 'kept',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ orders: [] });
+    const starts = calls.filter((call) => call.message === 'request started');
+    const completions = calls.filter((call) => call.message === 'request completed');
+    expect(starts).toHaveLength(1);
+    expect(starts[0]?.level).toBe('debug');
+    expect(completions).toHaveLength(1);
+    expect(completions[0]?.level).toBe('info');
+    expect(completions[0]?.data).toEqual(
+      expect.objectContaining({
+        traceId: 'orders-trace',
+        method: 'GET',
+        url: '/orders',
+        statusCode: 200,
+        duration: expect.any(Number),
+        headers: expect.objectContaining({
+          authorization: '[REDACTED]',
+          'x-visible': 'kept',
+        }),
+      })
+    );
+    expect(completions[0]?.data?.duration).toBeGreaterThanOrEqual(0);
+  });
+
+  it('logs routes registered in a later child plugin', async () => {
+    const { logger, calls } = makeLogger();
+    await app.register(createFastifyPlugin(logger));
+    app.register(async (child) => {
+      child.get('/nested', async () => ({ ok: true }));
+    });
+
+    const response = await app.inject('/nested');
+
+    expect(response.statusCode).toBe(200);
+    const completions = calls.filter((call) => call.message === 'request completed');
+    expect(completions).toHaveLength(1);
+    expect(completions[0]?.data?.url).toBe('/nested');
+  });
+
+  it('does not log skipped requests in either hook', async () => {
+    const { logger, calls } = makeLogger();
+    await app.register(
+      createFastifyPlugin(logger, {
+        skip: (request) => request.url === '/health',
+        slowRequestThresholdMs: 0,
+      })
+    );
+    app.get('/health', async () => ({ ok: true }));
+
+    const response = await app.inject('/health');
+
+    expect(response.statusCode).toBe(200);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('uses the configured error level for a server error', async () => {
+    const { logger, calls } = makeLogger();
+    await app.register(createFastifyPlugin(logger, { errorLevel: 'fatal' }));
+    app.get('/unavailable', async (_request, reply) => {
+      return reply.code(503).send({ error: 'unavailable' });
+    });
+
+    const response = await app.inject('/unavailable');
+
+    expect(response.statusCode).toBe(503);
+    const completion = calls.find((call) => call.message === 'request completed');
+    expect(completion?.level).toBe('fatal');
+    expect(completion?.data?.statusCode).toBe(503);
+  });
+
+  it('warns when a request exceeds the slow request threshold', async () => {
+    let now = 1000;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    const { logger, calls } = makeLogger();
+    await app.register(createFastifyPlugin(logger, { slowRequestThresholdMs: 0 }));
+    app.get('/slow', async () => {
+      now += 5;
+      return { ok: true };
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/slow',
+      headers: { 'x-trace-id': 'slow-trace' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const warnings = calls.filter((call) => call.message === 'slow request detected');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.level).toBe('warn');
+    expect(warnings[0]?.data).toEqual({
+      traceId: 'slow-trace',
+      url: '/slow',
+      method: 'GET',
+      duration: 5,
+      threshold: 0,
+    });
+  });
+
+  it('logs completion when request start logging is silent', async () => {
+    const { logger, calls } = makeLogger();
+    await app.register(createFastifyPlugin(logger, { requestLevel: 'silent' }));
+    app.get('/silent', async () => ({ ok: true }));
+
+    const response = await app.inject('/silent');
+
+    expect(response.statusCode).toBe(200);
+    expect(calls.filter((call) => call.message === 'request started')).toHaveLength(0);
+    expect(calls.filter((call) => call.message === 'request completed')).toHaveLength(1);
   });
 });

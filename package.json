@@ -313,6 +313,7 @@
     "eslint-plugin-sonarjs": "4.2.0",
     "eslint-plugin-unicorn": "^63.0.0",
     "express": "^5.2.1",
+    "fastify": "^5.12.7",
     "globals": "^17.4.0",
     "husky": "^9.1.7",
     "jest": "^30.3.0",
@@ -350,6 +351,9 @@
     "picocolors": "^1.1.1"
   },
   "overrides": {
+    "fastify": {
+      "light-my-request": "6.6.0"
+    },
     "lodash": "^4.18.1",
     "brace-expansion": "^5.0.5",
     "picomatch": "^4.0.4",
