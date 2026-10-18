@@ -1,17 +1,20 @@
 /**
- * Tests for the browser logger's remote transport.
+ * Tests for the browser logger and its remote transport.
  *
  * Regressions:
  *  - flush() spliced only ONE batchSize chunk, leaving a tail when the batch
  *    exceeded batchSize. It must drain the whole batch.
  *  - destroy() cleared the timer but did NOT flush, losing buffered logs on page
  *    unload / teardown. It must flush remaining entries.
+ *  - BrowserLogger.child() dropped the parent's `json` option, so children of a
+ *    JSON logger printed pretty lines, and it stripped a key named `_` instead
+ *    of keeping every context field.
  *
  * fetch is mocked so no real network call is made.
  */
 
 import type { BrowserLogEntry } from '../browser';
-import { BrowserRemoteTransport } from '../browser';
+import { BrowserLogger, BrowserRemoteTransport } from '../browser';
 
 function makeEntry(i: number): BrowserLogEntry {
   return { timestamp: '2026-01-01T00:00:00.000Z', level: 'info', appName: 'a', message: `b-${i}` };
@@ -164,5 +167,60 @@ describe('BrowserRemoteTransport', () => {
     expect(jest.getTimerCount()).toBe(0);
     t.destroy();
     jest.useRealTimers();
+  });
+});
+
+describe('BrowserLogger.child()', () => {
+  let logSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+  });
+
+  function lastJsonEntry(): BrowserLogEntry {
+    const calls = logSpy.mock.calls;
+    return JSON.parse(calls[calls.length - 1]![0] as string) as BrowserLogEntry;
+  }
+
+  it('keeps json output for a child of a json: true logger', () => {
+    const parent = new BrowserLogger({ appName: 'app', json: true });
+    const child = parent.child({ requestId: 'r-1' });
+
+    child.info('hello');
+
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    const entry = lastJsonEntry();
+    expect(entry.message).toBe('hello');
+    expect(entry.payload).toEqual({ requestId: 'r-1' });
+  });
+
+  it('merges the parent context with the new fields, including context', () => {
+    const parent = new BrowserLogger({
+      appName: 'app',
+      json: true,
+      context: { service: 'checkout' },
+    });
+    const child = parent.child({ context: 'AuthService', userId: '42' });
+
+    child.info('Login succeeded');
+
+    expect(lastJsonEntry().payload).toEqual({
+      service: 'checkout',
+      context: 'AuthService',
+      userId: '42',
+    });
+  });
+
+  it('keeps both levels of context in a grandchild', () => {
+    const parent = new BrowserLogger({ appName: 'app', json: true });
+    const grandchild = parent.child({ requestId: 'r-1' }).child({ userId: '42' });
+
+    grandchild.info('nested');
+
+    expect(lastJsonEntry().payload).toEqual({ requestId: 'r-1', userId: '42' });
   });
 });
