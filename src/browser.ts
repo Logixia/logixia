@@ -379,7 +379,9 @@ export class BrowserRemoteTransport implements IBrowserTransport {
  * Node.js dependencies. It can be bundled for any runtime.
  */
 export class BrowserLogger {
-  private readonly config: Required<Pick<BrowserLoggerConfig, 'appName' | 'level' | 'silent'>> & {
+  private readonly config: Required<
+    Pick<BrowserLoggerConfig, 'appName' | 'level' | 'silent' | 'json'>
+  > & {
     context: Record<string, unknown> | undefined;
   };
   private readonly transports: IBrowserTransport[];
@@ -389,13 +391,14 @@ export class BrowserLogger {
       appName: config.appName ?? 'App',
       level: config.level ?? 'info',
       silent: config.silent ?? false,
+      json: config.json ?? false,
       context: config.context,
     };
 
     if (config.silent) {
       this.transports = [];
     } else {
-      const builtIn = new BrowserConsoleTransport({ json: config.json ?? false });
+      const builtIn = new BrowserConsoleTransport({ json: this.config.json });
       this.transports = [builtIn, ...(config.transports ?? [])];
     }
   }
@@ -441,14 +444,14 @@ export class BrowserLogger {
    * ```
    */
   child(extraContext: Record<string, unknown>): BrowserLogger {
-    // Exclude 'context' string label from data fields (used for identification only)
-    const { _, ...rest } = extraContext;
-    // _context (string label) is intentionally unused — it's stripped from the data payload
+    // Every key, including `context`, is kept and merged over the parent's
+    // context, as the example above shows.
     return new BrowserLogger({
       appName: this.config.appName,
       level: this.config.level,
       silent: this.config.silent,
-      context: { ...this.config.context, ...rest },
+      json: this.config.json,
+      context: { ...this.config.context, ...extraContext },
       // Reuse existing transport list
       transports: this.transports.filter((t) => t.name !== 'browser-console'),
     });
