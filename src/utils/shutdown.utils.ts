@@ -70,6 +70,7 @@ export function flushOnExit(options: FlushOnExitOptions = {}): void {
 
     // Force-exit safety net — if flushing hangs, don't block the process forever
     const forceExitTimer = setTimeout(() => {
+      // Keep the force-exit message visible even when internal logs are silenced.
       process.stderr.write(
         `[logixia] Graceful shutdown timed out after ${timeout}ms on ${signal}. Force-exiting.\n`
       );

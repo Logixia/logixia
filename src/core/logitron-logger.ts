@@ -103,10 +103,10 @@ function matchesNamespacePattern(ns: string, pattern: string): boolean {
       _nsCacheEvictionCount++;
       if (!_nsCacheEvictionWarned) {
         _nsCacheEvictionWarned = true;
-        process.stderr.write(
-          `[logixia] namespace pattern cache hit ${_NS_CACHE_MAX} entries — evicting. ` +
+        internalWarn(
+          `namespace pattern cache hit ${_NS_CACHE_MAX} entries — evicting. ` +
             `This usually means dynamic/unique patterns are being registered at runtime; ` +
-            `review your levelOptions.namespaces configuration.\n`
+            `review your levelOptions.namespaces configuration.`
         );
       }
     }

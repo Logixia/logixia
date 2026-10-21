@@ -31,7 +31,7 @@ export default [
     },
     rules: {
       // No raw console in library source — use logixia's own log system
-      'no-console': 'warn',
+      'no-console': 'error',
 
       // ── TypeScript ─────────────────────────────────────────────
       '@typescript-eslint/no-explicit-any': 'error',
@@ -108,12 +108,6 @@ export default [
   // ── Internal log: IS the console wrapper ──────────────────────
   {
     files: ['src/utils/internal-log.ts'],
-    rules: { 'no-console': 'off' },
-  },
-
-  // ── Logger core: fallback console output when no transports ───
-  {
-    files: ['src/core/logitron-logger.ts'],
     rules: { 'no-console': 'off' },
   },
 ];
