@@ -44,8 +44,7 @@ export function parseSize(value: string | number | undefined): number | undefine
   if (typeof value === 'number') {
     return Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
   }
-  // eslint-disable-next-line sonarjs/super-linear-regex -- anchored, bounded input from config
-  const match = /^\s*(\d+(?:\.\d+)?)\s*([kmgt]?)(?:i?b)?\s*$/i.exec(value);
+  const match = /^(\d+(?:\.\d+)?) ?([kmgt]?)(?:i?b)?$/i.exec(value.trim());
   if (!match) return undefined;
   const bytes = Math.floor(Number(match[1]) * (SIZE_UNITS[(match[2] ?? '').toLowerCase()] ?? 1));
   return bytes > 0 ? bytes : undefined;
