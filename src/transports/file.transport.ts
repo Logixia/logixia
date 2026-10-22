@@ -20,6 +20,13 @@ const unlink = promisify(fs.unlink);
 const readdir = promisify(fs.readdir);
 const stat = promisify(fs.stat);
 
+interface FlushWaiter {
+  upTo: number;
+  resolve: () => void;
+  reject: (error: unknown) => void;
+  error?: unknown;
+}
+
 const SIZE_UNITS: Record<string, number> = {
   '': 1,
   k: 1024,
@@ -94,14 +101,17 @@ export class FileTransport implements ITransport, IBatchTransport {
   private bytesWritten = 0;
   private period: string | undefined;
   private rotateRequested = false;
+  private rotationWaiters: Array<() => void> = [];
   /**
-   * The in-flight drain promise, or undefined when idle. Concurrent flush() calls
-   * (e.g. the un-awaited flush addToBatch fires on every Nth entry) all await this
-   * single promise instead of starting their own drain, so the batch is never
-   * snapshotted and written twice. Rotation also runs inside the drain, so it
+   * The one drain loop, or undefined when idle. Only one ever runs, so the batch
+   * is never snapshotted and written twice, and rotation (which runs inside it)
    * never races a write.
    */
-  private flushPromise: Promise<void> | undefined;
+  private draining: Promise<void> | undefined;
+  /** Entries queued and entries written (or failed) so far; flush() waits on these. */
+  private enqueued = 0;
+  private settled = 0;
+  private flushWaiters: FlushWaiter[] = [];
   /** Gzip and pruning of rotated files run off the write path, one at a time. */
   private housekeeping: Promise<void> = Promise.resolve();
 
@@ -164,7 +174,7 @@ export class FileTransport implements ITransport, IBatchTransport {
       } else {
         // Unbatched writes still go through the drain so they stay in order and
         // share the rotation checks with batched ones.
-        this.batch.push(entry);
+        this.enqueue(entry);
         await this.flush();
       }
     } catch (error) {
@@ -172,51 +182,96 @@ export class FileTransport implements ITransport, IBatchTransport {
     }
   }
 
+  /**
+   * Resolves once every entry queued before the call is on disk. It does not
+   * wait for entries queued afterwards, so under steady traffic it still returns
+   * instead of waiting for a quiet moment that never comes.
+   */
   async flush(): Promise<void> {
     if (this.batchTimer) {
       clearTimeout(this.batchTimer);
       this.batchTimer = undefined;
     }
+    if (this.settled >= this.enqueued) return;
 
-    // Serialize concurrent flushes. addToBatch() calls flush() un-awaited on every
-    // Nth entry, so a synchronous burst of writes can fire many overlapping flushes.
-    // Every caller (awaited or not) joins the SAME in-flight drain, so the batch is
-    // never snapshotted twice — which previously turned N log calls into N² file
-    // lines (the batch-flush duplication bug). Callers that await flush() still see
-    // the batch fully drained because they await the shared drain promise.
-    if (!this.flushPromise) {
-      this.flushPromise = this.drain().finally(() => {
-        this.flushPromise = undefined;
-      });
-    }
-
-    await this.flushPromise;
+    const done = new Promise<void>((resolve, reject) => {
+      this.flushWaiters.push({ upTo: this.enqueued, resolve, reject });
+    });
+    this.startDrain();
+    await done;
   }
 
   /** Writes out anything pending, then starts a new file. */
   async rotate(): Promise<void> {
-    this.rotateRequested = true;
     await this.flush();
+    const done = new Promise<void>((resolve) => this.rotationWaiters.push(resolve));
+    this.rotateRequested = true;
+    this.startDrain();
+    await done;
+  }
+
+  private enqueue(entry: TransportLogEntry): void {
+    this.batch.push(entry);
+    this.enqueued += 1;
+  }
+
+  private startDrain(): void {
+    if (this.draining) return;
+    this.draining = this.drain().finally(() => {
+      this.draining = undefined;
+    });
   }
 
   /**
-   * Drains the batch to disk one snapshot at a time. Entries appended while a
-   * write is in flight are picked up by the next loop iteration, so a single
-   * drain() empties the batch completely regardless of concurrent writes.
+   * Writes the batch one snapshot at a time. Entries queued while a write is in
+   * flight are picked up by the next iteration, so one drain empties the batch
+   * however much is logged meanwhile.
    */
   private async drain(): Promise<void> {
     while (this.batch.length > 0 || this.rotateRequested) {
-      if (this.batch.length === 0) {
+      if (this.rotateRequested) {
         this.rotateRequested = false;
-        await this.rotateFile();
+        const waiting = this.rotationWaiters;
+        this.rotationWaiters = [];
+        try {
+          await this.rotateFile();
+        } catch (error) {
+          internalError('FileTransport rotation failed', error);
+        }
+        for (const resolve of waiting) resolve();
         continue;
       }
       // Detach the current batch SYNCHRONOUSLY before awaiting, so entries pushed
       // during the write land in a fresh array and are never re-written.
       const pending = this.batch;
       this.batch = [];
-      await this.writeBatch(pending);
+      let failure: unknown;
+      try {
+        await this.writeBatch(pending);
+      } catch (error) {
+        failure = error;
+      }
+      this.settled += pending.length;
+      this.settle(failure);
     }
+  }
+
+  /**
+   * Resolves the flush() calls whose entries are now written. A failed batch
+   * fails every flush still waiting, since each one covers that batch.
+   */
+  private settle(failure: unknown): void {
+    if (failure !== undefined) {
+      if (this.flushWaiters.length === 0) internalError('FileTransport write failed', failure);
+      for (const waiter of this.flushWaiters) waiter.error ??= failure;
+    }
+    const waiting: FlushWaiter[] = [];
+    for (const waiter of this.flushWaiters) {
+      if (waiter.upTo > this.settled) waiting.push(waiter);
+      else if (waiter.error === undefined) waiter.resolve();
+      else waiter.reject(waiter.error);
+    }
+    this.flushWaiters = waiting;
   }
 
   private formatEntry(entry: TransportLogEntry): string {
@@ -249,16 +304,19 @@ export class FileTransport implements ITransport, IBatchTransport {
   }
 
   addToBatch(entry: TransportLogEntry): void {
-    this.batch.push(entry);
+    this.enqueue(entry);
 
-    if (this.batch.length >= (this.config.batchSize || 100)) {
+    // While a drain is running it picks this entry up by itself. Starting a flush
+    // per entry here used to park one pending promise per log call until traffic
+    // paused, which under steady load grew the heap by ~600 bytes a line.
+    if (this.batch.length >= (this.config.batchSize || 100) && !this.draining) {
       // Cancel any pending interval flush — the threshold flush supersedes it, and
       // a leftover timer would fire a redundant flush after the batch is already gone.
       if (this.batchTimer) {
         clearTimeout(this.batchTimer);
         this.batchTimer = undefined;
       }
-      this.flush().catch((err: unknown) => internalError('FileTransport batch flush failed', err));
+      this.startDrain();
     } else if (!this.batchTimer && this.config.flushInterval) {
       this.batchTimer = setTimeout(() => {
         this.flush().catch((err: unknown) =>

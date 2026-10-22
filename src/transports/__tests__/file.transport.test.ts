@@ -105,6 +105,72 @@ describe('FileTransport — batch flush', () => {
   });
 });
 
+describe('FileTransport — sustained load', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'logixia-file-load-'));
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('flush() returns while logging continues instead of waiting for a pause', async () => {
+    const transport = new FileTransport({ dirname: dir, filename: 'app.log', batchSize: 100 });
+    let running = true;
+    let index = 0;
+    const producer = (async () => {
+      while (running) {
+        for (let n = 0; n < 500; n += 1) void transport.write(makeEntry(index++));
+        await new Promise(setImmediate);
+      }
+    })();
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const queuedBeforeFlush = index;
+    await transport.flush();
+    const stillRunning = running;
+    running = false;
+    await producer;
+    await transport.close();
+
+    expect(stillRunning).toBe(true);
+    expect(readLines(path.join(dir, 'app.log')).length).toBeGreaterThanOrEqual(queuedBeforeFlush);
+    expect(readLines(path.join(dir, 'app.log'))).toHaveLength(index);
+  });
+
+  it('does not queue a flush per log call while a drain is running', async () => {
+    const transport = new FileTransport({ dirname: dir, filename: 'app.log', batchSize: 10 });
+    const flush = jest.spyOn(transport, 'flush');
+
+    for (let round = 0; round < 50; round += 1) {
+      for (let n = 0; n < 200; n += 1) void transport.write(makeEntry(round * 200 + n));
+      await new Promise(setImmediate);
+    }
+    await transport.close();
+
+    expect(flush.mock.calls.length).toBeLessThan(5);
+    expect(readLines(path.join(dir, 'app.log'))).toHaveLength(10_000);
+  });
+
+  it('rejects the flush that covers a failed write and keeps writing afterwards', async () => {
+    process.env.LOGIXIA_SILENT_INTERNAL = '1';
+    const live = path.join(dir, 'app.log');
+    fs.mkdirSync(live); // appending to a directory fails with EISDIR
+    const transport = new FileTransport({ dirname: dir, filename: 'app.log', batchSize: 1 });
+
+    await expect(transport.write(makeEntry(0))).rejects.toThrow('File transport write failed');
+
+    fs.rmdirSync(live);
+    await transport.write(makeEntry(1));
+    await transport.close();
+    delete process.env.LOGIXIA_SILENT_INTERNAL;
+
+    expect(readLines(live)).toEqual([expect.stringContaining('burst-line-1')]);
+  });
+});
+
 describe('FileTransport — rotation', () => {
   let dir: string;
 
