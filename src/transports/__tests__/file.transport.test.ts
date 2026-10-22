@@ -13,9 +13,10 @@ import * as fs from 'node:fs';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
+import { gunzipSync } from 'node:zlib';
 
 import type { TransportLogEntry } from '../../types/transport.types';
-import { FileTransport } from '../file.transport';
+import { FileTransport, formatDatePattern, parseSize } from '../file.transport';
 
 function makeEntry(index: number): TransportLogEntry {
   return {
@@ -157,5 +158,253 @@ describe('FileTransport — rotation', () => {
 
     // The unrelated file must NOT have been deleted by cleanup.
     expect(fs.existsSync(unrelated)).toBe(true);
+  });
+});
+
+describe('FileTransport — size, date and custom rotation', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'logixia-file-size-'));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  /** Every line in the directory, gzipped rotations included. */
+  function allLines(): string[] {
+    return fs.readdirSync(dir).flatMap((file) => {
+      const raw = readFileSync(path.join(dir, file));
+      const text = file.endsWith('.gz') ? gunzipSync(raw).toString('utf8') : raw.toString('utf8');
+      return text.split('\n').filter(Boolean);
+    });
+  }
+
+  function rotatedFiles(): string[] {
+    return fs.readdirSync(dir).filter((f) => f !== 'app.log' && f.startsWith('app-'));
+  }
+
+  async function burst(transport: FileTransport, count: number, start = 0): Promise<void> {
+    const writes: Array<Promise<void>> = [];
+    for (let index = start; index < start + count; index += 1) {
+      writes.push(transport.write(makeEntry(index)));
+    }
+    await Promise.all(writes);
+    await transport.close();
+  }
+
+  it('rotates at maxSize and keeps the live file named app.log', async () => {
+    const transport = new FileTransport({
+      dirname: dir,
+      filename: 'app.log',
+      maxSize: '1KB',
+      batchSize: 100,
+    });
+
+    await burst(transport, 200);
+
+    expect(fs.existsSync(path.join(dir, 'app.log'))).toBe(true);
+    expect(rotatedFiles().length).toBeGreaterThan(5);
+    for (const file of fs.readdirSync(dir)) {
+      expect(fs.statSync(path.join(dir, file)).size).toBeLessThanOrEqual(1024);
+    }
+    const lines = allLines();
+    expect(lines).toHaveLength(200);
+    expect(new Set(lines).size).toBe(200);
+  });
+
+  it('rotates unbatched writes fired without awaiting, in order', async () => {
+    const transport = new FileTransport({
+      dirname: dir,
+      filename: 'app.log',
+      maxSize: 1024,
+      batchSize: 1,
+    });
+
+    await burst(transport, 150);
+
+    for (const file of fs.readdirSync(dir)) {
+      expect(fs.statSync(path.join(dir, file)).size).toBeLessThanOrEqual(1024);
+    }
+    const lines = allLines();
+    expect(lines).toHaveLength(150);
+    expect(new Set(lines).size).toBe(150);
+    const live = readLines(path.join(dir, 'app.log')).map((l) => JSON.parse(l).message as string);
+    const ids = live.map((m) => Number(m.replace('burst-line-', '')));
+    expect(ids).toEqual([...ids].sort((a, b) => a - b));
+  });
+
+  it('prunes rotated files to the top-level maxFiles', async () => {
+    const transport = new FileTransport({
+      dirname: dir,
+      filename: 'app.log',
+      maxSize: 512,
+      maxFiles: 2,
+      batchSize: 10,
+    });
+
+    await burst(transport, 200);
+
+    expect(rotatedFiles()).toHaveLength(2);
+    expect(fs.existsSync(path.join(dir, 'app.log'))).toBe(true);
+  });
+
+  it('gzips rotated files when zippedArchive is set, losing no lines', async () => {
+    const transport = new FileTransport({
+      dirname: dir,
+      filename: 'app.log',
+      maxSize: '2kb',
+      zippedArchive: true,
+      batchSize: 25,
+    });
+
+    await burst(transport, 300);
+
+    const rotated = rotatedFiles();
+    expect(rotated.length).toBeGreaterThan(3);
+    expect(rotated.every((f) => f.endsWith('.log.gz'))).toBe(true);
+    const lines = allLines();
+    expect(lines).toHaveLength(300);
+    expect(new Set(lines).size).toBe(300);
+  });
+
+  it('never reuses a file name when it rotates many times in the same millisecond', async () => {
+    const transport = new FileTransport({
+      dirname: dir,
+      filename: 'app.log',
+      maxSize: 1, // every line gets its own file
+      batchSize: 500,
+    });
+
+    await burst(transport, 300);
+
+    expect(fs.readdirSync(dir)).toHaveLength(300);
+    expect(new Set(allLines()).size).toBe(300);
+  });
+
+  it('counts the size of an existing file after a restart', async () => {
+    const live = path.join(dir, 'app.log');
+    fs.writeFileSync(live, 'x'.repeat(1000) + '\n');
+
+    const transport = new FileTransport({
+      dirname: dir,
+      filename: 'app.log',
+      maxSize: 1024,
+      batchSize: 1,
+    });
+    await burst(transport, 1);
+
+    const rotated = rotatedFiles();
+    expect(rotated).toHaveLength(1);
+    expect(readFileSync(path.join(dir, rotated[0]!), 'utf8')).toBe('x'.repeat(1000) + '\n');
+    expect(readLines(live)).toHaveLength(1);
+  });
+
+  it('rotates when the datePattern period changes and names the file after the old period', async () => {
+    jest.useFakeTimers({
+      now: new Date(2026, 9, 21, 23, 59, 0),
+      doNotFake: [
+        'nextTick',
+        'setImmediate',
+        'clearImmediate',
+        'setTimeout',
+        'clearTimeout',
+        'setInterval',
+        'clearInterval',
+        'queueMicrotask',
+      ],
+    });
+    const transport = new FileTransport({
+      dirname: dir,
+      filename: 'app.log',
+      datePattern: 'YYYY-MM-DD',
+      batchSize: 1,
+    });
+
+    await transport.write(makeEntry(0));
+    jest.setSystemTime(new Date(2026, 9, 22, 0, 0, 5));
+    await transport.write(makeEntry(1));
+    await transport.close();
+
+    expect(readLines(path.join(dir, 'app-2026-10-21.log'))).toHaveLength(1);
+    expect(readLines(path.join(dir, 'app.log'))).toHaveLength(1);
+  });
+
+  it('rotates when rotation.shouldRotate returns true', async () => {
+    const transport = new FileTransport({
+      dirname: dir,
+      filename: 'app.log',
+      batchSize: 1,
+      rotation: { shouldRotate: (_file, stats) => stats.size > 0 },
+    });
+
+    for (let index = 0; index < 5; index += 1) {
+      await transport.write(makeEntry(index));
+    }
+    await transport.close();
+
+    expect(fs.readdirSync(dir).filter((f) => f.endsWith('.log'))).toHaveLength(5);
+    expect(allLines()).toHaveLength(5);
+  });
+
+  it("does not prune another transport's files that share the prefix", async () => {
+    const errors = new FileTransport({ dirname: dir, filename: 'app-error.log', batchSize: 1 });
+    await errors.write(makeEntry(0));
+    await errors.close();
+
+    const transport = new FileTransport({
+      dirname: dir,
+      filename: 'app.log',
+      maxSize: 200,
+      maxFiles: 1,
+      batchSize: 1,
+    });
+    await burst(transport, 20);
+
+    expect(readLines(path.join(dir, 'app-error.log'))).toHaveLength(1);
+  });
+
+  it('ignores an unreadable maxSize instead of rotating on every line', async () => {
+    process.env.LOGIXIA_SILENT_INTERNAL = '1';
+    const transport = new FileTransport({
+      dirname: dir,
+      filename: 'app.log',
+      maxSize: 'fifty megs',
+      batchSize: 1,
+    });
+    await burst(transport, 10);
+    delete process.env.LOGIXIA_SILENT_INTERNAL;
+
+    expect(fs.readdirSync(dir)).toEqual(['app.log']);
+  });
+});
+
+describe('parseSize', () => {
+  it.each([
+    [1024, 1024],
+    ['100', 100],
+    ['1KB', 1024],
+    ['1.5k', 1536],
+    ['50MB', 50 * 1024 ** 2],
+    ['50 mb', 50 * 1024 ** 2],
+    ['2GiB', 2 * 1024 ** 3],
+    ['1g', 1024 ** 3],
+  ])('parses %p', (input, expected) => {
+    expect(parseSize(input)).toBe(expected);
+  });
+
+  it.each([['abc'], ['-5MB'], ['0'], [0], [-1], [Number.NaN], ['5XB']])('rejects %p', (input) => {
+    expect(parseSize(input)).toBeUndefined();
+  });
+});
+
+describe('formatDatePattern', () => {
+  it('fills the date tokens in local time', () => {
+    const date = new Date(2026, 0, 5, 7, 8, 9);
+    expect(formatDatePattern(date, 'YYYY-MM-DD')).toBe('2026-01-05');
+    expect(formatDatePattern(date, 'YYYY-MM-DD-HH')).toBe('2026-01-05-07');
+    expect(formatDatePattern(date, 'YYYYMMDD_HHmmss')).toBe('20260105_070809');
   });
 });

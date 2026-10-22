@@ -43,9 +43,13 @@ export interface TransportLogEntry {
 export interface FileTransportConfig {
   filename: string;
   dirname?: string;
+  /** Rotate once the file would pass this size: bytes, or a string like '50MB' or '1GB'. */
   maxSize?: string | number;
+  /** How many rotated files to keep; older ones are deleted. Unset keeps them all. */
   maxFiles?: number;
+  /** Rotate when the date changes, e.g. 'YYYY-MM-DD' (daily) or 'YYYY-MM-DD-HH' (hourly). */
   datePattern?: string;
+  /** Gzip rotated files. */
   zippedArchive?: boolean;
   format?: 'json' | 'text' | 'csv';
   level?: string;
@@ -139,6 +143,7 @@ export interface RotationConfig {
   maxSize?: string | number;
   maxFiles?: number;
   compress?: boolean;
+  /** Checked before each write; return true to rotate now. */
   shouldRotate?: (currentFile: string, stats: FileStats) => boolean;
 }
 
