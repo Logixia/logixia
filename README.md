@@ -520,9 +520,10 @@ const logger = createLogger({
     file: {
       filename: 'app.log',
       dirname: './logs',
-      maxSize: '50MB', // rotate when file reaches this size
-      maxFiles: 14, // keep 14 rotated files
+      maxSize: '50MB', // rotate before the file passes this size ('500KB', '1GB' or bytes)
+      maxFiles: 14, // keep the 14 newest rotated files, delete older ones
       zippedArchive: true, // compress old files with gzip
+      datePattern: 'YYYY-MM-DD', // optional: also rotate when the day changes
       format: 'json', // 'json' | 'text' | 'csv'
       batchSize: 100, // buffer up to 100 entries before writing
       flushInterval: 2000, // flush buffer every 2 seconds
@@ -530,6 +531,8 @@ const logger = createLogger({
   },
 });
 ```
+
+The live file keeps its name, so `tail -f logs/app.log` keeps working. Rotated files are renamed beside it: `app-2026-10-22T09-30-00-000.log.gz`, or `app-2026-10-22.log.gz` when `datePattern` is set. Files are split on line boundaries, so no line is cut in half. On restart the transport carries on from the size of the existing `app.log`.
 
 You can also use **time-based rotation** via the `rotation` sub-key:
 
@@ -540,12 +543,17 @@ transports: {
     dirname: './logs',
     rotation: {
       interval: '1d',      // rotate daily: '1h' | '6h' | '12h' | '1d' | '1w'
+      maxSize: '100MB',    // and on size
       maxFiles: 30,
       compress: true,
+      // or decide yourself, checked before each write:
+      // shouldRotate: (file, { size, created }) => size > 100 * 1024 * 1024,
     },
   },
 },
 ```
+
+With a `rotation` block every file is timestamped, including the one being written.
 
 Multiple file transports are supported — pass an array:
 
@@ -2540,6 +2548,10 @@ interface LoggerConfig {
             maxSize?: string | number;
             maxFiles?: number;
             compress?: boolean;
+            shouldRotate?: (
+              currentFile: string,
+              stats: { size: number; created: Date; modified: Date }
+            ) => boolean;
           };
           filter?: (entry: TransportLogEntry) => boolean;
         }
