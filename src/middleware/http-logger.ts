@@ -242,11 +242,7 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
     slowRequestThresholdMs = 1000,
   } = options;
 
-  return function logixiaFastifyPlugin(
-    fastify: FastifyInstance,
-    _opts: unknown,
-    done: () => void
-  ): void {
+  function logixiaFastifyPlugin(fastify: FastifyInstance, _opts: unknown, done: () => void): void {
     fastify.addHook('onRequest', (request: unknown, _reply: unknown, hookDone: () => void) => {
       const req = request as IncomingRequest & { _logixiaStart?: number; _logixiaId?: string };
       if (skip?.(req)) {
@@ -270,8 +266,13 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
 
     fastify.addHook('onResponse', (request: unknown, reply: unknown, hookDone: () => void) => {
       const req = request as IncomingRequest & { _logixiaStart?: number; _logixiaId?: string };
+      if (req._logixiaStart === undefined) {
+        hookDone();
+        return;
+      }
+
       const rep = reply as { statusCode?: number };
-      const duration = Date.now() - (req._logixiaStart ?? Date.now());
+      const duration = Date.now() - req._logixiaStart;
       const status = rep.statusCode ?? 0;
       const traceId = req._logixiaId ?? shortId();
       const level = status >= 500 ? errorLevel : responseLevel;
@@ -296,7 +297,12 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
     });
 
     done();
-  };
+  }
+
+  return Object.assign(logixiaFastifyPlugin, {
+    [Symbol.for('skip-override')]: true,
+    [Symbol.for('fastify.display-name')]: 'logixia',
+  });
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
