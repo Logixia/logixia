@@ -69,42 +69,42 @@
     },
     "./worker": {
       "import": {
-        "types": "./dist/transports/worker.transport.d.mts",
-        "default": "./dist/transports/worker.transport.mjs"
+        "types": "./dist/worker.d.mts",
+        "default": "./dist/worker.mjs"
       },
       "require": {
-        "types": "./dist/transports/worker.transport.d.ts",
-        "default": "./dist/transports/worker.transport.js"
+        "types": "./dist/worker.d.ts",
+        "default": "./dist/worker.js"
       }
     },
     "./cloudwatch": {
       "import": {
-        "types": "./dist/transports/cloudwatch.transport.d.mts",
-        "default": "./dist/transports/cloudwatch.transport.mjs"
+        "types": "./dist/cloudwatch.d.mts",
+        "default": "./dist/cloudwatch.mjs"
       },
       "require": {
-        "types": "./dist/transports/cloudwatch.transport.d.ts",
-        "default": "./dist/transports/cloudwatch.transport.js"
+        "types": "./dist/cloudwatch.d.ts",
+        "default": "./dist/cloudwatch.js"
       }
     },
     "./gcp": {
       "import": {
-        "types": "./dist/transports/gcp.transport.d.mts",
-        "default": "./dist/transports/gcp.transport.mjs"
+        "types": "./dist/gcp.d.mts",
+        "default": "./dist/gcp.mjs"
       },
       "require": {
-        "types": "./dist/transports/gcp.transport.d.ts",
-        "default": "./dist/transports/gcp.transport.js"
+        "types": "./dist/gcp.d.ts",
+        "default": "./dist/gcp.js"
       }
     },
     "./azure": {
       "import": {
-        "types": "./dist/transports/azure-monitor.transport.d.mts",
-        "default": "./dist/transports/azure-monitor.transport.mjs"
+        "types": "./dist/azure.d.mts",
+        "default": "./dist/azure.mjs"
       },
       "require": {
-        "types": "./dist/transports/azure-monitor.transport.d.ts",
-        "default": "./dist/transports/azure-monitor.transport.js"
+        "types": "./dist/azure.d.ts",
+        "default": "./dist/azure.js"
       }
     },
     "./browser": {
@@ -164,6 +164,7 @@
     "dev:search": "ts-node examples/search-quickstart.ts",
     "dev:intelligent-search": "ts-node examples/intelligent-search.ts",
     "benchmark": "npm run build && node benchmarks/run.mjs",
+    "check:exports": "node scripts/check-exports.mjs",
     "size": "size-limit",
     "postinstall": "node scripts/postinstall.js",
     "prepare": "node -e \"if(process.env.HUSKY!=='0'&&process.env.CI!=='true'){try{require('child_process').execSync('husky install',{stdio:'inherit'})}catch(e){process.exit(0)}}\"",

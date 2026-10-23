@@ -652,7 +652,7 @@ logixia includes built-in support for Datadog, Mixpanel, Segment, and Google Ana
 **Datadog** — sends logs, metrics, and traces to your Datadog account:
 
 ```typescript
-import { DataDogTransport } from 'logixia';
+import { DataDogTransport } from 'logixia/transports';
 
 const logger = createLogger({
   appName: 'api',
@@ -808,7 +808,7 @@ logixia ships three production-ready cloud transports. All are batched, non-bloc
 Batches log events and sends them to a CloudWatch Logs stream using `PutLogEvents`. Supports **EMF** (Embedded Metric Format) so numeric fields in your log entries are automatically promoted to CloudWatch Metrics — no separate SDK needed.
 
 ```typescript
-import { CloudWatchTransport } from 'logixia';
+import { CloudWatchTransport } from 'logixia/cloudwatch';
 
 const logger = createLogger({
   appName: 'api',
@@ -843,7 +843,7 @@ await logger.info('Request completed', { duration: 142, statusCode: 200 });
 Maps logixia levels to GCP `severity` values (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`), auto-injects `logging.googleapis.com/trace` for Cloud Trace correlation, and supports Application Default Credentials (ADC) — no service account JSON required when running on GKE / Cloud Run / App Engine.
 
 ```typescript
-import { GCPTransport } from 'logixia';
+import { GCPTransport } from 'logixia/gcp';
 
 const logger = createLogger({
   appName: 'api',
@@ -869,7 +869,7 @@ const logger = createLogger({
 Sends logs to Azure Monitor via the **Logs Ingestion API** (Data Collection Rule). Uses OAuth2 client-credentials to obtain a bearer token automatically.
 
 ```typescript
-import { AzureMonitorTransport } from 'logixia';
+import { AzureMonitorTransport } from 'logixia/azure';
 
 const logger = createLogger({
   appName: 'api',
@@ -2210,10 +2210,10 @@ import {
   LogixiaExceptionFilter, // global exception filter
 } from 'logixia';
 
-// Cloud transports (import directly):
-import { CloudWatchTransport } from 'logixia';
-import { GCPTransport } from 'logixia';
-import { AzureMonitorTransport } from 'logixia';
+// Cloud transports (subpath imports):
+import { CloudWatchTransport } from 'logixia/cloudwatch';
+import { GCPTransport } from 'logixia/gcp';
+import { AzureMonitorTransport } from 'logixia/azure';
 
 // Plugin API:
 import type { LogixiaPlugin } from 'logixia';
