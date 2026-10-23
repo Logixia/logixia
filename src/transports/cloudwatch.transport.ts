@@ -4,10 +4,13 @@
  * Sends log entries to AWS CloudWatch Logs via the PutLogEvents API.
  * Supports EMF (Embedded Metric Format) for automatic metric extraction.
  *
- * Auth: uses the standard AWS credential chain — environment variables
- * (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY), ~/.aws/credentials, or
- * instance/task IAM roles. No SDK dependency — uses raw HTTPS with
+ * Auth, in order: explicit config, environment variables, the shared
+ * credentials file (AWS_PROFILE, AWS_SHARED_CREDENTIALS_FILE), ECS container
+ * credentials, then EC2 instance metadata (IMDSv2). SSO, assume-role profiles
+ * and credential_process are not supported. No SDK dependency — raw HTTPS with
  * AWS Signature Version 4.
+ *
+ * The log group and stream are created on first use if they do not exist.
  *
  * @example
  * ```ts
@@ -27,16 +30,18 @@
  * ```
  */
 
-import * as crypto from 'node:crypto';
-
 import type { IAsyncTransport, TransportLogEntry } from '../types/transport.types';
 import { internalWarn } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
+import { AwsCredentialProvider } from './aws-credentials';
+import { signV4 } from './aws-sigv4';
 import {
   BatchBuffer,
   DEFAULT_MAX_BUFFER_SIZE,
   DEFAULT_REQUEST_TIMEOUT_MS,
+  HttpError,
   httpRequest,
+  isPermanentHttpError,
 } from './batch-buffer';
 
 export interface CloudWatchTransportConfig {
@@ -46,15 +51,17 @@ export interface CloudWatchTransportConfig {
   logGroupName: string;
   /** CloudWatch Logs stream name. Defaults to hostname + process PID. */
   logStreamName?: string;
-  /** AWS access key ID. Falls back to `AWS_ACCESS_KEY_ID` env var. */
+  /** Override the Logs endpoint, e.g. for LocalStack. Default: `https://logs.<region>.amazonaws.com`. */
+  endpoint?: string;
+  /** AWS access key ID. Falls back to the credential chain described above. */
   accessKeyId?: string;
-  /** AWS secret access key. Falls back to `AWS_SECRET_ACCESS_KEY` env var. */
+  /** AWS secret access key. Used together with `accessKeyId`. */
   secretAccessKey?: string;
-  /** AWS session token (for temporary credentials). Falls back to `AWS_SESSION_TOKEN`. */
+  /** AWS session token for temporary credentials. Used together with `accessKeyId`. */
   sessionToken?: string;
   /**
    * Number of log events to batch before flushing.
-   * CloudWatch allows max 10,000 events per PutLogEvents call.
+   * CloudWatch allows max 10,000 events per PutLogEvents call; larger values are capped.
    * @default 100
    */
   batchSize?: number;
@@ -69,12 +76,36 @@ export interface CloudWatchTransportConfig {
    * @default false
    */
   emf?: boolean;
+  /** CloudWatch Metrics namespace used by EMF. @default 'Logixia' */
+  emfNamespace?: string;
   /** Abort a request that has not finished after this many ms. @default 10000 */
   requestTimeoutMs?: number;
   /** Max buffered events; the oldest are dropped past this. @default 10000 */
   maxBufferSize?: number;
   /** Minimum log level to forward. */
   level?: string;
+}
+
+const MAX_EVENTS_PER_PUT = 10_000;
+
+/** Error types worth retrying even though CloudWatch reports them as HTTP 400. */
+const RETRYABLE_TYPES = new Set([
+  'ThrottlingException',
+  'ThrottledException',
+  'LimitExceededException',
+  'ServiceUnavailableException',
+  'ExpiredTokenException',
+  'ResourceNotFoundException',
+]);
+
+function awsErrorType(err: unknown): string | undefined {
+  if (!(err instanceof HttpError)) return undefined;
+  try {
+    const type = (JSON.parse(err.body) as { __type?: string }).__type;
+    return type?.split('#').pop();
+  } catch {
+    return undefined;
+  }
 }
 
 interface CwLogEvent {
@@ -94,15 +125,15 @@ export class CloudWatchTransport implements IAsyncTransport {
   private readonly buffer: BatchBuffer<CwLogEvent>;
   private readonly requestTimeoutMs: number;
   private flushTimer: NodeJS.Timeout | null = null;
-  private sequenceToken: string | undefined;
+  private readonly credentials: AwsCredentialProvider;
+  private readonly endpoint: URL;
+  private streamReady = false;
 
   private readonly region: string;
   private readonly logGroupName: string;
   private readonly logStreamName: string;
-  private readonly accessKeyId: string;
-  private readonly secretAccessKey: string;
-  private readonly sessionToken: string | undefined;
   private readonly emf: boolean;
+  private readonly emfNamespace: string;
 
   constructor(config: CloudWatchTransportConfig) {
     this.region =
@@ -113,10 +144,10 @@ export class CloudWatchTransport implements IAsyncTransport {
     this.logGroupName = config.logGroupName;
     this.logStreamName =
       config.logStreamName ?? `${process.env['HOSTNAME'] ?? 'node'}-${process.pid}`;
-    this.accessKeyId = config.accessKeyId ?? process.env['AWS_ACCESS_KEY_ID'] ?? '';
-    this.secretAccessKey = config.secretAccessKey ?? process.env['AWS_SECRET_ACCESS_KEY'] ?? '';
-    this.sessionToken = config.sessionToken ?? process.env['AWS_SESSION_TOKEN'];
-    this.batchSize = config.batchSize ?? 100;
+    this.credentials = new AwsCredentialProvider(config);
+    this.endpoint = new URL(config.endpoint ?? `https://logs.${this.region}.amazonaws.com`);
+    this.batchSize = Math.min(config.batchSize ?? 100, MAX_EVENTS_PER_PUT);
+    this.emfNamespace = config.emfNamespace ?? 'Logixia';
     this.flushInterval = config.flushIntervalMs ?? 5000;
     this.emf = config.emf ?? false;
     this.level = config.level;
@@ -126,6 +157,8 @@ export class CloudWatchTransport implements IAsyncTransport {
       batchSize: this.batchSize,
       maxBufferSize: config.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE,
       send: (events) => this.putLogEvents(events),
+      shouldRetry: (err) =>
+        !isPermanentHttpError(err) || RETRYABLE_TYPES.has(awsErrorType(err) ?? ''),
     });
 
     this.flushTimer = setInterval(() => {
@@ -159,19 +192,19 @@ export class CloudWatchTransport implements IAsyncTransport {
   }
 
   private toEmf(entry: TransportLogEntry): string {
-    const { level, message, data: payload } = entry;
+    const { level, message, data: payload, timestamp } = entry;
     const numericFields: Record<string, number> = {};
     for (const [k, v] of Object.entries(payload ?? {})) {
       if (typeof v === 'number') numericFields[k] = v;
     }
     return stringifyForLog({
       _aws: {
-        Timestamp: Date.now(),
+        Timestamp: timestamp ? new Date(timestamp).getTime() : Date.now(),
         CloudWatchMetrics:
           Object.keys(numericFields).length > 0
             ? [
                 {
-                  Namespace: this.logGroupName,
+                  Namespace: this.emfNamespace,
                   Dimensions: [['level']],
                   Metrics: Object.keys(numericFields).map((n) => ({ Name: n, Unit: 'None' })),
                 },
@@ -186,110 +219,68 @@ export class CloudWatchTransport implements IAsyncTransport {
   }
 
   private async putLogEvents(events: CwLogEvent[]): Promise<void> {
-    if (!this.accessKeyId || !this.secretAccessKey) {
-      internalWarn('CloudWatchTransport: missing AWS credentials — skipping PutLogEvents');
-      return;
-    }
-
-    const body = stringifyForLog({
-      logGroupName: this.logGroupName,
-      logStreamName: this.logStreamName,
-      logEvents: events,
-      ...(this.sequenceToken ? { sequenceToken: this.sequenceToken } : {}),
-    });
-
-    const host = `logs.${this.region}.amazonaws.com`;
-    const path = '/';
-    const service = 'logs';
-    const method = 'POST';
-    const amzTarget = 'Logs_20140328.PutLogEvents';
-
-    const headers = await this.signRequest(method, host, path, service, body, {
-      'Content-Type': 'application/x-amz-json-1.1',
-      'X-Amz-Target': amzTarget,
-    });
-
-    const res = await httpRequest({
-      url: new URL(`https://${host}${path}`),
-      headers,
-      body,
-      timeoutMs: this.requestTimeoutMs,
-      label: 'CloudWatch PutLogEvents',
-    });
+    await this.ensureStream();
+    const logEvents = [...events].sort((a, b) => a.timestamp - b.timestamp);
     try {
-      const parsed = JSON.parse(res.body) as { nextSequenceToken?: string };
-      if (parsed.nextSequenceToken) this.sequenceToken = parsed.nextSequenceToken;
-    } catch {
-      /* ignore */
+      await this.call('PutLogEvents', {
+        logGroupName: this.logGroupName,
+        logStreamName: this.logStreamName,
+        logEvents,
+      });
+    } catch (err) {
+      const type = awsErrorType(err);
+      if (type === 'DataAlreadyAcceptedException') return;
+      if (type === 'ResourceNotFoundException') this.streamReady = false;
+      if (type === 'ExpiredTokenException') this.credentials.invalidate();
+      throw err;
     }
   }
 
-  // ── AWS Signature Version 4 ─────────────────────────────────────────────────
+  private async ensureStream(): Promise<void> {
+    if (this.streamReady) return;
+    try {
+      await this.call('CreateLogGroup', { logGroupName: this.logGroupName });
+    } catch (err) {
+      if (awsErrorType(err) === 'ExpiredTokenException') this.credentials.invalidate();
+      if (!(err instanceof HttpError)) throw err;
+      if (awsErrorType(err) !== 'ResourceAlreadyExistsException') {
+        internalWarn(`CloudWatchTransport: CreateLogGroup failed, continuing (${err.message})`);
+      }
+    }
+    try {
+      await this.call('CreateLogStream', {
+        logGroupName: this.logGroupName,
+        logStreamName: this.logStreamName,
+      });
+    } catch (err) {
+      if (awsErrorType(err) !== 'ResourceAlreadyExistsException') throw err;
+    }
+    this.streamReady = true;
+  }
 
-  private async signRequest(
-    method: string,
-    host: string,
-    path: string,
-    service: string,
-    body: string,
-    extraHeaders: Record<string, string>
-  ): Promise<Record<string, string>> {
-    const now = new Date();
-    const amzDate = now
-      .toISOString()
-      .replace(/[:-]/g, '')
-      .replace(/\.\d+Z/, 'Z');
-    const dateStamp = amzDate.slice(0, 8);
-
-    const payloadHash = crypto.createHash('sha256').update(body).digest('hex');
-    const headers: Record<string, string> = {
-      host,
-      'x-amz-date': amzDate,
-      'x-amz-content-sha256': payloadHash,
-      ...(this.sessionToken ? { 'x-amz-security-token': this.sessionToken } : {}),
-      ...extraHeaders,
-    };
-
-    const signedHeaderKeys = Object.keys(headers).sort().join(';');
-    const canonicalHeaders =
-      Object.entries(headers)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([k, v]) => `${k}:${v.trim()}`)
-        .join('\n') + '\n';
-
-    const canonicalRequest = [
-      method,
-      path,
-      '',
-      canonicalHeaders,
-      signedHeaderKeys,
-      payloadHash,
-    ].join('\n');
-    const credentialScope = `${dateStamp}/${this.region}/${service}/aws4_request`;
-    const stringToSign = [
-      'AWS4-HMAC-SHA256',
-      amzDate,
-      credentialScope,
-      crypto.createHash('sha256').update(canonicalRequest).digest('hex'),
-    ].join('\n');
-
-    const sign = (key: Buffer | string, msg: string): Buffer =>
-      crypto.createHmac('sha256', key).update(msg).digest();
-
-    const signingKey = sign(
-      sign(sign(sign(`AWS4${this.secretAccessKey}`, dateStamp), this.region), service),
-      'aws4_request'
-    );
-    const signature = crypto.createHmac('sha256', signingKey).update(stringToSign).digest('hex');
-
-    const authHeader =
-      `AWS4-HMAC-SHA256 Credential=${this.accessKeyId}/${credentialScope}, ` +
-      `SignedHeaders=${signedHeaderKeys}, Signature=${signature}`;
-
-    return {
-      ...headers,
-      Authorization: authHeader,
-      'Content-Length': Buffer.byteLength(body).toString(),
-    };
+  private async call(action: string, payload: Record<string, unknown>): Promise<void> {
+    const credentials = await this.credentials.get();
+    const body = stringifyForLog(payload);
+    const { host } = this.endpoint;
+    const headers = signV4({
+      method: 'POST',
+      path: '/',
+      headers: {
+        host,
+        'content-type': 'application/x-amz-json-1.1',
+        'x-amz-target': `Logs_20140328.${action}`,
+      },
+      body,
+      region: this.region,
+      service: 'logs',
+      credentials,
+    });
+    await httpRequest({
+      url: this.endpoint,
+      headers,
+      body,
+      timeoutMs: this.requestTimeoutMs,
+      label: `CloudWatch ${action}`,
+    });
   }
 }
