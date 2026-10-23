@@ -23,6 +23,7 @@
  */
 
 import type { IBaseLogger } from '../types';
+import { stringifyForLog } from '../utils/safe-stringify';
 
 // ── Shared types ─────────────────────────────────────────────────────────────
 
@@ -305,7 +306,7 @@ function truncateBody(body: unknown, maxBytes = 4096): unknown {
     return body.length > maxBytes ? body.slice(0, maxBytes) + '…[truncated]' : body;
   }
   if (body && typeof body === 'object') {
-    const str = JSON.stringify(body);
+    const str = stringifyForLog(body);
     if (str.length > maxBytes) {
       return str.slice(0, maxBytes) + '…[truncated]';
     }

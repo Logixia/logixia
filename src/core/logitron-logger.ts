@@ -50,6 +50,7 @@ import { isError, serializeError } from '../utils/error.utils';
 import { internalError, internalLog, internalWarn } from '../utils/internal-log';
 import { _getOtelPayloadIfEnabled, _isOtelBridgeEnabled } from '../utils/otel';
 import { applyRedaction, applyRedactionToString } from '../utils/redact.utils';
+import { stringifyForLog } from '../utils/safe-stringify';
 import { Sampler } from '../utils/sampling.utils';
 import { deregisterFromShutdown, flushOnExit, registerForShutdown } from '../utils/shutdown.utils';
 import { TraceContext } from '../utils/trace.utils';
@@ -852,7 +853,14 @@ export class LogixiaLogger<
 
   private formatLog(entry: LogEntry): string {
     // JSON mode: use fast-json-stringify (pre-compiled serializer, ~59% faster than JSON.stringify)
-    if (this.config.format?.json) return _fastStringifyEntry(entry);
+    if (this.config.format?.json) {
+      try {
+        return _fastStringifyEntry(entry);
+      } catch {
+        // A BigInt or a cycle in the payload — rare, so pay for the safe walk only then.
+        return stringifyForLog(entry);
+      }
+    }
 
     let formatted = '';
 
@@ -883,7 +891,7 @@ export class LogixiaLogger<
     if (this._fieldCache.get('message') !== false) formatted += entry.message;
 
     if (entry.payload !== undefined && this._fieldCache.get('payload') !== false) {
-      formatted += ` ${JSON.stringify(entry.payload)}`;
+      formatted += ` ${stringifyForLog(entry.payload)}`;
     }
 
     return formatted;

@@ -25,6 +25,8 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
    * (same class of bug fixed earlier in FileTransport / DatabaseTransport).
    */
   private flushPromise?: Promise<void> | undefined;
+  /** Set on the first write. Subclass fields don't exist yet while the base constructor runs. */
+  private initPromise?: Promise<void> | undefined;
 
   constructor(name: string, config: AnalyticsTransportConfig) {
     this.name = name;
@@ -38,14 +40,10 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
     this.level = config.level;
     this.batchSize = this.config.batchSize || 50;
     this.flushInterval = this.config.flushInterval || 10000;
-
-    this.initialize();
   }
 
   async write(entry: TransportLogEntry): Promise<void> {
-    if (!this.isReady) {
-      await this.waitForReady();
-    }
+    if (!this.isReady) await this.ensureReady();
 
     if (this.shouldSkipEntry(entry)) {
       return;
@@ -178,14 +176,21 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
     return transformed;
   }
 
-  protected async waitForReady(timeout: number = 5000): Promise<void> {
-    const startTime = Date.now();
-    while (!this.isReady && Date.now() - startTime < timeout) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    if (!this.isReady) {
-      throw new Error(`Analytics transport ${this.name} failed to initialize within ${timeout}ms`);
-    }
+  /**
+   * Runs initialize() once. A bad config (say, a missing API key) fails every
+   * write with the same error instead of an unhandled rejection at startup.
+   */
+  protected ensureReady(): Promise<void> {
+    this.initPromise ??= (async () => {
+      await this.initialize();
+      this.isReady = true;
+    })();
+    return this.initPromise;
+  }
+
+  /** @deprecated Use ensureReady(); kept for subclasses that call it. */
+  protected async waitForReady(): Promise<void> {
+    await this.ensureReady();
   }
 
   // Abstract methods to be implemented by specific analytics providers

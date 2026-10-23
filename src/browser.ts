@@ -34,6 +34,8 @@
  * ```
  */
 
+import { stringifyForLog } from './utils/safe-stringify';
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type BrowserLogLevel = 'verbose' | 'debug' | 'info' | 'warn' | 'error' | 'critical';
@@ -125,7 +127,7 @@ export class BrowserConsoleTransport implements IBrowserTransport {
 
   /* eslint-disable no-console */
   private writeJson(entry: BrowserLogEntry): void {
-    const line = JSON.stringify(entry);
+    const line = stringifyForLog(entry);
     switch (entry.level) {
       case 'verbose':
       case 'debug':
@@ -314,7 +316,7 @@ export class BrowserRemoteTransport implements IBrowserTransport {
     // concurrently land in a fresh slice and are never sent twice.
     while (this.batch.length > 0) {
       const entries = this.batch.splice(0, this.batchSize);
-      const body = JSON.stringify(entries);
+      const body = stringifyForLog(entries);
       // keepalive only survives bodies under 64 KB; a large batch would
       // otherwise throw on every attempt and be retried forever.
       const keepalive = byteLength(body) < 60_000;

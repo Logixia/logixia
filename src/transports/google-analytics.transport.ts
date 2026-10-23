@@ -1,5 +1,6 @@
 import type { GoogleAnalyticsTransportConfig, TransportLogEntry } from '../types/transport.types';
 import { internalError, internalLog } from '../utils/internal-log';
+import { stringifyForLog } from '../utils/safe-stringify';
 import { AnalyticsTransport } from './analytics.transport';
 
 /**
@@ -29,9 +30,6 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
       if (!this.gaConfig.apiSecret) {
         throw new Error('Google Analytics API Secret is required');
       }
-
-      // Test connection
-      await this.testConnection();
       this.isReady = true;
     } catch (error) {
       internalError('Google Analytics transport initialization failed', error);
@@ -148,7 +146,7 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload),
+        body: stringifyForLog(payload),
       });
 
       if (!response.ok) {
@@ -167,27 +165,6 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
         cause: error,
       });
     }
-  }
-
-  private async testConnection(): Promise<void> {
-    // Send a test event to validate the connection
-    const testEvent = {
-      name: 'logitron_test',
-      params: {
-        event_category: 'Test',
-        event_label: 'Connection Test',
-        test: true,
-        timestamp: new Date().toISOString(),
-      },
-    };
-
-    const payload = {
-      client_id: this.gaConfig.clientId || this.generateClientId(),
-      events: [testEvent],
-    };
-
-    // Use debug endpoint for testing
-    await this.makeRequest(payload, true);
   }
 
   private generateClientId(): string {

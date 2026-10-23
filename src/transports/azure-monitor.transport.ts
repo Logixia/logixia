@@ -33,6 +33,7 @@ import * as https from 'node:https';
 
 import type { IAsyncTransport, TransportLogEntry } from '../types/transport.types';
 import { internalError, internalWarn } from '../utils/internal-log';
+import { stringifyForLog } from '../utils/safe-stringify';
 
 /**
  * Azure AD tenant IDs are either a GUID or a verified domain (e.g. `contoso.onmicrosoft.com`).
@@ -166,7 +167,7 @@ export class AzureMonitorTransport implements IAsyncTransport {
       AppName: entry.appName,
       Context: entry.context ?? '',
       TraceId: entry.traceId ?? '',
-      Properties: JSON.stringify(entry.data ?? {}),
+      Properties: stringifyForLog(entry.data ?? {}),
     };
   }
 
@@ -239,7 +240,7 @@ export class AzureMonitorTransport implements IAsyncTransport {
     if (!token) return;
 
     const records = entries.map((e) => this.toAzureRecord(e));
-    const body = JSON.stringify(records);
+    const body = stringifyForLog(records);
     let reqUrl: URL;
     try {
       // Build from the user-configured DCE endpoint; encodeURIComponent-ing the

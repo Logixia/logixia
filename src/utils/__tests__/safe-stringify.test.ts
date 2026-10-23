@@ -3,7 +3,7 @@
  * order, and round-trippable $ref decycle/retrocycle.
  */
 
-import { decycleValue, retrocycle, safeStringify } from '../safe-stringify';
+import { decycleValue, retrocycle, safeStringify, stringifyForLog } from '../safe-stringify';
 
 describe('safeStringify', () => {
   it('serializes BigInt as a string by default (JSON.stringify would throw)', () => {
@@ -82,5 +82,49 @@ describe('decycle / retrocycle round-trip', () => {
     const json = safeStringify({ p: shared, q: shared }, { decycle: true });
     const parsed = retrocycle(JSON.parse(json)) as { p: unknown; q: unknown };
     expect(parsed.p).toBe(parsed.q); // same reference restored
+  });
+});
+
+describe('safeStringify — toJSON', () => {
+  it('uses toJSON like JSON.stringify does', () => {
+    const url = new URL('https://example.com/a?b=1');
+    expect(safeStringify({ url, at: new Date(0), self: undefined })).toBe(
+      '{"url":"https://example.com/a?b=1","at":"1970-01-01T00:00:00.000Z"}'
+    );
+  });
+
+  it('prints an invalid Date as null instead of throwing', () => {
+    expect(safeStringify({ at: new Date('nope') })).toBe('{"at":null}');
+  });
+
+  it('treats a toJSON that returns itself as a cycle', () => {
+    const odd = {
+      toJSON(): unknown {
+        return odd;
+      },
+    };
+    expect(safeStringify({ odd })).toBe('{"odd":"[Circular]"}');
+  });
+});
+
+describe('stringifyForLog', () => {
+  it('matches JSON.stringify for ordinary values', () => {
+    const value = { a: 1, b: [true, null, 'x'], c: { d: new Date(0) } };
+    expect(stringifyForLog(value)).toBe(JSON.stringify(value));
+  });
+
+  it('handles BigInt and cycles instead of throwing', () => {
+    const req: Record<string, unknown> = { id: 10n };
+    req.self = req;
+    expect(stringifyForLog(req)).toBe('{"id":"10","self":"[Circular]"}');
+  });
+
+  it('never throws, even when toJSON throws', () => {
+    const bad = {
+      toJSON(): never {
+        throw new Error('nope');
+      },
+    };
+    expect(stringifyForLog({ bad })).toBe('"[Unserializable: nope]"');
   });
 });

@@ -31,6 +31,7 @@ import * as https from 'node:https';
 
 import type { IAsyncTransport, TransportLogEntry } from '../types/transport.types';
 import { internalError, internalWarn } from '../utils/internal-log';
+import { stringifyForLog } from '../utils/safe-stringify';
 
 export interface GCPMonitoredResource {
   type: string;
@@ -339,7 +340,7 @@ export class GCPTransport implements IAsyncTransport {
       return;
     }
 
-    const body = JSON.stringify({
+    const body = stringifyForLog({
       logName: this.logName,
       resource: this.resource,
       entries: entries.map((e) => this.buildLogEntry(e)),
