@@ -361,8 +361,24 @@ export function applyRedaction(
   return redactObject(payload, resolved);
 }
 
+const OPAQUE_BUILTINS: readonly (abstract new (...args: never[]) => object)[] = [
+  Date,
+  Error,
+  RegExp,
+  URL,
+  URLSearchParams,
+  ArrayBuffer,
+  DataView,
+  Map,
+  Set,
+  WeakMap,
+  WeakSet,
+  Promise,
+];
+
+/** Plain objects and class instances are walked; built-ins are left alone. */
 function isPlainObject(value: unknown): boolean {
   if (value === null || typeof value !== 'object') return false;
-  const proto = Object.getPrototypeOf(value);
-  return proto === Object.prototype || proto === null;
+  if (ArrayBuffer.isView(value)) return false;
+  return !OPAQUE_BUILTINS.some((ctor) => value instanceof ctor);
 }

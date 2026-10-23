@@ -103,33 +103,58 @@ describe('redactObject — circular references', () => {
   });
 });
 
-describe('redactObject — non-plain objects', () => {
-  it('leaves URL, Date, Buffer, Map and class instances untouched', () => {
-    class Thing {
-      password = 'p';
-    }
-    const url = new URL('https://example.com/a');
-    const date = new Date(0);
-    const buf = Buffer.from('x');
-    const map = new Map([['a', 1]]);
-    const thing = new Thing();
-    const out = redactObject(
-      { url, date, buf, map, thing },
-      { paths: ['nothing'], patterns: [/zzz/g] }
-    );
-    expect(out.url).toBe(url);
-    expect(out.date).toBe(date);
-    expect(out.buf).toBe(buf);
-    expect(out.map).toBe(map);
-    expect(out.thing).toBe(thing);
+describe('redactObject — class instances and built-ins', () => {
+  class Creds {
+    constructor(
+      public password: string,
+      public user = 'u'
+    ) {}
+  }
+
+  it('redacts fields of class instances by wildcard path', () => {
+    const out = redactObject({ entity: new Creds('p') }, { paths: ['*.password'] });
+    expect(out).toEqual({ entity: { password: CENSOR, user: 'u' } });
   });
 
-  it('still redacts a non-plain value when a rule targets it', () => {
+  it('redacts fields of class instances by exact and deep path', () => {
+    expect(redactObject({ entity: new Creds('p') }, { paths: ['entity.password'] })).toEqual({
+      entity: { password: CENSOR, user: 'u' },
+    });
+    expect(redactObject({ list: [new Creds('p')] }, { paths: ['**.password'] })).toEqual({
+      list: [{ password: CENSOR, user: 'u' }],
+    });
+  });
+
+  it('does not mutate a class instance', () => {
+    const c = new Creds('p');
+    redactObject({ c }, { paths: ['**.password'] });
+    expect(c.password).toBe('p');
+  });
+
+  it('leaves URL, Date, Buffer, Map, Set and friends untouched', () => {
+    const values = {
+      url: new URL('https://example.com/a'),
+      params: new URLSearchParams('a=1'),
+      date: new Date(0),
+      re: /x/g,
+      buf: Buffer.from('x'),
+      ab: new ArrayBuffer(2),
+      typed: new Uint8Array(2),
+      view: new DataView(new ArrayBuffer(2)),
+      map: new Map([['password', 1]]),
+      set: new Set([1]),
+      err: new Error('boom'),
+    };
+    const out = redactObject(values, { paths: ['nothing'], patterns: [/zzz/g] });
+    for (const [k, v] of Object.entries(values)) expect(out[k]).toBe(v);
+  });
+
+  it('still redacts a built-in when a rule targets it', () => {
     const url = new URL('https://example.com/a');
     expect(redactObject({ url }, { paths: ['url'] })).toEqual({ url: CENSOR });
   });
 
-  it('handles null-prototype objects as plain', () => {
+  it('handles null-prototype objects', () => {
     const o = Object.assign(Object.create(null), { password: 'p' });
     expect(redactObject({ o }, { paths: ['o.password'] })).toEqual({ o: { password: CENSOR } });
   });

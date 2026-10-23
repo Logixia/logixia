@@ -1515,7 +1515,7 @@ Path rules follow these conventions:
 - Matching is case-insensitive, so `req.headers.authorization` also redacts `Authorization`.
 - Array elements are addressed by index: `users.*.password` and `users.0.password` both match, and the older index-free form `users.password` still works. Nested arrays are walked the same way.
 - Circular references are printed as `[Circular]` instead of throwing.
-- Only plain objects and arrays are walked. Class instances, `URL`, `Date`, `Buffer` and `Map` pass through unchanged unless a rule targets them directly.
+- Plain objects, class instances (ORM entities, documents) and arrays are walked. Built-ins such as `URL`, `Date`, `Buffer`, `Map`, `Set` and `Error` pass through unchanged unless a rule targets them directly.
 
 ---
 
