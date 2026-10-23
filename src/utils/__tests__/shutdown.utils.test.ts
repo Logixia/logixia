@@ -5,6 +5,8 @@
  * resetShutdownHandlers — with signal simulation and hook ordering.
  */
 
+import { constants as osConstants } from 'os';
+
 import {
   deregisterFromShutdown,
   flushOnExit,
@@ -139,14 +141,14 @@ describe('flushOnExit', () => {
     expect(logger.close).toHaveBeenCalledTimes(1);
   });
 
-  it('calls process.exit(0) after successful flush', async () => {
+  it('exits with 128 + signal number after a successful flush', async () => {
     const logger = makeFakeLogger();
     registerForShutdown(logger);
 
     flushOnExit({ timeout: 1000 });
     await emitSignal('SIGTERM');
 
-    expect(exitSpy).toHaveBeenCalledWith(0);
+    expect(exitSpy).toHaveBeenCalledWith(143);
   });
 
   it('calls beforeFlush hook before flushing loggers', async () => {
@@ -219,7 +221,7 @@ describe('flushOnExit', () => {
     await emitSignal('SIGINT');
 
     expect(logger.close).toHaveBeenCalledTimes(1);
-    expect(exitSpy).toHaveBeenCalledWith(0);
+    expect(exitSpy).toHaveBeenCalledWith(130);
   });
 
   it('responds to custom signals', async () => {
@@ -230,7 +232,7 @@ describe('flushOnExit', () => {
     await emitSignal('SIGUSR2');
 
     expect(logger.close).toHaveBeenCalledTimes(1);
-    expect(exitSpy).toHaveBeenCalledWith(0);
+    expect(exitSpy).toHaveBeenCalledWith(128 + osConstants.signals.SIGUSR2);
 
     process.removeAllListeners('SIGUSR2');
   });
@@ -254,8 +256,101 @@ describe('flushOnExit', () => {
 
     await emitSignal('SIGTERM');
     expect(logger.close).toHaveBeenCalledTimes(1);
+    // The app owns shutdown when it has its own handler
+    expect(exitSpy).not.toHaveBeenCalled();
 
     process.removeListener('SIGTERM', preExistingHandler);
+  });
+
+  it("exit: 'always' exits even when another listener exists", async () => {
+    const preExistingHandler = jest.fn();
+    process.on('SIGTERM', preExistingHandler);
+    flushOnExit({ timeout: 1000, exit: 'always' });
+
+    await emitSignal('SIGTERM');
+
+    expect(exitSpy).toHaveBeenCalledWith(143);
+    process.removeListener('SIGTERM', preExistingHandler);
+  });
+
+  it("exit: 'never' flushes but does not exit", async () => {
+    const logger = makeFakeLogger();
+    registerForShutdown(logger);
+    flushOnExit({ timeout: 1000, exit: 'never' });
+
+    await emitSignal('SIGTERM');
+
+    expect(logger.close).toHaveBeenCalledTimes(1);
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('can flush again on a later signal when it did not exit', async () => {
+    const logger = makeFakeLogger();
+    registerForShutdown(logger);
+    flushOnExit({ timeout: 1000, exit: 'never' });
+
+    await emitSignal('SIGTERM');
+    await emitSignal('SIGTERM');
+
+    expect(logger.close).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not arm the force-exit timer when the app owns the exit', async () => {
+    jest.useFakeTimers();
+    try {
+      const logger = makeFakeLogger(() => new Promise(() => {}));
+      registerForShutdown(logger);
+      process.on('SIGTERM', () => {});
+      flushOnExit({ timeout: 100 });
+
+      process.emit('SIGTERM', 'SIGTERM');
+      jest.advanceTimersByTime(500);
+
+      expect(exitSpy).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('warns when a later call passes conflicting options', () => {
+    const write = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    flushOnExit({ timeout: 1000 });
+    flushOnExit({ timeout: 9000, signals: ['SIGHUP'], exit: 'always' });
+
+    const message = write.mock.calls.map((c) => String(c[0])).join('');
+    write.mockRestore();
+    expect(message).toContain('ignoring conflicting options: timeout, exit, signals');
+  });
+
+  it('does not warn when a later call repeats the same options', () => {
+    const write = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    flushOnExit({ timeout: 1000, signals: ['SIGTERM', 'SIGINT'] });
+    flushOnExit({ timeout: 1000, signals: ['SIGINT', 'SIGTERM'] });
+    flushOnExit();
+
+    write.mockRestore();
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('flushes registered loggers once on beforeExit', async () => {
+    const logger = makeFakeLogger();
+    registerForShutdown(logger);
+    flushOnExit({ timeout: 1000 });
+
+    process.emit('beforeExit', 0);
+    process.emit('beforeExit', 0);
+    await new Promise((r) => setImmediate(r));
+
+    expect(logger.close).toHaveBeenCalledTimes(1);
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('removes the beforeExit listener on reset', () => {
+    const before = process.listenerCount('beforeExit');
+    flushOnExit({ timeout: 1000 });
+    expect(process.listenerCount('beforeExit')).toBe(before + 1);
+    resetShutdownHandlers();
+    expect(process.listenerCount('beforeExit')).toBe(before);
   });
 
   it('does not register its own handler twice across repeated flushOnExit calls', () => {
@@ -279,15 +374,15 @@ describe('flushOnExit', () => {
     // Both were attempted; healthy one completed
     expect(failing.close).toHaveBeenCalledTimes(1);
     expect(healthy.close).toHaveBeenCalledTimes(1);
-    // Exits 0 because Promise.allSettled absorbs rejections
-    expect(exitSpy).toHaveBeenCalledWith(0);
+    // Rejections are absorbed, so the signal exit code is still used
+    expect(exitSpy).toHaveBeenCalledWith(143);
   });
 
-  it('exits with 0 even if registry is empty', async () => {
+  it('still exits with the signal code if registry is empty', async () => {
     flushOnExit({ timeout: 1000 });
     await emitSignal('SIGTERM');
 
-    expect(exitSpy).toHaveBeenCalledWith(0);
+    expect(exitSpy).toHaveBeenCalledWith(143);
   });
 
   it('uses default 5000ms timeout when none is provided', () => {

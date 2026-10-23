@@ -1831,10 +1831,15 @@ const logger = createLogger({
     enabled: true,
     timeout: 10_000, // wait up to 10 s; force-exits after
     signals: ['SIGTERM', 'SIGINT', 'SIGHUP'],
+    exit: 'auto', // 'auto' | 'always' | 'never'
   },
   transports: {/* ... */},
 });
 ```
+
+**Who ends the process.** By default (`exit: 'auto'`) logixia flushes and then exits only if its handler is the only listener for that signal. If your app registers its own `SIGTERM` handler (`server.close()`, NestJS shutdown hooks, ...), logixia just flushes and leaves the exit to you, so your cleanup is never cut off. When logixia does exit it uses `128 + signal number` (143 for SIGTERM, 130 for SIGINT), so supervisors see a signal exit. Set `exit: 'always'` or `exit: 'never'` to override. Registered loggers are also flushed once on a normal exit (`beforeExit`).
+
+`flushOnExit` is configured by its first call; later calls with different `timeout`, `signals`, `exit` or hooks print a warning and are ignored.
 
 You can also call `flushOnExit` directly with lifecycle hooks:
 

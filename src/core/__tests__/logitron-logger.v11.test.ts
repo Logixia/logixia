@@ -473,7 +473,7 @@ describe('Feature 1 — Graceful shutdown via config', () => {
     await new Promise((r) => setImmediate(r));
 
     expect(closeSpy).toHaveBeenCalledTimes(1);
-    expect(exitSpy).toHaveBeenCalledWith(0);
+    expect(exitSpy).toHaveBeenCalledWith(143);
   });
 
   it('gracefulShutdown: false does not register the logger', async () => {

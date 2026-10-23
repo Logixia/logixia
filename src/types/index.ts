@@ -236,6 +236,12 @@ export interface GracefulShutdownConfig {
   timeout?: number;
   /** Signals to listen on. Default: ['SIGTERM', 'SIGINT'] */
   signals?: NodeJS.Signals[];
+  /**
+   * Whether logixia ends the process after flushing. Default: 'auto' — exit only
+   * when logixia is the sole listener for the signal; if the app has its own
+   * handler it flushes and leaves the exit to the app. Exits with 128 + signal number.
+   */
+  exit?: 'auto' | 'always' | 'never';
 }
 
 export interface LoggerConfig<TLevels extends Record<string, number> = Record<string, number>> {

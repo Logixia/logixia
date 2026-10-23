@@ -315,6 +315,7 @@ export class LogixiaLogger<
     flushOnExit({
       timeout: normalized.timeout ?? 5000,
       signals: normalized.signals ?? ['SIGTERM', 'SIGINT'],
+      ...(normalized.exit ? { exit: normalized.exit } : {}),
     });
   }
 
