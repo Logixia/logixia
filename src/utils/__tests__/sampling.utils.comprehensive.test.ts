@@ -293,9 +293,18 @@ describe('Sampler', () => {
       const s = new Sampler({ rate: 1.0, traceConsistent: true });
       s.shouldEmit('info', 'trace-1');
       s.resetStats();
-      // After reset, 'trace-1' is no longer in sampledTraces,
-      // so it gets re-evaluated — with rate=1.0 it should still emit
       expect(s.shouldEmit('info', 'trace-1')).toBe(true);
+      s.destroy();
+    });
+
+    it('keeps per-trace decisions across resetStats', () => {
+      const s = new Sampler({ rate: 0.5, traceConsistent: true });
+      const randomSpy = jest.spyOn(Math, 'random').mockReturnValueOnce(0.9);
+      expect(s.shouldEmit('info', 'trace-1')).toBe(false);
+      s.resetStats();
+      randomSpy.mockReturnValue(0.0);
+      expect(s.shouldEmit('info', 'trace-1')).toBe(false);
+      randomSpy.mockRestore();
       s.destroy();
     });
   });
@@ -303,34 +312,143 @@ describe('Sampler', () => {
   // ── bounded trace tracking (memory leak guard) ──────────────────────────────
 
   describe('traceConsistent — bounded memory', () => {
-    it('does not grow the sampled-trace set without limit when no stats timer resets it', () => {
-      // rate 1.0 → every unique trace is remembered as "sampled". Without a bound
-      // this Set would grow one entry per traceId forever (the leak). The cap
-      // clears it on overflow, so its size stays bounded.
+    type Internals = { traceDecisions: Map<string, unknown>; maxTrackedTraces: number };
+
+    it('never holds more than the cap and evicts the least recently used trace', () => {
       const s = new Sampler({ rate: 1.0, traceConsistent: true });
-      const internals = s as unknown as {
-        sampledTraces: Set<string>;
-        maxTrackedTraces: number;
-      };
+      const internals = s as unknown as Internals;
       const cap = internals.maxTrackedTraces;
 
       for (let i = 0; i < cap + 50; i += 1) {
         s.shouldEmit('info', `trace-${i}`);
       }
 
-      // Never exceeds the cap (it clears and refills rather than growing forever).
-      expect(internals.sampledTraces.size).toBeLessThanOrEqual(cap);
+      expect(internals.traceDecisions.size).toBe(cap);
+      expect(internals.traceDecisions.has('trace-0')).toBe(false);
+      expect(internals.traceDecisions.has(`trace-${cap + 49}`)).toBe(true);
       s.destroy();
     });
 
-    it('still emits correctly after a trace-set overflow clear', () => {
+    it('a recently used trace survives eviction', () => {
       const s = new Sampler({ rate: 1.0, traceConsistent: true });
-      const internals = s as unknown as { maxTrackedTraces: number };
-      for (let i = 0; i < internals.maxTrackedTraces + 10; i += 1) {
+      const internals = s as unknown as Internals;
+      const cap = internals.maxTrackedTraces;
+
+      s.shouldEmit('info', 'long-trace');
+      for (let i = 0; i < cap + 10; i += 1) {
         s.shouldEmit('info', `t-${i}`);
+        if (i % 1000 === 0) s.shouldEmit('info', 'long-trace');
       }
-      // A fresh trace after overflow still gets a correct (emit) decision.
-      expect(s.shouldEmit('info', 'fresh-trace')).toBe(true);
+
+      expect(internals.traceDecisions.has('long-trace')).toBe(true);
+      s.destroy();
+    });
+
+    it('re-decides a trace that has been idle past the TTL', () => {
+      const s = new Sampler({ rate: 0.5, traceConsistent: true });
+      const nowSpy = jest.spyOn(Date, 'now');
+      const t0 = 1_000_000;
+      nowSpy.mockReturnValue(t0);
+      const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.9);
+      expect(s.shouldEmit('info', 'trace-1')).toBe(false);
+
+      nowSpy.mockReturnValue(t0 + 60_000);
+      randomSpy.mockReturnValue(0.0);
+      expect(s.shouldEmit('info', 'trace-1')).toBe(false);
+
+      nowSpy.mockReturnValue(t0 + 60_000 + 6 * 60_000);
+      expect(s.shouldEmit('info', 'trace-1')).toBe(true);
+
+      nowSpy.mockRestore();
+      randomSpy.mockRestore();
+      s.destroy();
+    });
+  });
+
+  // ── rate cap with traceConsistent ─────────────────────────────────────────
+
+  describe('maxLogsPerSecond with traceConsistent', () => {
+    it('caps output even when every trace is sampled', () => {
+      const s = new Sampler({ rate: 1.0, maxLogsPerSecond: 5, traceConsistent: true });
+      let delivered = 0;
+      for (let i = 0; i < 1000; i += 1) {
+        if (s.shouldEmit('info', `trace-${i % 10}`)) delivered += 1;
+      }
+      expect(delivered).toBeLessThanOrEqual(6);
+      expect(delivered).toBeGreaterThanOrEqual(5);
+      expect(s.getStats().dropped).toBe(1000 - delivered);
+      s.destroy();
+    });
+
+    it('does not apply the cap to errors', () => {
+      const s = new Sampler({ maxLogsPerSecond: 1, traceConsistent: true });
+      for (let i = 0; i < 20; i += 1) {
+        expect(s.shouldEmit('error', 'trace-1')).toBe(true);
+      }
+      s.destroy();
+    });
+  });
+
+  describe('traceConsistent without a trace id', () => {
+    it('samples each log independently instead of all-or-nothing', () => {
+      const s = new Sampler({ rate: 0.5, traceConsistent: true });
+      let delivered = 0;
+      for (let i = 0; i < 1000; i += 1) {
+        if (s.shouldEmit('info')) delivered += 1;
+      }
+      expect(delivered).toBeGreaterThan(350);
+      expect(delivered).toBeLessThan(650);
+      s.destroy();
+    });
+  });
+
+  // ── adaptive window ───────────────────────────────────────────────────────
+
+  describe('adaptive window', () => {
+    it('detects an error burst and relaxes once the window slides past it', () => {
+      const nowSpy = jest.spyOn(Date, 'now');
+      let t = 5_000_000;
+      nowSpy.mockImplementation(() => t);
+      const s = new Sampler({
+        rate: 0.0,
+        adaptive: { windowMs: 1000, errorRateThreshold: 0.5, minSamples: 10, boostRate: 1.0 },
+      });
+
+      for (let i = 0; i < 20; i += 1) s.shouldEmit('error');
+      expect(s.isBoosting()).toBe(true);
+
+      t += 2000;
+      for (let i = 0; i < 20; i += 1) s.shouldEmit('info');
+      expect(s.isBoosting()).toBe(false);
+      nowSpy.mockRestore();
+      s.destroy();
+    });
+
+    it('compacts the window and keeps counts correct over many entries', () => {
+      const nowSpy = jest.spyOn(Date, 'now');
+      let t = 9_000_000;
+      nowSpy.mockImplementation(() => t);
+      const s = new Sampler({
+        rate: 1.0,
+        adaptive: { windowMs: 100, errorRateThreshold: 0.5, minSamples: 10 },
+      });
+      const internals = s as unknown as {
+        _adaptiveWindow: unknown[];
+        _adaptiveHead: number;
+        _adaptiveErrors: number;
+      };
+
+      for (let i = 0; i < 5000; i += 1) {
+        t += 1;
+        s.shouldEmit(i % 2 === 0 ? 'info' : 'error');
+      }
+
+      const live = internals._adaptiveWindow.length - internals._adaptiveHead;
+      expect(live).toBeLessThanOrEqual(101);
+      expect(internals._adaptiveWindow.length).toBeLessThan(2500);
+      expect(internals._adaptiveErrors).toBeGreaterThanOrEqual(live / 2 - 1);
+      expect(internals._adaptiveErrors).toBeLessThanOrEqual(live / 2 + 1);
+      nowSpy.mockRestore();
       s.destroy();
     });
   });

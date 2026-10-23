@@ -779,9 +779,7 @@ export class LogixiaLogger<
 
     // ── Feature 8: Sampling ───────────────────────────────────────────────────
     if (this._sampler) {
-      const traceId = this.config.traceId
-        ? (TraceContext.instance.getCurrentTraceId() ?? this.fallbackTraceId)
-        : undefined;
+      const traceId = this.config.traceId ? TraceContext.instance.getCurrentTraceId() : undefined;
       if (!this._sampler.shouldEmit(level, traceId)) return;
     }
 

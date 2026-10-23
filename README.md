@@ -1785,6 +1785,8 @@ const logger = createLogger({
 });
 ```
 
+`maxLogsPerSecond` is always enforced after the rate decision, including with `traceConsistent: true` (a kept trace can still lose entries once the cap is hit). With `traceConsistent`, a trace's keep/drop decision is remembered in a bounded LRU (100k traces, dropped after 5 minutes idle) and survives stats resets; logs written outside any trace are sampled one by one.
+
 ---
 
 ## Robust serialization
