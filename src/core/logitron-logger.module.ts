@@ -11,6 +11,7 @@ import type { RouteInfo } from '@nestjs/common/interfaces/middleware/middleware-
 import type { NextFunction, Request, Response } from 'express';
 
 import type { LoggerConfig, TraceIdConfig } from '../types';
+import { internalWarn } from '../utils/internal-log';
 import { TraceContext } from '../utils/trace.utils';
 import { KafkaTraceInterceptor } from './kafka-trace.interceptor';
 import { LogixiaLoggerService } from './logitron-nestjs.service';
@@ -81,9 +82,9 @@ export class LogixiaLoggerModule implements NestModule {
    */
   static _setGlobalLogger(service: LogixiaLoggerService): void {
     if (LogixiaLoggerModule._globalLogger !== null) {
-      process.stderr.write(
-        '[logixia] LogixiaLoggerModule.forRoot() was called more than once — ignoring the second init. ' +
-          'If this is intentional (e.g. in tests), call LogixiaLoggerModule._resetGlobalLogger() first.\n'
+      internalWarn(
+        'LogixiaLoggerModule.forRoot() was called more than once — ignoring the second init. ' +
+          'If this is intentional (e.g. in tests), call LogixiaLoggerModule._resetGlobalLogger() first.'
       );
       return;
     }

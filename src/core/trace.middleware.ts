@@ -7,6 +7,7 @@ import { Injectable, Optional } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
 
 import type { TraceIdConfig } from '../types';
+import { internalWarn } from '../utils/internal-log';
 import { DEFAULT_TRACE_HEADERS, extractTraceId, TraceContext } from '../utils/trace.utils';
 
 /** Default response header used to echo the resolved traceId back to the caller. */
@@ -99,8 +100,8 @@ export class TraceMiddleware implements NestMiddleware {
       if (typeof candidate === 'string' && candidate.trim().length > 0) {
         traceId = candidate;
       } else {
-        process.stderr.write(
-          '[logixia] TraceIdConfig.generator returned a non-string/empty value — using built-in generator.\n'
+        internalWarn(
+          'TraceIdConfig.generator returned a non-string/empty value — using built-in generator.'
         );
       }
     }
@@ -168,8 +169,8 @@ export function traceMiddleware(config?: TraceIdConfig) {
       if (typeof candidate === 'string' && candidate.trim().length > 0) {
         traceId = candidate;
       } else {
-        process.stderr.write(
-          '[logixia] TraceIdConfig.generator returned a non-string/empty value — using built-in generator.\n'
+        internalWarn(
+          'TraceIdConfig.generator returned a non-string/empty value — using built-in generator.'
         );
       }
     }

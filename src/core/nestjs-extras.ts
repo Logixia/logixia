@@ -38,6 +38,7 @@ import { Catch, Inject, Optional } from '@nestjs/common';
 import { ErrorResponseBuilder } from '../exceptions/builder';
 import { isLogixiaException } from '../exceptions/exception';
 import type { LoggerConfig, LogLevelString, TraceIdConfig } from '../types';
+import { internalError, internalWarn } from '../utils/internal-log';
 import { TraceContext } from '../utils/trace.utils';
 import {
   LOGIXIA_LOGGER_CONFIG,
@@ -129,7 +130,7 @@ export function LogMethod(options: LogMethodOptions = {}): MethodDecorator {
 
     // Surface logger failures on stderr instead of silently swallowing them.
     const reportLogFailure = (phase: string, err: unknown): void => {
-      process.stderr.write(`[logixia] @LogMethod(${label}) ${phase} log failed: ${String(err)}\n`);
+      internalError(`@LogMethod(${label}) ${phase} log failed: ${String(err)}`);
     };
 
     // Emit a log line fire-and-forget, routing transport failures to stderr.
@@ -167,9 +168,8 @@ export function LogMethod(options: LogMethodOptions = {}): MethodDecorator {
 
       if (!logger && !_warnedNoLogger) {
         _warnedNoLogger = true;
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[logixia] @LogMethod on ${label}: no logger available. ` +
+        internalWarn(
+          `@LogMethod on ${label}: no logger available. ` +
             `Either inject LogixiaLoggerService as this.logger or ensure LogixiaLoggerModule is initialised.`
         );
       }
@@ -322,9 +322,7 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
       // a `.catch()` to prevent unhandledRejection if a transport fails — and
       // fall back to stderr so the error is never silently swallowed.
       const onLogFailure = (err: unknown): void => {
-        process.stderr.write(
-          `[logixia] ExceptionFilter failed to write log entry: ${String(err)}\n`
-        );
+        internalError(`ExceptionFilter failed to write log entry: ${String(err)}`);
       };
 
       let logPromise: Promise<void> | void;
