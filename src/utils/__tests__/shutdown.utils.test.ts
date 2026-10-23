@@ -332,17 +332,47 @@ describe('flushOnExit', () => {
     expect(write).not.toHaveBeenCalled();
   });
 
-  it('flushes registered loggers once on beforeExit', async () => {
-    const logger = makeFakeLogger();
+  it('flushes without closing on beforeExit, and keeps working after repeated emits', async () => {
+    const logger = { ...makeFakeLogger(), flush: jest.fn(() => Promise.resolve()) };
+    registerForShutdown(logger);
+    flushOnExit({ timeout: 1000 });
+
+    process.emit('beforeExit', 0);
+    await new Promise((r) => setImmediate(r));
+    process.emit('beforeExit', 0);
+    await new Promise((r) => setImmediate(r));
+
+    expect(logger.flush).toHaveBeenCalledTimes(2);
+    expect(logger.close).not.toHaveBeenCalled();
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not start a second beforeExit flush while one is running', async () => {
+    let release!: () => void;
+    const logger = {
+      ...makeFakeLogger(),
+      flush: jest.fn(() => new Promise<void>((resolve) => (release = resolve))),
+    };
     registerForShutdown(logger);
     flushOnExit({ timeout: 1000 });
 
     process.emit('beforeExit', 0);
     process.emit('beforeExit', 0);
-    await new Promise((r) => setImmediate(r));
+    expect(logger.flush).toHaveBeenCalledTimes(1);
+    release();
+  });
 
-    expect(logger.close).toHaveBeenCalledTimes(1);
-    expect(exitSpy).not.toHaveBeenCalled();
+  it('stops flushing on beforeExit after a bounded number of cycles', async () => {
+    const logger = { ...makeFakeLogger(), flush: jest.fn(() => Promise.resolve()) };
+    registerForShutdown(logger);
+    flushOnExit({ timeout: 1000 });
+
+    for (let i = 0; i < 20; i += 1) {
+      process.emit('beforeExit', 0);
+      await new Promise((r) => setImmediate(r));
+    }
+
+    expect(logger.flush).toHaveBeenCalledTimes(5);
   });
 
   it('removes the beforeExit listener on reset', () => {

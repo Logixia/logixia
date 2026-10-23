@@ -45,9 +45,10 @@ describe('flushOnExit in a real process', () => {
     expect(result.code).toBe(143);
   });
 
-  it('flushes registered loggers on a normal exit', async () => {
+  it('flushes without closing registered loggers on a normal exit', async () => {
     const result = await run('natural-exit');
-    expect(result.stdout).toContain('logger-closed');
+    expect(result.stdout).toContain('logger-flushed');
+    expect(result.stdout).not.toContain('logger-closed');
     expect(result.code).toBe(0);
   });
 });

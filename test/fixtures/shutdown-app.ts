@@ -8,6 +8,10 @@ registerForShutdown({
     await new Promise((resolve) => setTimeout(resolve, 50));
     log('logger-closed');
   },
+  flush: async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    log('logger-flushed');
+  },
 });
 
 if (mode === 'own-handler') {

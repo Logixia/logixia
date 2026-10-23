@@ -31,7 +31,9 @@ export interface FlushOnExitOptions {
   exit?: ExitMode;
 }
 
-type Closeable = { close(): Promise<void> };
+type Closeable = { close(): Promise<void>; flush?(): Promise<void> };
+
+const MAX_BEFORE_EXIT_FLUSHES = 5;
 
 /** Module-level registry of all logger instances that have opted into graceful shutdown */
 const registry = new Set<Closeable>();
@@ -67,7 +69,7 @@ export function deregisterFromShutdown(logger: Closeable): void {
  * conflicting options print a warning. The process is ended with 128 + signal
  * number only when logixia's handler is the sole listener for that signal (see
  * `exit`); otherwise it just flushes and leaves shutdown to the application.
- * Loggers are also flushed once on `beforeExit`.
+ * Loggers are also flushed (not closed) on `beforeExit`.
  *
  * @example
  * ```ts
@@ -142,13 +144,20 @@ export function flushOnExit(options: FlushOnExitOptions = {}): void {
     process.on(signal, activeHandler);
   }
 
-  // Normal exit (event loop drained): flush once, best effort. The loop stays alive
-  // for the pending close() calls and `beforeExit` is not re-run.
-  let flushedOnBeforeExit = false;
+  // Normal exit (event loop drained): flush, never close, since beforeExit can fire
+  // again and the app may keep logging. Not re-entrant, and capped so a transport
+  // that schedules work on every flush cannot keep the process alive forever.
+  let beforeExitFlushes = 0;
+  let beforeExitFlushing = false;
   beforeExitHandler = () => {
-    if (flushedOnBeforeExit || shutdownInProgress) return;
-    flushedOnBeforeExit = true;
-    void Promise.allSettled([...registry].map((logger) => logger.close()));
+    if (beforeExitFlushing || shutdownInProgress || beforeExitFlushes >= MAX_BEFORE_EXIT_FLUSHES) {
+      return;
+    }
+    beforeExitFlushing = true;
+    beforeExitFlushes += 1;
+    void Promise.allSettled([...registry].map((logger) => logger.flush?.())).finally(() => {
+      beforeExitFlushing = false;
+    });
   };
   process.on('beforeExit', beforeExitHandler);
 }
