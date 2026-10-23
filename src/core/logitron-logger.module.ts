@@ -21,6 +21,7 @@ const DEFAULT_ROUTES: RouteInfo[] = [{ path: '*', method: RequestMethod.ALL }];
 
 // Constants for provider tokens
 export const LOGIXIA_LOGGER_CONFIG = 'LOGIXIA_LOGGER_CONFIG';
+export const LOGIXIA_TRACE_CONFIG = 'TRACE_CONFIG';
 export const LOGIXIA_LOGGER_PREFIX = 'LOGIXIA_LOGGER_';
 
 // Export the service and interceptors for external use
@@ -167,7 +168,7 @@ export class LogixiaLoggerModule implements NestModule {
           useValue: config || {},
         },
         {
-          provide: 'TRACE_CONFIG',
+          provide: LOGIXIA_TRACE_CONFIG,
           useValue: traceConfig,
         },
         {
@@ -207,15 +208,15 @@ export class LogixiaLoggerModule implements NestModule {
         },
         {
           provide: KafkaTraceInterceptor,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NestJS DI injects typed config
-          useFactory: (traceConfig: any) => new KafkaTraceInterceptor(traceConfig),
-          inject: ['TRACE_CONFIG'],
+          useFactory: (traceConfig: TraceIdConfig | undefined) =>
+            new KafkaTraceInterceptor(traceConfig),
+          inject: [LOGIXIA_TRACE_CONFIG],
         },
         {
           provide: WebSocketTraceInterceptor,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NestJS DI injects typed config
-          useFactory: (traceConfig: any) => new WebSocketTraceInterceptor(traceConfig),
-          inject: ['TRACE_CONFIG'],
+          useFactory: (traceConfig: TraceIdConfig | undefined) =>
+            new WebSocketTraceInterceptor(traceConfig),
+          inject: [LOGIXIA_TRACE_CONFIG],
         },
       ],
       exports: [
@@ -238,7 +239,7 @@ export class LogixiaLoggerModule implements NestModule {
       providers: [
         ...this.createAsyncProviders(options),
         {
-          provide: 'TRACE_CONFIG',
+          provide: LOGIXIA_TRACE_CONFIG,
           useFactory: (loggerConfig: Partial<LoggerConfig>) => {
             return typeof loggerConfig?.traceId === 'object'
               ? loggerConfig.traceId
@@ -285,15 +286,15 @@ export class LogixiaLoggerModule implements NestModule {
         },
         {
           provide: KafkaTraceInterceptor,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NestJS DI injects typed config
-          useFactory: (traceConfig: any) => new KafkaTraceInterceptor(traceConfig),
-          inject: ['TRACE_CONFIG'],
+          useFactory: (traceConfig: TraceIdConfig | undefined) =>
+            new KafkaTraceInterceptor(traceConfig),
+          inject: [LOGIXIA_TRACE_CONFIG],
         },
         {
           provide: WebSocketTraceInterceptor,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NestJS DI injects typed config
-          useFactory: (traceConfig: any) => new WebSocketTraceInterceptor(traceConfig),
-          inject: ['TRACE_CONFIG'],
+          useFactory: (traceConfig: TraceIdConfig | undefined) =>
+            new WebSocketTraceInterceptor(traceConfig),
+          inject: [LOGIXIA_TRACE_CONFIG],
         },
       ],
       exports: [
