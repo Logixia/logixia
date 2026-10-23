@@ -28,11 +28,16 @@
  */
 
 import * as crypto from 'node:crypto';
-import * as https from 'node:https';
 
 import type { IAsyncTransport, TransportLogEntry } from '../types/transport.types';
-import { internalError, internalWarn } from '../utils/internal-log';
+import { internalWarn } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
+import {
+  BatchBuffer,
+  DEFAULT_MAX_BUFFER_SIZE,
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  httpRequest,
+} from './batch-buffer';
 
 export interface CloudWatchTransportConfig {
   /** AWS region, e.g. `'us-east-1'`. Falls back to `AWS_REGION` env var. */
@@ -64,6 +69,10 @@ export interface CloudWatchTransportConfig {
    * @default false
    */
   emf?: boolean;
+  /** Abort a request that has not finished after this many ms. @default 10000 */
+  requestTimeoutMs?: number;
+  /** Max buffered events; the oldest are dropped past this. @default 10000 */
+  maxBufferSize?: number;
   /** Minimum log level to forward. */
   level?: string;
 }
@@ -82,7 +91,8 @@ export class CloudWatchTransport implements IAsyncTransport {
   public readonly flushInterval: number;
   public readonly level: string | undefined;
 
-  private batch: CwLogEvent[] = [];
+  private readonly buffer: BatchBuffer<CwLogEvent>;
+  private readonly requestTimeoutMs: number;
   private flushTimer: NodeJS.Timeout | null = null;
   private sequenceToken: string | undefined;
 
@@ -110,6 +120,13 @@ export class CloudWatchTransport implements IAsyncTransport {
     this.flushInterval = config.flushIntervalMs ?? 5000;
     this.emf = config.emf ?? false;
     this.level = config.level;
+    this.requestTimeoutMs = config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    this.buffer = new BatchBuffer<CwLogEvent>({
+      name: 'CloudWatchTransport',
+      batchSize: this.batchSize,
+      maxBufferSize: config.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE,
+      send: (events) => this.putLogEvents(events),
+    });
 
     this.flushTimer = setInterval(() => {
       this.flush().catch(() => {});
@@ -120,48 +137,25 @@ export class CloudWatchTransport implements IAsyncTransport {
   write(entry: TransportLogEntry): void {
     const timestamp = entry.timestamp ? new Date(entry.timestamp).getTime() : Date.now();
     const message = this.emf ? this.toEmf(entry) : stringifyForLog(entry);
-    this.batch.push({ timestamp, message });
-    if (this.batch.length >= this.batchSize) {
-      this.flush().catch(() => {});
-    }
+    this.buffer.push({ timestamp, message });
+    this.buffer.flushIfFull();
   }
 
-  async flush(): Promise<void> {
-    // Drain the WHOLE batch, not just one batchSize chunk — splice() detaches
-    // synchronously so concurrent writes are never sent twice, and looping means
-    // a flush during shutdown empties everything rather than leaving a tail.
-    while (this.batch.length > 0) {
-      const events = this.batch.splice(0, this.batchSize);
-      try {
-        await this.putLogEvents(events);
-      } catch (err) {
-        internalError('CloudWatchTransport flush error', err);
-        // Re-queue on failure at the front and stop so we don't hot-spin.
-        this.batch.unshift(...events);
-        return;
-      }
-    }
+  flush(): Promise<void> {
+    return this.buffer.flush();
   }
 
   /**
    * Flush remaining events and stop the interval timer on shutdown. Without this
    * the manager's close() skips the transport (close was undefined) and any
-   * buffered events were lost on deploy. Retries a bounded number of times so a
-   * transient CloudWatch outage does not drop logs.
+   * buffered events were lost on deploy. Waits for any in-flight send first.
    */
   async close(): Promise<void> {
     if (this.flushTimer) {
       clearInterval(this.flushTimer);
       this.flushTimer = null;
     }
-    for (let attempt = 0; attempt < 3 && this.batch.length > 0; attempt += 1) {
-      await this.flush();
-    }
-    if (this.batch.length > 0) {
-      internalError(
-        `CloudWatchTransport closing with ${this.batch.length} unflushed event(s) after 3 attempts`
-      );
-    }
+    await this.buffer.close();
   }
 
   private toEmf(entry: TransportLogEntry): string {
@@ -215,28 +209,19 @@ export class CloudWatchTransport implements IAsyncTransport {
       'X-Amz-Target': amzTarget,
     });
 
-    return new Promise<void>((resolve, reject) => {
-      const req = https.request({ host, path, method, headers }, (res) => {
-        let raw = '';
-        res.on('data', (c: Buffer) => (raw += c.toString()));
-        res.on('end', () => {
-          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-            try {
-              const parsed = JSON.parse(raw) as { nextSequenceToken?: string };
-              if (parsed.nextSequenceToken) this.sequenceToken = parsed.nextSequenceToken;
-            } catch {
-              /* ignore */
-            }
-            resolve();
-          } else {
-            reject(new Error(`CloudWatch PutLogEvents returned ${res.statusCode}: ${raw}`));
-          }
-        });
-      });
-      req.on('error', reject);
-      req.write(body);
-      req.end();
+    const res = await httpRequest({
+      url: new URL(`https://${host}${path}`),
+      headers,
+      body,
+      timeoutMs: this.requestTimeoutMs,
+      label: 'CloudWatch PutLogEvents',
     });
+    try {
+      const parsed = JSON.parse(res.body) as { nextSequenceToken?: string };
+      if (parsed.nextSequenceToken) this.sequenceToken = parsed.nextSequenceToken;
+    } catch {
+      /* ignore */
+    }
   }
 
   // ── AWS Signature Version 4 ─────────────────────────────────────────────────

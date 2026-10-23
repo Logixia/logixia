@@ -29,11 +29,15 @@
  * ```
  */
 
-import * as https from 'node:https';
-
 import type { IAsyncTransport, TransportLogEntry } from '../types/transport.types';
 import { internalError, internalWarn } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
+import {
+  BatchBuffer,
+  DEFAULT_MAX_BUFFER_SIZE,
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  httpRequest,
+} from './batch-buffer';
 
 /**
  * Azure AD tenant IDs are either a GUID or a verified domain (e.g. `contoso.onmicrosoft.com`).
@@ -61,6 +65,10 @@ export interface AzureMonitorTransportConfig {
   batchSize?: number;
   /** Flush interval in ms. @default 5000 */
   flushIntervalMs?: number;
+  /** Abort a request that has not finished after this many ms. @default 10000 */
+  requestTimeoutMs?: number;
+  /** Max buffered entries; the oldest are dropped past this. @default 10000 */
+  maxBufferSize?: number;
   level?: string;
 }
 
@@ -86,7 +94,8 @@ export class AzureMonitorTransport implements IAsyncTransport {
   public readonly flushInterval: number;
   public readonly level: string | undefined;
 
-  private batch: TransportLogEntry[] = [];
+  private readonly buffer: BatchBuffer<TransportLogEntry>;
+  private readonly requestTimeoutMs: number;
   private flushTimer: NodeJS.Timeout | null = null;
   private accessToken: string | null = null;
   private tokenExpiry = 0;
@@ -108,6 +117,13 @@ export class AzureMonitorTransport implements IAsyncTransport {
     this.batchSize = config.batchSize ?? 200;
     this.flushInterval = config.flushIntervalMs ?? 5000;
     this.level = config.level;
+    this.requestTimeoutMs = config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    this.buffer = new BatchBuffer<TransportLogEntry>({
+      name: 'AzureMonitorTransport',
+      batchSize: this.batchSize,
+      maxBufferSize: config.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE,
+      send: (entries) => this.sendEntries(entries),
+    });
 
     this.flushTimer = setInterval(() => {
       this.flush().catch(() => {});
@@ -116,47 +132,25 @@ export class AzureMonitorTransport implements IAsyncTransport {
   }
 
   write(entry: TransportLogEntry): void {
-    this.batch.push(entry);
-    if (this.batch.length >= this.batchSize) {
-      this.flush().catch(() => {});
-    }
+    this.buffer.push(entry);
+    this.buffer.flushIfFull();
   }
 
-  async flush(): Promise<void> {
-    // Drain the WHOLE batch, not just one batchSize chunk — splice() detaches
-    // synchronously so concurrent writes are never sent twice, and looping means
-    // a flush during shutdown empties everything rather than leaving a tail.
-    while (this.batch.length > 0) {
-      const entries = this.batch.splice(0, this.batchSize);
-      try {
-        await this.sendEntries(entries);
-      } catch (err) {
-        internalError('AzureMonitorTransport flush error', err);
-        this.batch.unshift(...entries);
-        return;
-      }
-    }
+  flush(): Promise<void> {
+    return this.buffer.flush();
   }
 
   /**
    * Flush remaining entries and stop the interval timer on shutdown. Without
    * this the manager's close() skipped the transport (close was undefined) and
-   * buffered entries were lost on deploy. Retries a bounded number of times so a
-   * transient outage does not drop logs.
+   * buffered entries were lost on deploy. Waits for any in-flight send first.
    */
   async close(): Promise<void> {
     if (this.flushTimer) {
       clearInterval(this.flushTimer);
       this.flushTimer = null;
     }
-    for (let attempt = 0; attempt < 3 && this.batch.length > 0; attempt += 1) {
-      await this.flush();
-    }
-    if (this.batch.length > 0) {
-      internalError(
-        `AzureMonitorTransport closing with ${this.batch.length} unflushed entr${this.batch.length === 1 ? 'y' : 'ies'} after 3 attempts`
-      );
-    }
+    await this.buffer.close();
   }
 
   private toAzureRecord(entry: TransportLogEntry): Record<string, unknown> {
@@ -196,48 +190,31 @@ export class AzureMonitorTransport implements IAsyncTransport {
       return null;
     }
 
-    return new Promise<string | null>((resolve, reject) => {
-      const reqUrl = new URL(
-        `https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/oauth2/v2.0/token`
-      );
-      const req = https.request(
-        {
-          hostname: reqUrl.hostname,
-          path: `${reqUrl.pathname}${reqUrl.search}`,
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Content-Length': Buffer.byteLength(body),
-          },
-        },
-        (res) => {
-          let raw = '';
-          res.on('data', (c: Buffer) => (raw += c.toString()));
-          res.on('end', () => {
-            try {
-              const parsed = JSON.parse(raw) as { access_token?: string; expires_in?: number };
-              if (parsed.access_token) {
-                this.accessToken = parsed.access_token;
-                this.tokenExpiry = Date.now() + (parsed.expires_in ?? 3600) * 1000 - 60_000;
-                resolve(this.accessToken);
-              } else {
-                resolve(null);
-              }
-            } catch {
-              resolve(null);
-            }
-          });
-        }
-      );
-      req.on('error', reject);
-      req.write(body);
-      req.end();
-    });
+    const reqUrl = new URL(
+      `https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/oauth2/v2.0/token`
+    );
+    try {
+      const res = await httpRequest({
+        url: reqUrl,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+        timeoutMs: this.requestTimeoutMs,
+        label: 'Azure token request',
+      });
+      const parsed = JSON.parse(res.body) as { access_token?: string; expires_in?: number };
+      if (!parsed.access_token) return null;
+      this.accessToken = parsed.access_token;
+      this.tokenExpiry = Date.now() + (parsed.expires_in ?? 3600) * 1000 - 60_000;
+      return this.accessToken;
+    } catch (err) {
+      internalError('AzureMonitorTransport token request failed', err);
+      return null;
+    }
   }
 
   private async sendEntries(entries: TransportLogEntry[]): Promise<void> {
     const token = await this.getAccessToken();
-    if (!token) return;
+    if (!token) throw new Error('AzureMonitorTransport: no access token available');
 
     const records = entries.map((e) => this.toAzureRecord(e));
     const body = stringifyForLog(records);
@@ -259,33 +236,12 @@ export class AzureMonitorTransport implements IAsyncTransport {
       return;
     }
 
-    return new Promise<void>((resolve, reject) => {
-      const req = https.request(
-        {
-          hostname: reqUrl.hostname,
-          path: `${reqUrl.pathname}${reqUrl.search}`,
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(body),
-          },
-        },
-        (res) => {
-          let raw = '';
-          res.on('data', (c: Buffer) => (raw += c.toString()));
-          res.on('end', () => {
-            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-              resolve();
-            } else {
-              reject(new Error(`Azure Monitor API returned ${res.statusCode}: ${raw}`));
-            }
-          });
-        }
-      );
-      req.on('error', reject);
-      req.write(body);
-      req.end();
+    await httpRequest({
+      url: reqUrl,
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body,
+      timeoutMs: this.requestTimeoutMs,
+      label: 'Azure Monitor API',
     });
   }
 }

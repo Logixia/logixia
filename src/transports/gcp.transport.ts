@@ -30,8 +30,14 @@
 import * as https from 'node:https';
 
 import type { IAsyncTransport, TransportLogEntry } from '../types/transport.types';
-import { internalError, internalWarn } from '../utils/internal-log';
+import { internalError } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
+import {
+  BatchBuffer,
+  DEFAULT_MAX_BUFFER_SIZE,
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  httpRequest,
+} from './batch-buffer';
 
 export interface GCPMonitoredResource {
   type: string;
@@ -60,6 +66,10 @@ export interface GCPTransportConfig {
   batchSize?: number;
   /** Flush interval in ms. @default 5000 */
   flushIntervalMs?: number;
+  /** Abort a request that has not finished after this many ms. @default 10000 */
+  requestTimeoutMs?: number;
+  /** Max buffered entries; the oldest are dropped past this. @default 10000 */
+  maxBufferSize?: number;
   level?: string;
 }
 
@@ -105,7 +115,8 @@ export class GCPTransport implements IAsyncTransport {
   public readonly flushInterval: number;
   public readonly level: string | undefined;
 
-  private batch: TransportLogEntry[] = [];
+  private readonly buffer: BatchBuffer<TransportLogEntry>;
+  private readonly requestTimeoutMs: number;
   private flushTimer: NodeJS.Timeout | null = null;
   private accessToken: string | null = null;
   private tokenExpiry = 0;
@@ -127,6 +138,13 @@ export class GCPTransport implements IAsyncTransport {
     this.batchSize = config.batchSize ?? 200;
     this.flushInterval = config.flushIntervalMs ?? 5000;
     this.level = config.level;
+    this.requestTimeoutMs = config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    this.buffer = new BatchBuffer<TransportLogEntry>({
+      name: 'GCPTransport',
+      batchSize: this.batchSize,
+      maxBufferSize: config.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE,
+      send: (entries) => this.writeEntries(entries),
+    });
 
     this.flushTimer = setInterval(() => {
       this.flush().catch(() => {});
@@ -135,47 +153,25 @@ export class GCPTransport implements IAsyncTransport {
   }
 
   write(entry: TransportLogEntry): void {
-    this.batch.push(entry);
-    if (this.batch.length >= this.batchSize) {
-      this.flush().catch(() => {});
-    }
+    this.buffer.push(entry);
+    this.buffer.flushIfFull();
   }
 
-  async flush(): Promise<void> {
-    // Drain the WHOLE batch, not just one batchSize chunk — splice() detaches
-    // synchronously so concurrent writes are never sent twice, and looping means
-    // a flush during shutdown empties everything rather than leaving a tail.
-    while (this.batch.length > 0) {
-      const entries = this.batch.splice(0, this.batchSize);
-      try {
-        await this.writeEntries(entries);
-      } catch (err) {
-        internalError('GCPTransport flush error', err);
-        this.batch.unshift(...entries);
-        return;
-      }
-    }
+  flush(): Promise<void> {
+    return this.buffer.flush();
   }
 
   /**
    * Flush remaining entries and stop the interval timer on shutdown. Without
    * this the manager's close() skipped the transport (close was undefined) and
-   * buffered entries were lost on deploy. Retries a bounded number of times so a
-   * transient outage does not drop logs.
+   * buffered entries were lost on deploy. Waits for any in-flight send first.
    */
   async close(): Promise<void> {
     if (this.flushTimer) {
       clearInterval(this.flushTimer);
       this.flushTimer = null;
     }
-    for (let attempt = 0; attempt < 3 && this.batch.length > 0; attempt += 1) {
-      await this.flush();
-    }
-    if (this.batch.length > 0) {
-      internalError(
-        `GCPTransport closing with ${this.batch.length} unflushed entr${this.batch.length === 1 ? 'y' : 'ies'} after 3 attempts`
-      );
-    }
+    await this.buffer.close();
   }
 
   private buildLogEntry(entry: TransportLogEntry): Record<string, unknown> {
@@ -303,41 +299,22 @@ export class GCPTransport implements IAsyncTransport {
     const jwt = `${signingInput}.${signature}`;
     const body = `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`;
 
-    return new Promise((resolve, reject) => {
-      const req = https.request(
-        {
-          hostname: 'oauth2.googleapis.com',
-          path: '/token',
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Content-Length': Buffer.byteLength(body),
-          },
-        },
-        (res) => {
-          let raw = '';
-          res.on('data', (c: Buffer) => (raw += c.toString()));
-          res.on('end', () => {
-            try {
-              const parsed = JSON.parse(raw) as { access_token?: string };
-              resolve(parsed.access_token ?? null);
-            } catch {
-              resolve(null);
-            }
-          });
-        }
-      );
-      req.on('error', reject);
-      req.write(body);
-      req.end();
-    });
+    return httpRequest({
+      url: new URL('https://oauth2.googleapis.com/token'),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+      timeoutMs: this.requestTimeoutMs,
+      label: 'GCP token request',
+    }).then(
+      (res) => (JSON.parse(res.body) as { access_token?: string }).access_token ?? null,
+      () => null
+    );
   }
 
   private async writeEntries(entries: TransportLogEntry[]): Promise<void> {
     const token = await this.getAccessToken();
     if (!token) {
-      internalWarn('GCPTransport: no access token available — dropping entries');
-      return;
+      throw new Error('GCPTransport: no access token available');
     }
 
     const body = stringifyForLog({
@@ -346,33 +323,12 @@ export class GCPTransport implements IAsyncTransport {
       entries: entries.map((e) => this.buildLogEntry(e)),
     });
 
-    return new Promise<void>((resolve, reject) => {
-      const req = https.request(
-        {
-          hostname: 'logging.googleapis.com',
-          path: '/v2/entries:write',
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(body),
-          },
-        },
-        (res) => {
-          let raw = '';
-          res.on('data', (c: Buffer) => (raw += c.toString()));
-          res.on('end', () => {
-            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-              resolve();
-            } else {
-              reject(new Error(`GCP Logging API returned ${res.statusCode}: ${raw}`));
-            }
-          });
-        }
-      );
-      req.on('error', reject);
-      req.write(body);
-      req.end();
+    await httpRequest({
+      url: new URL('https://logging.googleapis.com/v2/entries:write'),
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body,
+      timeoutMs: this.requestTimeoutMs,
+      label: 'GCP Logging API',
     });
   }
 }

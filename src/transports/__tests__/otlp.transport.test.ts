@@ -66,7 +66,14 @@ describe('OtlpLogTransport', () => {
       batchSize: 1000,
       flushIntervalMs: 999_999,
     });
-    t.write(entry(1, { level: 'error', message: 'boom', traceId: 'trace-1', data: { code: 42 } }));
+    t.write(
+      entry(1, {
+        level: 'error',
+        message: 'boom',
+        traceId: '123e4567-e89b-12d3-a456-426614174000',
+        data: { code: 42 },
+      })
+    );
     await t.flush();
 
     const p = lastPayload() as {
@@ -89,7 +96,7 @@ describe('OtlpLogTransport', () => {
     expect(rec.severityNumber).toBe(17); // error
     expect(rec.severityText).toBe('ERROR');
     expect((rec.body as { stringValue: string }).stringValue).toBe('boom');
-    expect(rec.traceId).toBe('trace-1');
+    expect(rec.traceId).toBe('123e4567e89b12d3a456426614174000');
     // data fields become attributes
     const attrs = rec.attributes as Array<{ key: string; value: { intValue?: number } }>;
     expect(attrs.find((a) => a.key === 'code')?.value.intValue).toBe(42);
