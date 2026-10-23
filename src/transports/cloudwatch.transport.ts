@@ -32,6 +32,7 @@ import * as https from 'node:https';
 
 import type { IAsyncTransport, TransportLogEntry } from '../types/transport.types';
 import { internalError, internalWarn } from '../utils/internal-log';
+import { stringifyForLog } from '../utils/safe-stringify';
 
 export interface CloudWatchTransportConfig {
   /** AWS region, e.g. `'us-east-1'`. Falls back to `AWS_REGION` env var. */
@@ -118,7 +119,7 @@ export class CloudWatchTransport implements IAsyncTransport {
 
   write(entry: TransportLogEntry): void {
     const timestamp = entry.timestamp ? new Date(entry.timestamp).getTime() : Date.now();
-    const message = this.emf ? this.toEmf(entry) : JSON.stringify(entry);
+    const message = this.emf ? this.toEmf(entry) : stringifyForLog(entry);
     this.batch.push({ timestamp, message });
     if (this.batch.length >= this.batchSize) {
       this.flush().catch(() => {});
@@ -169,7 +170,7 @@ export class CloudWatchTransport implements IAsyncTransport {
     for (const [k, v] of Object.entries(payload ?? {})) {
       if (typeof v === 'number') numericFields[k] = v;
     }
-    return JSON.stringify({
+    return stringifyForLog({
       _aws: {
         Timestamp: Date.now(),
         CloudWatchMetrics:
@@ -196,7 +197,7 @@ export class CloudWatchTransport implements IAsyncTransport {
       return;
     }
 
-    const body = JSON.stringify({
+    const body = stringifyForLog({
       logGroupName: this.logGroupName,
       logStreamName: this.logStreamName,
       logEvents: events,

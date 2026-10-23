@@ -110,3 +110,29 @@ describe('ConsoleTransport — stream routing', () => {
     expect(cap.err.join('')).toBe('');
   });
 });
+
+describe('ConsoleTransport — payloads JSON.stringify rejects', () => {
+  const awkward = (): Record<string, unknown> => {
+    const req: Record<string, unknown> = { id: 10n };
+    req.self = req;
+    return { req };
+  };
+
+  it('prints BigInt and circular data in JSON mode', async () => {
+    const cap = capture();
+    const t = new ConsoleTransport({ format: 'json', colorize: false });
+    t.write(makeEntry({ data: awkward() }));
+    cap.restore();
+
+    expect(JSON.parse(cap.out.join('')).req).toEqual({ id: '10', self: '[Circular]' });
+  });
+
+  it('prints BigInt and circular data in text mode', async () => {
+    const cap = capture();
+    const t = new ConsoleTransport({ colorize: false });
+    t.write(makeEntry({ data: awkward() }));
+    cap.restore();
+
+    expect(cap.out.join('')).toContain('{"req":{"id":"10","self":"[Circular]"}}');
+  });
+});

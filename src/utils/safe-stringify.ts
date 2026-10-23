@@ -67,10 +67,13 @@ export function safeStringify(value: unknown, options: SafeStringifyOptions = {}
     seen.add(val);
 
     let out: unknown;
+    const toJSON = (val as { toJSON?: unknown }).toJSON;
     if (Array.isArray(val)) {
       out = val.map((item) => transform(item));
-    } else if (val instanceof Date) {
-      out = val.toISOString();
+    } else if (typeof toJSON === 'function') {
+      // Dates, URLs, Buffers and classes with their own toJSON print the way
+      // JSON.stringify would; a toJSON that returns `this` hits the cycle check.
+      out = transform(toJSON.call(val));
     } else {
       const rec = val as Record<string, unknown>;
       const keys = deterministic ? Object.keys(rec).sort() : Object.keys(rec);
@@ -165,4 +168,23 @@ export function retrocycle<T>(root: T): T {
 
   walk(root);
   return root;
+}
+
+/**
+ * `JSON.stringify` for log output. Takes the plain fast path first and only
+ * falls back to {@link safeStringify} when that throws (a cycle, a BigInt, a
+ * throwing `toJSON`), so a bad payload costs nothing until it shows up.
+ * Never throws: if even the safe walk fails, the value is replaced by a marker.
+ */
+export function stringifyForLog(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    try {
+      return safeStringify(value);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      return JSON.stringify(`[Unserializable: ${reason}]`);
+    }
+  }
 }

@@ -1,5 +1,6 @@
 import type { MixpanelTransportConfig, TransportLogEntry } from '../types/transport.types';
 import { internalError } from '../utils/internal-log';
+import { stringifyForLog } from '../utils/safe-stringify';
 import type { AnalyticsEvent, AnalyticsUser } from './analytics.transport';
 import { AnalyticsTransport } from './analytics.transport';
 
@@ -24,9 +25,6 @@ export class MixpanelTransport extends AnalyticsTransport {
       if (!this.mixpanelConfig.token) {
         throw new Error('Mixpanel token is required');
       }
-
-      // Test connection with a simple request
-      await this.testConnection();
       this.isReady = true;
     } catch (error) {
       internalError('Mixpanel transport initialization failed', error);
@@ -99,7 +97,7 @@ export class MixpanelTransport extends AnalyticsTransport {
           'Content-Type': 'application/json',
           Accept: 'text/plain',
         },
-        body: JSON.stringify(data),
+        body: stringifyForLog(data),
       });
 
       if (!response.ok) {
@@ -115,21 +113,6 @@ export class MixpanelTransport extends AnalyticsTransport {
         cause: error,
       });
     }
-  }
-
-  private async testConnection(): Promise<void> {
-    // Send a test event to validate the connection
-    const testEvent = {
-      event: 'logitron_test',
-      properties: {
-        token: this.mixpanelConfig.token,
-        distinct_id: 'test_user',
-        test: true,
-        time: Date.now(),
-      },
-    };
-
-    await this.makeRequest('/track', [testEvent]);
   }
 
   private generateInsertId(entry: TransportLogEntry): string {

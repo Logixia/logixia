@@ -27,6 +27,7 @@
 
 import type { IAsyncTransport, TransportLogEntry } from '../types/transport.types';
 import { internalError, internalWarn } from '../utils/internal-log';
+import { stringifyForLog } from '../utils/safe-stringify';
 
 export interface OtlpLogTransportConfig {
   /** OTLP/HTTP logs endpoint, e.g. `http://localhost:4318/v1/logs`. */
@@ -87,7 +88,7 @@ function toAnyValue(value: unknown): Record<string, unknown> {
   // Objects/arrays → JSON string (kvlistValue would be richer but stringValue is
   // universally accepted and avoids deep recursion / circular issues here).
   try {
-    return { stringValue: JSON.stringify(value) };
+    return { stringValue: stringifyForLog(value) };
   } catch {
     return { stringValue: String(value) };
   }
@@ -169,7 +170,7 @@ export class OtlpLogTransport implements IAsyncTransport {
   }
 
   private buildPayload(entries: TransportLogEntry[]): string {
-    return JSON.stringify({
+    return stringifyForLog({
       resourceLogs: [
         {
           resource: { attributes: this.resourceAttrs },

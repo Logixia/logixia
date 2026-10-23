@@ -13,6 +13,7 @@ import type {
 } from '../types/transport.types';
 import { safeToString } from '../utils/coerce.utils';
 import { internalError, internalWarn } from '../utils/internal-log';
+import { stringifyForLog } from '../utils/safe-stringify';
 
 const appendFile = promisify(fs.appendFile);
 const rename = promisify(fs.rename);
@@ -276,7 +277,7 @@ export class FileTransport implements ITransport, IBatchTransport {
   private formatEntry(entry: TransportLogEntry): string {
     switch (this.config.format) {
       case 'json':
-        return JSON.stringify({
+        return stringifyForLog({
           timestamp: entry.timestamp.toISOString(),
           level: entry.level,
           message: entry.message,
@@ -291,14 +292,14 @@ export class FileTransport implements ITransport, IBatchTransport {
           `"${safeMessage.replace(/"/g, '""')}"`,
           safeToString(entry.context),
           safeToString(entry.traceId),
-          JSON.stringify(entry.data || {}),
+          stringifyForLog(entry.data || {}),
         ];
         return fields.join(',');
       }
 
       case 'text':
       default:
-        return `${entry.timestamp.toISOString()} [${entry.level.toUpperCase()}] ${safeToString(entry.message)}${entry.data ? ' ' + JSON.stringify(entry.data) : ''}`;
+        return `${entry.timestamp.toISOString()} [${entry.level.toUpperCase()}] ${safeToString(entry.message)}${entry.data ? ' ' + stringifyForLog(entry.data) : ''}`;
     }
   }
 

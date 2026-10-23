@@ -1,5 +1,6 @@
 import type { SegmentTransportConfig, TransportLogEntry } from '../types/transport.types';
 import { internalError } from '../utils/internal-log';
+import { stringifyForLog } from '../utils/safe-stringify';
 import type { AnalyticsUser } from './analytics.transport';
 import { AnalyticsTransport } from './analytics.transport';
 
@@ -32,9 +33,6 @@ export class SegmentTransport extends AnalyticsTransport {
       if (!this.segmentConfig.writeKey) {
         throw new Error('Segment Write Key is required');
       }
-
-      // Test connection
-      await this.testConnection();
       this.isReady = true;
     } catch (error) {
       internalError('Segment transport initialization failed', error);
@@ -138,7 +136,7 @@ export class SegmentTransport extends AnalyticsTransport {
           Authorization: `Basic ${auth}`,
           'User-Agent': 'logixia/1.0.0',
         },
-        body: JSON.stringify(data),
+        body: stringifyForLog(data),
       });
 
       if (!response.ok) {
@@ -152,29 +150,6 @@ export class SegmentTransport extends AnalyticsTransport {
         cause: error,
       });
     }
-  }
-
-  private async testConnection(): Promise<void> {
-    // Send a test track event
-    const testEvent = {
-      type: 'track',
-      event: 'Logixia Test',
-      userId: 'test-user',
-      anonymousId: this.generateAnonymousId(),
-      timestamp: new Date().toISOString(),
-      properties: {
-        test: true,
-        source: 'logixia',
-      },
-      context: {
-        library: {
-          name: 'logixia',
-          version: '1.0.0',
-        },
-      },
-    };
-
-    await this.makeRequest('/v1/track', testEvent);
   }
 
   private extractUserId(entry: TransportLogEntry): string | undefined {

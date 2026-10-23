@@ -4,6 +4,7 @@ import type {
   TransportLogEntry,
 } from '../types/transport.types';
 import { safeToString } from '../utils/coerce.utils';
+import { stringifyForLog } from '../utils/safe-stringify';
 
 /**
  * Writes log entries to stdout (info/debug/verbose) and stderr (error/warn).
@@ -76,7 +77,7 @@ export class ConsoleTransport implements ITransport {
     if (this.config.format === 'json') {
       // Compact (single-line) JSON so line-based log collectors can parse one
       // entry per line. JSON.stringify already escapes control chars.
-      return JSON.stringify({
+      return stringifyForLog({
         timestamp: this.config.timestamp !== false ? entry.timestamp.toISOString() : undefined,
         level: entry.level,
         message: entry.message,
@@ -121,7 +122,7 @@ export class ConsoleTransport implements ITransport {
     // Data — JSON.stringify already escapes control chars as \u001b, so the
     // JSON representation is safe to print without further sanitization.
     if (entry.data && Object.keys(entry.data).length > 0) {
-      const data = JSON.stringify(entry.data);
+      const data = stringifyForLog(entry.data);
       parts.push(this.colorize(data, 'blue'));
     }
 

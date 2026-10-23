@@ -181,12 +181,20 @@ export class TransportManager extends EventEmitter {
     }
 
     let pending: Promise<void>[] | undefined;
+    let syncFailure: { error: unknown } | undefined;
 
     for (const [id, transport] of this.transports) {
       if (!this.shouldTransportHandle(transport, transportEntry.level, id)) continue;
       if (transport.filter && !transport.filter(transportEntry)) continue;
 
-      const result = this.writeToTransport(id, transport, transportEntry);
+      let result: void | Promise<void>;
+      try {
+        result = this.writeToTransport(id, transport, transportEntry);
+      } catch (error) {
+        // Keep going: one transport throwing must not stop the entry reaching the rest.
+        syncFailure ??= { error };
+        continue;
+      }
       // Only collect genuinely-pending results. A synchronous transport returns
       // undefined → nothing to await.
       if (result && typeof (result as Promise<void>).then === 'function') {
@@ -195,6 +203,7 @@ export class TransportManager extends EventEmitter {
       }
     }
 
+    if (syncFailure) throw syncFailure.error;
     if (pending === undefined) return; // all transports were synchronous
 
     return Promise.allSettled(pending).then((results) => {

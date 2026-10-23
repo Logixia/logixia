@@ -1,5 +1,6 @@
 import type { DataDogTransportConfig, TransportLogEntry } from '../types/transport.types';
 import { internalError } from '../utils/internal-log';
+import { stringifyForLog } from '../utils/safe-stringify';
 import type { AnalyticsMetric } from './analytics.transport';
 import { AnalyticsTransport } from './analytics.transport';
 
@@ -34,9 +35,6 @@ export class DataDogTransport extends AnalyticsTransport {
       if (!this.datadogConfig.apiKey) {
         throw new Error('DataDog API key is required');
       }
-
-      // Test connection
-      await this.testConnection();
       this.isReady = true;
     } catch (error) {
       internalError('DataDog transport initialization failed', error);
@@ -227,7 +225,7 @@ export class DataDogTransport extends AnalyticsTransport {
           'Content-Type': 'application/json',
           'DD-API-KEY': this.datadogConfig.apiKey,
         },
-        body: JSON.stringify(data),
+        body: stringifyForLog(data),
       });
 
       if (!response.ok) {
@@ -250,7 +248,7 @@ export class DataDogTransport extends AnalyticsTransport {
           'Content-Type': 'application/json',
           'DD-API-KEY': this.datadogConfig.apiKey,
         },
-        body: JSON.stringify(data),
+        body: stringifyForLog(data),
       });
 
       if (!response.ok) {
@@ -261,23 +259,6 @@ export class DataDogTransport extends AnalyticsTransport {
         cause: error,
       });
     }
-  }
-
-  private async testConnection(): Promise<void> {
-    // Test with a simple metric
-    const testMetric = {
-      series: [
-        {
-          metric: 'logitron.test',
-          points: [[Math.floor(Date.now() / 1000), 1]],
-          type: 'count',
-          host: this.getHostname(),
-          tags: ['test:true'],
-        },
-      ],
-    };
-
-    await this.makeMetricsRequest('/api/v1/series', testMetric);
   }
 
   private generateSpanId(): string {
@@ -334,7 +315,7 @@ export class DataDogTransport extends AnalyticsTransport {
           'Content-Type': 'application/json',
           'DD-API-KEY': this.datadogConfig.apiKey,
         },
-        body: JSON.stringify(payload),
+        body: stringifyForLog(payload),
       });
 
       if (!response.ok) {

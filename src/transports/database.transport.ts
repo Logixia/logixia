@@ -5,6 +5,7 @@ import type {
   TransportLogEntry,
 } from '../types/transport.types';
 import { internalError } from '../utils/internal-log';
+import { stringifyForLog } from '../utils/safe-stringify';
 
 /**
  * Validates that a SQL identifier (table/index name) contains only safe characters.
@@ -306,7 +307,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       entry.timestamp,
       entry.level,
       entry.message,
-      JSON.stringify(entry.data || {}),
+      stringifyForLog(entry.data || {}),
       entry.context,
       entry.traceId,
       entry.appName,
@@ -335,7 +336,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       entry.timestamp,
       entry.level,
       entry.message,
-      JSON.stringify(entry.data || {}),
+      stringifyForLog(entry.data || {}),
       entry.context,
       entry.traceId,
       entry.appName,
@@ -365,7 +366,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
         entry.timestamp instanceof Date ? entry.timestamp.toISOString() : entry.timestamp,
         entry.level,
         entry.message,
-        JSON.stringify(entry.data || {}),
+        stringifyForLog(entry.data || {}),
         entry.context,
         entry.traceId,
         entry.appName,

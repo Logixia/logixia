@@ -99,3 +99,24 @@ describe('TransportManager', () => {
     expect(buffering.persisted).toEqual(['mgr-line-0']);
   });
 });
+
+describe('TransportManager — failing transport', () => {
+  it('still delivers to the transports after one that throws', async () => {
+    const manager = new TransportManager({});
+    manager.onError(() => {});
+    const received: string[] = [];
+    manager.addTransport(
+      {
+        name: 'boom',
+        write: () => {
+          throw new Error('boom');
+        },
+      },
+      'boom-0'
+    );
+    manager.addTransport({ name: 'rec', write: (e) => void received.push(e.message) }, 'rec-0');
+
+    expect(() => manager.write(makeLogEntry(1))).toThrow('boom');
+    expect(received).toEqual(['mgr-line-1']);
+  });
+});
