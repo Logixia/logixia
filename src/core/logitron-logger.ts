@@ -177,7 +177,7 @@ export class LogixiaLogger<
   private context?: string;
   private timers: Map<string, TimingEntry> = new Map();
   private contextData: ContextData = {};
-  private transportManager?: TransportManager;
+  private transportManager: TransportManager | undefined;
   private fieldState: Map<string, boolean> = new Map();
 
   /** Stable fallback trace ID generated ONCE per logger instance. */
@@ -206,11 +206,16 @@ export class LogixiaLogger<
   /** True when a redact config is present — short-circuits applyRedaction when false. */
   private _hasRedact = false;
   /** Sampling engine — only created when sampling config is present. */
-  private _sampler?: Sampler;
+  private _sampler: Sampler | undefined;
   /** Per-instance plugin registry — also inherits from the global registry at creation time. */
-  private readonly _pluginRegistry = new PluginRegistry();
+  private readonly _pluginRegistry: PluginRegistry;
+  /** Set on loggers created by child(); they borrow the root's transports, sampler and plugins. */
+  private readonly _parent: LogixiaLogger<TConfig> | undefined;
 
-  constructor(config: TConfig, context?: string) {
+  constructor(config: TConfig, context?: string, parent?: LogixiaLogger<TConfig>) {
+    this._parent = parent;
+    this._pluginRegistry = parent ? parent._pluginRegistry : new PluginRegistry();
+
     const defaultConfig: LoggerConfig = {
       appName: 'App',
       environment: 'development',
@@ -256,7 +261,10 @@ export class LogixiaLogger<
 
     this.context = context ?? '';
 
-    if (this.config.transports) {
+    if (parent) {
+      this.transportManager = parent.transportManager;
+      this._sampler = parent._sampler;
+    } else if (this.config.transports) {
       // Inject levelOptions.colors into the console transport config so
       // ConsoleTransport can colorize custom levels (e.g. kafka, mongo)
       // using the same colors the user configured on the logger.
@@ -271,7 +279,7 @@ export class LogixiaLogger<
     }
 
     // ── Feature 8: Log sampling ───────────────────────────────────────────────
-    if (this.config.sampling) {
+    if (!parent && this.config.sampling) {
       this._sampler = new Sampler(this.config.sampling, (stats) => {
         // Emit sampling stats as an INFO log via direct stdout to avoid recursion
         process.stdout.write(
@@ -285,15 +293,17 @@ export class LogixiaLogger<
     }
 
     // ── Feature 1: Graceful shutdown ─────────────────────────────────────────
-    this.setupGracefulShutdown();
+    if (!parent) this.setupGracefulShutdown();
 
     this.createCustomLevelMethods();
 
     // ── Feature 20: Seed with any plugins already in the global registry ─────
     // Plugins registered via usePlugin() before this logger was created are
     // automatically included in this instance's registry.
-    for (const p of (globalPluginRegistry as unknown as { _plugins: LogixiaPlugin[] })._plugins) {
-      this._pluginRegistry.register(p);
+    if (!parent) {
+      for (const p of (globalPluginRegistry as unknown as { _plugins: LogixiaPlugin[] })._plugins) {
+        this._pluginRegistry.register(p);
+      }
     }
 
     // ── Build hot-path caches after all config is finalised ──────────────────
@@ -701,7 +711,7 @@ export class LogixiaLogger<
   // ── Child logger ─────────────────────────────────────────────────────────────
 
   child(context: string, data?: Record<string, unknown>): ILogger {
-    const childLogger = new LogixiaLogger(this.config, context);
+    const childLogger = new LogixiaLogger(this.config, context, this);
     // Inherit the parent's bound fields plus any child-specific data. The
     // hot-path merge in log() is gated on _hasContextData, so it must be set
     // here or the merged fields are silently dropped from every log.
@@ -761,6 +771,8 @@ export class LogixiaLogger<
       });
     }
     this.timers.clear();
+
+    if (this._parent) return;
 
     if (this.transportManager) {
       await this.transportManager.close();
