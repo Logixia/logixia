@@ -54,6 +54,18 @@ export default defineConfig([
     sourcemap: true,
     target: 'node16',
     platform: 'node',
+    shims: true,
+    external: OPTIONAL_RUNTIME_DEPS,
+  },
+  // Worker thread entry loaded by WorkerTransport (dist/worker-entry.js).
+  {
+    entry: { 'worker-entry': 'src/transports/worker-entry.ts' },
+    outDir: 'dist',
+    format: ['cjs'],
+    dts: false,
+    clean: false,
+    target: 'node16',
+    platform: 'node',
     external: OPTIONAL_RUNTIME_DEPS,
   },
   // Browser / edge entry: must stay free of Node built-ins.

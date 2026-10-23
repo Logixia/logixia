@@ -96,6 +96,32 @@ try {
   } catch (err) {
     fail(`cli --help: ${err.message}`);
   }
+
+  for (const kind of ['require', 'import']) {
+    const body = `
+      const done = async (m) => {
+        const t = new m.WorkerTransport({ transportType: 'file', transportConfig: { filename: 'w.log', dirname: ${JSON.stringify(project)} } });
+        for (let i = 0; i < 5; i++) t.write({ timestamp: new Date(), level: 'info', message: 'm' + i, data: {} });
+        await t.close();
+      };`;
+    const code =
+      kind === 'require'
+        ? `${body} done(require('logixia/worker')).catch((e) => { console.error(e); process.exit(1); })`
+        : `${body} import('logixia/worker').then(done).catch((e) => { console.error(e); process.exit(1); })`;
+    try {
+      for (const f of fs.readdirSync(project))
+        if (f.endsWith('.log')) fs.rmSync(path.join(project, f));
+      run(process.execPath, ['-e', code], project);
+      const written = fs.readdirSync(project).filter((f) => f.endsWith('.log'));
+      const text = written.map((f) => fs.readFileSync(path.join(project, f), 'utf8')).join('');
+      const lines = ['m0', 'm1', 'm2', 'm3', 'm4'];
+      if (!lines.every((l) => text.includes(l)))
+        fail(`worker (${kind}): entries missing from log file (${written.join(',') || 'no file'})`);
+      else console.log(`ok   worker writes ${kind}`);
+    } catch (err) {
+      fail(`worker (${kind}): ${err.message}`);
+    }
+  }
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }

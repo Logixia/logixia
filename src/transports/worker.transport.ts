@@ -15,7 +15,7 @@
  *
  * @example
  * ```ts
- * import { WorkerTransport } from 'logixia';
+ * import { WorkerTransport } from 'logixia/worker';
  *
  * const logger = createLogger({
  *   transports: {
@@ -31,6 +31,7 @@
  * ```
  */
 
+import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 
 import type { ITransport, TransportLogEntry } from '../types/transport.types';
@@ -61,64 +62,6 @@ export interface WorkerTransportConfig {
    */
   level?: string;
 }
-
-/** Inline worker script — avoids a separate file on disk */
-const WORKER_SCRIPT = `
-const { parentPort, workerData } = require('node:worker_threads');
-const { transportType, transportConfig } = workerData;
-
-let transport;
-
-async function loadTransport() {
-  switch (transportType) {
-    case 'file': {
-      const { FileTransport } = await import('./file.transport.js');
-      transport = new FileTransport(transportConfig);
-      break;
-    }
-    case 'database': {
-      const { DatabaseTransport } = await import('./database.transport.js');
-      transport = new DatabaseTransport(transportConfig);
-      break;
-    }
-    case 'console':
-    default: {
-      const { ConsoleTransport } = await import('./console.transport.js');
-      transport = new ConsoleTransport(transportConfig);
-      break;
-    }
-  }
-}
-
-loadTransport().then(() => {
-  parentPort.postMessage({ type: 'ready' });
-}).catch((err) => {
-  parentPort.postMessage({ type: 'error', error: err.message });
-  process.exit(1);
-});
-
-parentPort.on('message', async (msg) => {
-  if (msg.type === 'write') {
-    try {
-      await transport.write(msg.entry);
-    } catch (err) {
-      parentPort.postMessage({ type: 'write-error', error: err.message, entry: msg.entry });
-    }
-  } else if (msg.type === 'flush') {
-    try {
-      if (typeof transport.flush === 'function') await transport.flush();
-      parentPort.postMessage({ type: 'flushed' });
-    } catch (err) {
-      parentPort.postMessage({ type: 'flush-error', error: err.message });
-    }
-  } else if (msg.type === 'shutdown') {
-    if (typeof transport.flush === 'function') {
-      try { await transport.flush(); } catch { /* ignore */ }
-    }
-    process.exit(0);
-  }
-});
-`.trim();
 
 /**
  * Transport that runs a wrapped transport inside a dedicated Node.js worker
@@ -156,8 +99,7 @@ export class WorkerTransport implements ITransport {
 
   private startWorker(): void {
     try {
-      this.worker = new Worker(WORKER_SCRIPT, {
-        eval: true,
+      this.worker = new Worker(this.workerFile(), {
         workerData: {
           transportType: this.config.transportType,
           transportConfig: this.config.transportConfig,
@@ -189,6 +131,11 @@ export class WorkerTransport implements ITransport {
     } catch (err) {
       internalError('WorkerTransport failed to start', err);
     }
+  }
+
+  /** The worker entry is always built as CommonJS, next to this module's output. */
+  protected workerFile(): string {
+    return path.join(__dirname, 'worker-entry.js');
   }
 
   private handleWorkerExit(): void {
@@ -281,10 +228,10 @@ export class WorkerTransport implements ITransport {
     const worker = this.worker;
     this.worker = null;
 
-    // First push any locally-buffered (pre-ready) entries to the worker so they
-    // are not lost, then ask it to flush+exit. The worker script flushes its own
-    // transport before exiting on the 'shutdown' message.
-    if (this.ready) this.drainBufferTo(worker);
+    // Push any locally-buffered (pre-ready) entries first: the worker's port
+    // queues them until its listener attaches, so they are handled before the
+    // shutdown message, which flushes the wrapped transport and exits.
+    this.drainBufferTo(worker);
     worker.postMessage({ type: 'shutdown' });
 
     await new Promise<void>((resolve) => {
