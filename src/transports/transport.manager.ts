@@ -1,5 +1,4 @@
 import { EventEmitter } from 'node:events';
-import * as readline from 'node:readline';
 
 import type { LogEntry } from '../types';
 import type {
@@ -30,7 +29,7 @@ export class TransportManager extends EventEmitter {
   private metrics: Map<string, TransportMetrics> = new Map();
   private isShuttingDown = false;
   private transportLevelPreferences: Map<string, string[]> = new Map(); // Store user preferences for transport levels
-  private promptForLevels: boolean = false; // Flag to enable/disable prompting
+  private warnedPromptDeprecated = false;
 
   constructor(config: TransportConfig = {}) {
     super();
@@ -175,11 +174,6 @@ export class TransportManager extends EventEmitter {
     if (entry.traceId !== undefined) transportEntry.traceId = entry.traceId;
     if (entry.environment !== undefined) transportEntry.environment = entry.environment;
 
-    // Prompting needs an async pre-step — only taken when explicitly enabled.
-    if (this.promptForLevels) {
-      return this._writeAsyncWithPrompt(transportEntry);
-    }
-
     let pending: Promise<void>[] | undefined;
     let syncFailure: { error: unknown } | undefined;
 
@@ -213,28 +207,6 @@ export class TransportManager extends EventEmitter {
         this.emit('error', new Error(`Transport write failures: ${errors.join(', ')}`), 'multiple');
       }
     });
-  }
-
-  /** Slow path used only when interactive level-prompting is enabled. */
-  private async _writeAsyncWithPrompt(transportEntry: TransportLogEntry): Promise<void> {
-    const writePromises: Promise<void>[] = [];
-    for (const [id, transport] of this.transports) {
-      if (!this.transportLevelPreferences.has(id)) {
-        await this.configureTransportLevels(id);
-      }
-      if (!this.shouldTransportHandle(transport, transportEntry.level, id)) continue;
-      if (transport.filter && !transport.filter(transportEntry)) continue;
-      const result = this.writeToTransport(id, transport, transportEntry);
-      if (result && typeof (result as Promise<void>).then === 'function') {
-        writePromises.push(result as Promise<void>);
-      }
-    }
-    const results = await Promise.allSettled(writePromises);
-    const failures = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
-    if (failures.length > 0) {
-      const errors = failures.map((f) => f.reason);
-      this.emit('error', new Error(`Transport write failures: ${errors.join(', ')}`), 'multiple');
-    }
   }
 
   private writeToTransport(
@@ -531,59 +503,23 @@ export class TransportManager extends EventEmitter {
   }
 
   // Transport Level Configuration Methods
+
+  /** @deprecated Library code never prompts on stdin. Use setTransportLevels(). No-op. */
   enableLevelPrompting(): void {
-    this.promptForLevels = true;
-    internalLog('Transport level prompting enabled');
+    this.warnPromptingRemoved();
   }
 
+  /** @deprecated Library code never prompts on stdin. No-op. */
   disableLevelPrompting(): void {
-    this.promptForLevels = false;
-    internalLog('Transport level prompting disabled');
+    this.warnPromptingRemoved();
   }
 
-  async promptUserForTransportLevels(transportId: string): Promise<string[]> {
-    const availableLevels = ['error', 'warn', 'info', 'debug', 'trace', 'verbose'];
-
-    return new Promise((resolve) => {
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
-
-      process.stdout.write(`\nConfigure log levels for transport '${transportId}'\n`);
-      process.stdout.write(`Available levels: ${availableLevels.join(', ')}\n`);
-      process.stdout.write(
-        'Enter levels separated by commas (e.g., error,warn,info) or "all" for all levels:\n'
-      );
-
-      rl.question('> ', (answer) => {
-        rl.close();
-
-        if (answer.toLowerCase().trim() === 'all') {
-          resolve(availableLevels);
-        } else {
-          const selectedLevels = answer
-            .split(',')
-            .map((level) => level.trim().toLowerCase())
-            .filter((level) => availableLevels.includes(level));
-
-          if (selectedLevels.length === 0) {
-            internalWarn('No valid levels selected, using all levels');
-            resolve(availableLevels);
-          } else {
-            internalLog(`Selected levels for ${transportId}: ${selectedLevels.join(', ')}`);
-            resolve(selectedLevels);
-          }
-        }
-      });
-    });
-  }
-
-  async configureTransportLevels(transportId: string): Promise<void> {
-    if (this.promptForLevels && !this.transportLevelPreferences.has(transportId)) {
-      const selectedLevels = await this.promptUserForTransportLevels(transportId);
-      this.transportLevelPreferences.set(transportId, selectedLevels);
-    }
+  private warnPromptingRemoved(): void {
+    if (this.warnedPromptDeprecated) return;
+    this.warnedPromptDeprecated = true;
+    internalWarn(
+      'Transport level prompting was removed: logixia never reads stdin. Use setTransportLevels(id, levels) instead.'
+    );
   }
 
   setTransportLevels(transportId: string, levels: string[]): void {

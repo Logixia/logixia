@@ -668,11 +668,13 @@ export class LogixiaLogger<
 
   // ── Transport level management ───────────────────────────────────────────────
 
+  /** @deprecated No-op. Library code never prompts on stdin; use setTransportLevels(). */
   enableTransportLevelPrompting(): void {
     if (this.transportManager) this.transportManager.enableLevelPrompting();
     else internalWarn('Transport manager not initialized');
   }
 
+  /** @deprecated No-op. */
   disableTransportLevelPrompting(): void {
     if (this.transportManager) this.transportManager.disableLevelPrompting();
     else internalWarn('Transport manager not initialized');
