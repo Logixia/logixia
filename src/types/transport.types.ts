@@ -56,6 +56,17 @@ export interface FileTransportConfig {
   batchSize?: number;
   flushInterval?: number;
   rotation?: RotationConfig;
+  /**
+   * Cap on entries held in memory that are not on disk yet, the batch being
+   * written included. Unset means no cap.
+   */
+  maxQueue?: number;
+  /**
+   * What to do when `maxQueue` is reached. `drop-oldest` discards the oldest
+   * waiting entry, `drop-newest` discards the incoming one, `block` makes
+   * `write()` wait for room. Default `drop-oldest`.
+   */
+  queuePolicy?: 'drop-oldest' | 'drop-newest' | 'block';
   filter?: (entry: TransportLogEntry) => boolean;
 }
 

@@ -28,6 +28,8 @@ interface FlushWaiter {
   error?: unknown;
 }
 
+const DROP_WARN_INTERVAL_MS = 5000;
+
 const SIZE_UNITS: Record<string, number> = {
   '': 1,
   k: 1024,
@@ -112,6 +114,12 @@ export class FileTransport implements ITransport, IBatchTransport {
   private enqueued = 0;
   private settled = 0;
   private flushWaiters: FlushWaiter[] = [];
+  private readonly maxQueue: number | undefined;
+  private readonly queuePolicy: 'drop-oldest' | 'drop-newest' | 'block';
+  private spaceWaiters: Array<() => void> = [];
+  private inFlight = 0;
+  private dropped = 0;
+  private lastDropWarning = 0;
   /** Gzip and pruning of rotated files run off the write path, one at a time. */
   private housekeeping: Promise<void> = Promise.resolve();
 
@@ -135,6 +143,15 @@ export class FileTransport implements ITransport, IBatchTransport {
         `FileTransport: maxSize ${JSON.stringify(rawMaxSize)} is not a valid size (try '50MB'); size rotation is off`
       );
     }
+    const maxQueue = config.maxQueue;
+    if (maxQueue !== undefined && !(Number.isInteger(maxQueue) && maxQueue > 0)) {
+      internalWarn(
+        `FileTransport: maxQueue ${String(maxQueue)} is not a positive integer; ignored`
+      );
+    } else {
+      this.maxQueue = maxQueue;
+    }
+    this.queuePolicy = config.queuePolicy ?? 'drop-oldest';
     this.maxFiles = rotation?.maxFiles ?? config.maxFiles;
     this.compress = rotation?.compress ?? config.zippedArchive ?? false;
     this.intervalMs = rotation?.interval ? this.parseInterval(rotation.interval) : undefined;
@@ -169,6 +186,7 @@ export class FileTransport implements ITransport, IBatchTransport {
 
   async write(entry: TransportLogEntry): Promise<void> {
     try {
+      while (this.queuePolicy === 'block' && this.queueFull()) await this.roomAvailable();
       if (this.config.batchSize && this.config.batchSize > 1) {
         this.addToBatch(entry);
       } else {
@@ -211,8 +229,52 @@ export class FileTransport implements ITransport, IBatchTransport {
   }
 
   private enqueue(entry: TransportLogEntry): void {
+    if (this.queueFull()) {
+      // Block waits in write(); a caller that got here anyway (addToBatch) has
+      // nowhere to wait, so it sheds the new entry. The batch being written
+      // can't be taken back, so with nothing waiting the new entry goes too.
+      if (this.queuePolicy === 'drop-oldest' && this.batch.length > 0) {
+        // Replacing in place keeps enqueued == settled + waiting, so flush()
+        // waiters never resolve before the entries they cover are written.
+        this.batch.shift();
+        this.batch.push(entry);
+      }
+      this.noteDropped();
+      return;
+    }
     this.batch.push(entry);
     this.enqueued += 1;
+  }
+
+  private queueFull(): boolean {
+    return this.maxQueue !== undefined && this.batch.length + this.inFlight >= this.maxQueue;
+  }
+
+  private roomAvailable(): Promise<void> {
+    const room = new Promise<void>((resolve) => this.spaceWaiters.push(resolve));
+    this.startDrain();
+    return room;
+  }
+
+  private releaseWaiters(): void {
+    const waiting = this.spaceWaiters;
+    this.spaceWaiters = [];
+    for (const resolve of waiting) resolve();
+  }
+
+  private noteDropped(): void {
+    this.dropped += 1;
+    this.reportDropped(DROP_WARN_INTERVAL_MS);
+  }
+
+  private reportDropped(minGapMs: number): void {
+    const now = Date.now();
+    if (this.dropped === 0 || now - this.lastDropWarning < minGapMs) return;
+    internalWarn(
+      `FileTransport: dropped ${this.dropped} log line${this.dropped === 1 ? '' : 's'} (queue full at maxQueue ${this.maxQueue}, policy ${this.queuePolicy})`
+    );
+    this.dropped = 0;
+    this.lastDropWarning = now;
   }
 
   private startDrain(): void {
@@ -245,14 +307,17 @@ export class FileTransport implements ITransport, IBatchTransport {
       // during the write land in a fresh array and are never re-written.
       const pending = this.batch;
       this.batch = [];
+      this.inFlight = pending.length;
       let failure: unknown;
       try {
         await this.writeBatch(pending);
       } catch (error) {
         failure = error;
       }
+      this.inFlight = 0;
       this.settled += pending.length;
       this.settle(failure);
+      this.releaseWaiters();
     }
   }
 
@@ -309,7 +374,8 @@ export class FileTransport implements ITransport, IBatchTransport {
     // While a drain is running it picks this entry up by itself. Starting a flush
     // per entry here used to park one pending promise per log call until traffic
     // paused, which under steady load grew the heap by ~600 bytes a line.
-    if (this.batch.length >= (this.config.batchSize || 100) && !this.draining) {
+    const threshold = Math.min(this.config.batchSize || 100, this.maxQueue ?? Infinity);
+    if (this.batch.length >= threshold && !this.draining) {
       // Cancel any pending interval flush — the threshold flush supersedes it, and
       // a leftover timer would fire a redundant flush after the batch is already gone.
       if (this.batchTimer) {
@@ -544,5 +610,6 @@ export class FileTransport implements ITransport, IBatchTransport {
     }
     await this.flush();
     await this.housekeeping;
+    this.reportDropped(0);
   }
 }
