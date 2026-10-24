@@ -198,7 +198,7 @@ function pathToRegExp(pattern: string): RegExp {
     regexStr += segment === '*' ? '[^.]+' : segment.replace(/[$()*+.?[\\\]^{|}]/g, '\\$&');
   }
 
-  return new RegExp(`^${regexStr}$`);
+  return new RegExp(`^${regexStr}$`, 'i');
 }
 
 /** Pre-compiled path matchers keyed by pattern string for perf */
@@ -221,71 +221,107 @@ function applyPatterns(value: string, patterns: readonly RegExp[], censor: strin
   return redacted;
 }
 
-function redactArrayItem(
-  item: unknown,
-  config: RedactConfig,
-  fullPath: string,
-  skipPatternScan: boolean
-): unknown {
-  if (isPlainObject(item)) {
-    return redactObject(item as Record<string, unknown>, config, fullPath);
-  }
-  const { patterns = [], censor = DEFAULT_CENSOR } = config;
-  if (!skipPatternScan && typeof item === 'string' && patterns.length > 0) {
-    return applyPatterns(item, patterns, censor);
-  }
-  return item;
+const CIRCULAR = '[Circular]';
+
+interface WalkState {
+  config: RedactConfig;
+  ancestors: Set<object>;
 }
 
-function redactField(value: unknown, config: RedactConfig, fullPath: string): unknown {
-  const { paths = [], excludePaths = [], patterns = [], censor = DEFAULT_CENSOR } = config;
+function joinPath(parent: string, key: string): string {
+  return parent ? `${parent}.${key}` : key;
+}
 
-  if (paths.some((p) => matchesPath(fullPath, p))) {
+function walkValue(value: unknown, state: WalkState, fullPath: string, bare: string): unknown {
+  const { paths = [], excludePaths = [], patterns = [], censor = DEFAULT_CENSOR } = state.config;
+
+  if (paths.some((p) => matchesPath(fullPath, p) || matchesPath(bare, p))) {
     return censor;
   }
 
-  if (isPlainObject(value)) {
-    return redactObject(value as Record<string, unknown>, config, fullPath);
-  }
-
-  const skipPatternScan = excludePaths.some((p) => matchesPath(fullPath, p));
-
-  if (!skipPatternScan && typeof value === 'string' && patterns.length > 0) {
+  if (typeof value === 'string') {
+    if (patterns.length === 0) return value;
+    if (excludePaths.some((p) => matchesPath(fullPath, p) || matchesPath(bare, p))) return value;
     return applyPatterns(value, patterns, censor);
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => redactArrayItem(item, config, fullPath, skipPatternScan));
+    return walkContainer(value, state, fullPath, bare, walkArray);
+  }
+
+  if (isPlainObject(value)) {
+    return walkContainer(value as object, state, fullPath, bare, walkRecord);
   }
 
   return value;
 }
 
+function walkContainer(
+  value: object,
+  state: WalkState,
+  fullPath: string,
+  bare: string,
+  walk: (value: never, state: WalkState, fullPath: string, bare: string) => unknown
+): unknown {
+  if (state.ancestors.has(value)) return CIRCULAR;
+  state.ancestors.add(value);
+  try {
+    return walk(value as never, state, fullPath, bare);
+  } finally {
+    state.ancestors.delete(value);
+  }
+}
+
 /**
- * Deep-clone and redact an object according to the given RedactConfig.
- * Non-objects are returned as-is (with pattern replacement on strings).
- *
- * The function is intentionally non-mutating — it returns a new object.
+ * Array elements are matched by their indexed path (`users.0.password`) and by
+ * the index-free path (`users.password`) that earlier versions used.
+ */
+function walkArray(arr: unknown[], state: WalkState, fullPath: string, bare: string): unknown[] {
+  let result: unknown[] | undefined;
+  for (const [i, item] of arr.entries()) {
+    const next = walkValue(item, state, joinPath(fullPath, String(i)), bare);
+    if (next !== item && !result) result = arr.slice(0, i);
+    if (result) result.push(next);
+  }
+  return result ?? arr;
+}
+
+function walkRecord(
+  obj: Record<string, unknown>,
+  state: WalkState,
+  fullPath: string,
+  bare: string
+): Record<string, unknown> {
+  let result: Record<string, unknown> | undefined;
+  const entries = Object.entries(obj);
+  for (const [index, [key, value]] of entries.entries()) {
+    // Prototype pollution guard: skip forbidden keys that could mutate
+    // Object.prototype when assigned via bracket notation on a literal object.
+    const forbidden = key === '__proto__' || key === 'constructor' || key === 'prototype';
+    const next = forbidden
+      ? undefined
+      : walkValue(value, state, joinPath(fullPath, key), joinPath(bare, key));
+    if ((forbidden || next !== value) && !result) {
+      result = Object.fromEntries(entries.slice(0, index));
+    }
+    if (result && !forbidden) result[key] = next;
+  }
+  return result ?? obj;
+}
+
+/**
+ * Redact an object according to the given RedactConfig and return a new
+ * top-level object. Subtrees with nothing to redact are shared with the input,
+ * never mutated. Circular references become `[Circular]`.
  */
 export function redactObject(
   obj: Record<string, unknown>,
   config: RedactConfig,
   _currentPath = ''
 ): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(obj)) {
-    // Prototype pollution guard: skip forbidden keys that could mutate
-    // Object.prototype when assigned via bracket notation on a literal object.
-    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
-      continue;
-    }
-    const fullPath = _currentPath ? `${_currentPath}.${key}` : key;
-
-    result[key] = redactField(value, config, fullPath);
-  }
-
-  return result;
+  const state: WalkState = { config, ancestors: new Set([obj]) };
+  const result = walkRecord(obj, state, _currentPath, _currentPath);
+  return result === obj ? { ...obj } : result;
 }
 
 /**
@@ -325,13 +361,24 @@ export function applyRedaction(
   return redactObject(payload, resolved);
 }
 
+const OPAQUE_BUILTINS: readonly (abstract new (...args: never[]) => object)[] = [
+  Date,
+  Error,
+  RegExp,
+  URL,
+  URLSearchParams,
+  ArrayBuffer,
+  DataView,
+  Map,
+  Set,
+  WeakMap,
+  WeakSet,
+  Promise,
+];
+
+/** Plain objects and class instances are walked; built-ins are left alone. */
 function isPlainObject(value: unknown): boolean {
-  return (
-    value !== null &&
-    typeof value === 'object' &&
-    !Array.isArray(value) &&
-    !(value instanceof Date) &&
-    !(value instanceof Error) &&
-    !(value instanceof RegExp)
-  );
+  if (value === null || typeof value !== 'object') return false;
+  if (ArrayBuffer.isView(value)) return false;
+  return !OPAQUE_BUILTINS.some((ctor) => value instanceof ctor);
 }
