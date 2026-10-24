@@ -26,8 +26,14 @@
  */
 
 import type { IAsyncTransport, TransportLogEntry } from '../types/transport.types';
-import { internalError, internalWarn } from '../utils/internal-log';
+import { internalWarn } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
+import {
+  BatchBuffer,
+  DEFAULT_MAX_BUFFER_SIZE,
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  HttpError,
+} from './batch-buffer';
 
 export interface OtlpLogTransportConfig {
   /** OTLP/HTTP logs endpoint, e.g. `http://localhost:4318/v1/logs`. */
@@ -46,7 +52,22 @@ export interface OtlpLogTransportConfig {
   batchSize?: number;
   /** Auto-flush interval (ms). Default: 5000. */
   flushIntervalMs?: number;
+  /** Abort a request that has not finished after this many ms. Default: 10000. */
+  requestTimeoutMs?: number;
+  /** Max buffered entries; the oldest are dropped past this. Default: 10000. */
+  maxBufferSize?: number;
   level?: string;
+}
+
+const HEX_32 = /^[0-9a-f]{32}$/;
+
+/**
+ * OTLP JSON wants a 32-char lowercase hex trace id. Dashed UUIDs are
+ * normalised; anything else (or all zeros) returns undefined.
+ */
+export function toOtlpTraceId(id: string): string | undefined {
+  const hex = id.replace(/-/g, '').toLowerCase();
+  return HEX_32.test(hex) && hex !== '0'.repeat(32) ? hex : undefined;
 }
 
 /**
@@ -107,9 +128,10 @@ export class OtlpLogTransport implements IAsyncTransport {
   private readonly headers: Record<string, string>;
   private readonly batchSize: number;
   private readonly flushIntervalMs: number;
+  private readonly requestTimeoutMs: number;
   private readonly resourceAttrs: Array<{ key: string; value: unknown }>;
 
-  private batch: TransportLogEntry[] = [];
+  private readonly buffer: BatchBuffer<TransportLogEntry>;
   private flushTimer: NodeJS.Timeout | null = null;
 
   constructor(config: OtlpLogTransportConfig) {
@@ -117,7 +139,14 @@ export class OtlpLogTransport implements IAsyncTransport {
     this.headers = config.headers ?? {};
     this.batchSize = config.batchSize ?? 100;
     this.flushIntervalMs = config.flushIntervalMs ?? 5000;
+    this.requestTimeoutMs = config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.level = config.level;
+    this.buffer = new BatchBuffer<TransportLogEntry>({
+      name: 'OtlpLogTransport',
+      batchSize: this.batchSize,
+      maxBufferSize: config.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE,
+      send: (entries) => this.send(entries),
+    });
 
     const resource: Record<string, unknown> = {
       'service.name': config.serviceName ?? 'logixia',
@@ -134,10 +163,8 @@ export class OtlpLogTransport implements IAsyncTransport {
   }
 
   write(entry: TransportLogEntry): void {
-    this.batch.push(entry);
-    if (this.batch.length >= this.batchSize) {
-      this.flush().catch(() => {});
-    }
+    this.buffer.push(entry);
+    this.buffer.flushIfFull();
   }
 
   /** Convert one entry into an OTLP LogRecord. */
@@ -159,11 +186,14 @@ export class OtlpLogTransport implements IAsyncTransport {
       attributes: toAttributes(attrs),
     };
 
-    // Trace correlation: OTel expects 32-hex traceId / 16-hex spanId. Pass the
-    // traceId through (collectors tolerate non-hex correlation ids via the
-    // attribute too, but the dedicated field enables native trace-log linking).
     if (entry.traceId) {
-      record['traceId'] = entry.traceId;
+      const traceId = toOtlpTraceId(entry.traceId);
+      if (traceId) record['traceId'] = traceId;
+      else
+        (record['attributes'] as unknown[]).push({
+          key: 'trace_id',
+          value: { stringValue: entry.traceId },
+        });
     }
 
     return record;
@@ -185,19 +215,8 @@ export class OtlpLogTransport implements IAsyncTransport {
     });
   }
 
-  async flush(): Promise<void> {
-    // Drain the WHOLE batch; splice() detaches synchronously so concurrent
-    // writes are never sent twice, and looping empties everything on shutdown.
-    while (this.batch.length > 0) {
-      const entries = this.batch.splice(0, this.batchSize);
-      try {
-        await this.send(entries);
-      } catch (err) {
-        internalError('OtlpLogTransport flush error', err);
-        this.batch.unshift(...entries);
-        return;
-      }
-    }
+  flush(): Promise<void> {
+    return this.buffer.flush();
   }
 
   private async send(entries: TransportLogEntry[]): Promise<void> {
@@ -205,13 +224,25 @@ export class OtlpLogTransport implements IAsyncTransport {
       internalWarn('OtlpLogTransport: global fetch unavailable — cannot export logs');
       return;
     }
-    const res = await fetch(this.url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...this.headers },
-      body: this.buildPayload(entries),
-    });
-    if (!res.ok) {
-      throw new Error(`OTLP export failed: HTTP ${res.status}`);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    try {
+      const res = await fetch(this.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...this.headers },
+        body: this.buildPayload(entries),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        throw new HttpError(res.status, '', 'OTLP export');
+      }
+    } catch (err) {
+      if (controller.signal.aborted) {
+        throw new Error(`OTLP export timed out after ${this.requestTimeoutMs}ms`, { cause: err });
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -220,11 +251,6 @@ export class OtlpLogTransport implements IAsyncTransport {
       clearInterval(this.flushTimer);
       this.flushTimer = null;
     }
-    for (let attempt = 0; attempt < 3 && this.batch.length > 0; attempt += 1) {
-      await this.flush();
-    }
-    if (this.batch.length > 0) {
-      internalError(`OtlpLogTransport closing with ${this.batch.length} undelivered record(s)`);
-    }
+    await this.buffer.close();
   }
 }

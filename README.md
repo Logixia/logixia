@@ -819,8 +819,7 @@ const logger = createLogger({
         region: 'us-east-1', // or set AWS_REGION env var
         logGroupName: '/app/api',
         logStreamName: 'api-server-1', // defaults to hostname + PID
-        // Credentials fall back to AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY env vars,
-        // or the EC2/ECS/Lambda metadata service — no hard-coding needed.
+        // Credentials: see "Credential sources" below — no hard-coding needed.
         batchSize: 100, // default: 100
         flushIntervalMs: 5000, // default: 5000
         emf: true, // emit numeric fields as CloudWatch Metrics
@@ -831,12 +830,24 @@ const logger = createLogger({
 });
 ```
 
-With `emf: true`, any numeric field in your log data is published as a CloudWatch Metric under the `Logixia` namespace:
+With `emf: true`, any numeric field in your log data is published as a CloudWatch Metric in the `Logixia` namespace (override with `emfNamespace`), with a `level` dimension:
 
 ```typescript
 await logger.info('Request completed', { duration: 142, statusCode: 200 });
-// → CloudWatch Metric: Logixia/duration, Logixia/statusCode
+// → CloudWatch Metrics in namespace "Logixia": duration, statusCode
 ```
+
+**Credential sources**, tried in this order (no SDK needed):
+
+1. `accessKeyId` / `secretAccessKey` / `sessionToken` in the transport config
+2. `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN`
+3. The shared credentials file: `~/.aws/credentials`, or `AWS_SHARED_CREDENTIALS_FILE`, using the `AWS_PROFILE` profile (default `default`)
+4. ECS container credentials: `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` or `AWS_CONTAINER_CREDENTIALS_FULL_URI` (with `AWS_CONTAINER_AUTHORIZATION_TOKEN` or `_FILE`)
+5. EC2 instance role through IMDSv2 (set `AWS_EC2_METADATA_DISABLED=true` to skip)
+
+Not supported: SSO, assume-role profiles, `credential_process`, web identity (EKS IRSA). If no source yields credentials, events stay buffered (and the buffer cap applies) rather than being dropped, and a warning is logged.
+
+The log group and stream are created on first use; an already-existing one is fine. The IAM role needs `logs:CreateLogGroup`, `logs:CreateLogStream` and `logs:PutLogEvents` (if the group and stream already exist, only `PutLogEvents` is required, and a failed `CreateLogGroup` is tolerated). Use `endpoint` to point at LocalStack or a VPC endpoint.
 
 ### Google Cloud Logging
 
