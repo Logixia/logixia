@@ -34,6 +34,11 @@ let activeSignals: NodeJS.Signals[] = [];
  * Register a logger instance so it is included in the graceful shutdown flush.
  * Called automatically when `gracefulShutdown: true` is set in logger config.
  */
+/** Test helper: number of loggers currently registered for graceful shutdown. */
+export function _shutdownRegistrySize(): number {
+  return registry.size;
+}
+
 export function registerForShutdown(logger: Closeable): void {
   registry.add(logger);
 }
