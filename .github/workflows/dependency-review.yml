@@ -19,7 +19,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # The action hard-fails when the repo's dependency graph is off
+      # (Settings -> Advanced Security -> Dependency graph). Skip with a
+      # warning instead, so every PR isn't red for a settings reason.
+      - name: Check the dependency graph is on
+        id: graph
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RANGE: ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}
+        run: |
+          if gh api "repos/${{ github.repository }}/dependency-graph/compare/$RANGE" --silent 2>/dev/null; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Dependency graph is off for this repository, so dependency review was skipped. Enable it under Settings -> Advanced Security -> Dependency graph."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Dependency Review
+        if: steps.graph.outputs.enabled == 'true'
         uses: actions/dependency-review-action@v5
         with:
           # Block PRs that introduce HIGH or CRITICAL vulnerabilities.
