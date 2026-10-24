@@ -1,6 +1,7 @@
 import type { SegmentTransportConfig, TransportLogEntry } from '../types/transport.types';
 import { internalError } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
+import { LOGIXIA_VERSION } from '../version';
 import type { AnalyticsUser } from './analytics.transport';
 import { AnalyticsTransport } from './analytics.transport';
 
@@ -84,7 +85,7 @@ export class SegmentTransport extends AnalyticsTransport {
       context: {
         library: {
           name: 'logixia',
-          version: '1.0.0',
+          version: LOGIXIA_VERSION,
         },
         app: {
           name: entry.appName || 'unknown',
@@ -134,7 +135,7 @@ export class SegmentTransport extends AnalyticsTransport {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Basic ${auth}`,
-          'User-Agent': 'logixia/1.0.0',
+          'User-Agent': `logixia/${LOGIXIA_VERSION}`,
         },
         body: stringifyForLog(data),
       });
@@ -193,8 +194,8 @@ export class SegmentTransport extends AnalyticsTransport {
       },
       context: {
         library: {
-          name: 'logitron',
-          version: '1.0.0',
+          name: 'logixia',
+          version: LOGIXIA_VERSION,
         },
       },
     };
@@ -215,8 +216,8 @@ export class SegmentTransport extends AnalyticsTransport {
       },
       context: {
         library: {
-          name: 'logitron',
-          version: '1.0.0',
+          name: 'logixia',
+          version: LOGIXIA_VERSION,
         },
         page: {
           url: properties.url || `/${name.toLowerCase().replace(/\s+/g, '-')}`,
@@ -239,8 +240,8 @@ export class SegmentTransport extends AnalyticsTransport {
       },
       context: {
         library: {
-          name: 'logitron',
-          version: '1.0.0',
+          name: 'logixia',
+          version: LOGIXIA_VERSION,
         },
         screen: {
           name,
@@ -265,8 +266,8 @@ export class SegmentTransport extends AnalyticsTransport {
       traits,
       context: {
         library: {
-          name: 'logitron',
-          version: '1.0.0',
+          name: 'logixia',
+          version: LOGIXIA_VERSION,
         },
       },
     };
@@ -282,8 +283,8 @@ export class SegmentTransport extends AnalyticsTransport {
       timestamp: new Date().toISOString(),
       context: {
         library: {
-          name: 'logitron',
-          version: '1.0.0',
+          name: 'logixia',
+          version: LOGIXIA_VERSION,
         },
       },
     };
@@ -305,8 +306,8 @@ export class SegmentTransport extends AnalyticsTransport {
       properties,
       context: {
         library: {
-          name: 'logitron',
-          version: '1.0.0',
+          name: 'logixia',
+          version: LOGIXIA_VERSION,
         },
       },
     };
@@ -334,8 +335,8 @@ export class SegmentTransport extends AnalyticsTransport {
       },
       context: {
         library: {
-          name: 'logitron',
-          version: '1.0.0',
+          name: 'logixia',
+          version: LOGIXIA_VERSION,
         },
       },
     };
@@ -352,8 +353,8 @@ export class SegmentTransport extends AnalyticsTransport {
       properties: product,
       context: {
         library: {
-          name: 'logitron',
-          version: '1.0.0',
+          name: 'logixia',
+          version: LOGIXIA_VERSION,
         },
       },
     };

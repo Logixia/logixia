@@ -139,11 +139,11 @@ export class DataDogTransport extends AnalyticsTransport {
       timestamp: entry.timestamp.toISOString(),
       level: this.mapLogLevel(entry.level),
       message: entry.message,
-      service: this.datadogConfig.service || 'logitron',
+      service: this.datadogConfig.service || 'logixia',
       version: this.datadogConfig.version,
       env: this.datadogConfig.env || 'production',
       logger: {
-        name: 'logitron',
+        name: 'logixia',
         thread_name: 'main',
       },
       ...transformed,
@@ -157,13 +157,15 @@ export class DataDogTransport extends AnalyticsTransport {
 
   private transformToDataDogMetric(entry: TransportLogEntry): Record<string, unknown> {
     return {
+      // TODO(v2): rename to logixia.logs.* — kept as logitron.logs.* so existing
+      // Datadog dashboards and monitors keep resolving. Maintainers decide when to break them.
       metric: `logitron.logs.${entry.level}`,
       points: [[Math.floor(entry.timestamp.getTime() / 1000), 1]],
       type: 'count',
       host: this.getHostname(),
       tags: [
         `level:${entry.level}`,
-        `service:${this.datadogConfig.service || 'logitron'}`,
+        `service:${this.datadogConfig.service || 'logixia'}`,
         `env:${this.datadogConfig.env || 'production'}`,
         ...(entry.context ? [`context:${entry.context}`] : []),
         ...(entry.appName ? [`app:${entry.appName}`] : []),
@@ -177,7 +179,7 @@ export class DataDogTransport extends AnalyticsTransport {
       span_id: this.generateSpanId(),
       parent_id: null,
       name: 'log.entry',
-      service: this.datadogConfig.service || 'logitron',
+      service: this.datadogConfig.service || 'logixia',
       resource: entry.message,
       type: 'log',
       start: entry.timestamp.getTime() * 1000000, // nanoseconds
@@ -299,11 +301,11 @@ export class DataDogTransport extends AnalyticsTransport {
       date_happened: Math.floor(Date.now() / 1000),
       priority: 'normal',
       tags: [
-        `service:${this.datadogConfig.service || 'logitron'}`,
+        `service:${this.datadogConfig.service || 'logixia'}`,
         `env:${this.datadogConfig.env || 'production'}`,
         ...tags,
       ],
-      source_type_name: 'logitron',
+      source_type_name: 'logixia',
     };
 
     const url = `${this.baseUrl}/api/v1/events`;
