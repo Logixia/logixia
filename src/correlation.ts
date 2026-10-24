@@ -110,6 +110,20 @@ export function generateCorrelationId(): string {
   return randomUUID();
 }
 
+const MAX_INCOMING_ID_LENGTH = 128;
+const VALID_INCOMING_ID = /^[A-Za-z0-9._:-]+$/;
+
+/**
+ * Return an incoming correlation ID only if it is short and made of safe
+ * characters. Anything else (over-long, empty, or containing newlines or other
+ * control characters) is dropped so the caller generates a fresh ID instead of
+ * writing client-supplied text into every log line.
+ */
+function validIncomingId(value: string | undefined): string | undefined {
+  if (value === undefined || value.length > MAX_INCOMING_ID_LENGTH) return undefined;
+  return VALID_INCOMING_ID.test(value) ? value : undefined;
+}
+
 // ── Context helpers ───────────────────────────────────────────────────────────
 
 /**
@@ -169,8 +183,9 @@ export function correlationMiddleware(options: CorrelationMiddlewareOptions = {}
   ): void {
     const headers = (req['headers'] ?? {}) as Record<string, string | undefined>;
 
-    const correlationId = headers[header] ?? generate();
-    const originService = headers[originServiceHeader];
+    // Node lower-cases incoming header names, so look up with lower-cased keys.
+    const correlationId = validIncomingId(headers[header.toLowerCase()]) ?? generate();
+    const originService = headers[originServiceHeader.toLowerCase()];
 
     if (setResponseHeader) {
       const setHeader = res['setHeader'] as ((name: string, value: string) => void) | undefined;
@@ -215,8 +230,9 @@ export function correlationFastifyHook(options: CorrelationMiddlewareOptions = {
   ): void {
     const headers = (request['headers'] ?? {}) as Record<string, string | undefined>;
 
-    const correlationId = headers[header] ?? generate();
-    const originService = headers[originServiceHeader];
+    // Node lower-cases incoming header names, so look up with lower-cased keys.
+    const correlationId = validIncomingId(headers[header.toLowerCase()]) ?? generate();
+    const originService = headers[originServiceHeader.toLowerCase()];
 
     if (setResponseHeader) {
       const replyHeader = reply['header'] as ((name: string, value: string) => void) | undefined;
@@ -349,8 +365,11 @@ export function childFromRequest<TLogger extends { child(ctx: Record<string, unk
   const correlationHeader = options.correlationHeader ?? 'x-correlation-id';
 
   const headers = (req['headers'] ?? {}) as Record<string, string | undefined>;
+  // Node lower-cases incoming header names, so look up with a lower-cased key.
   const correlationId =
-    headers[correlationHeader] ?? getCurrentCorrelationId() ?? generateCorrelationId();
+    validIncomingId(headers[correlationHeader.toLowerCase()]) ??
+    getCurrentCorrelationId() ??
+    generateCorrelationId();
 
   const method = req['method'] as string | undefined;
   const url = (req['url'] as string | undefined) ?? (req['originalUrl'] as string | undefined);
