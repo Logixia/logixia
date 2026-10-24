@@ -130,6 +130,9 @@ jobs:
             || (echo "dist/index.d.ts (or .d.mts) missing" && exit 1)
           echo "All dist artifacts present"
 
+      - name: Check package exports
+        run: npm run check:exports
+
       - name: Upload dist artifact
         uses: actions/upload-artifact@v6
         with:

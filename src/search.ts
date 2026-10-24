@@ -8,4 +8,4 @@
  * const results = await searcher.search({ query: 'payment failed', levels: ['error'] });
  */
 
-export * from './search';
+export * from './search/index';
