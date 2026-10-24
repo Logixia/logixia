@@ -10,6 +10,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import { internalWarn } from '../utils/internal-log';
 import { type AwsCredentials } from './aws-sigv4';
 import { httpRequest } from './batch-buffer';
 
@@ -84,11 +85,34 @@ function fromDocument(raw: string): AwsCredentials | undefined {
   };
 }
 
+const CONTAINER_HOSTS = new Set([
+  // eslint-disable-next-line sonarjs/no-hardcoded-ip -- fixed ECS credentials endpoint
+  '169.254.170.2',
+  // eslint-disable-next-line sonarjs/no-hardcoded-ip -- fixed EKS pod identity endpoint
+  '169.254.170.23',
+  '[fd00:ec2::23]',
+  'localhost',
+  '[::1]',
+]);
+
+/** Same rule as the AWS SDKs: never send the container token to an arbitrary http host. */
+function isAllowedContainerHost(url: URL): boolean {
+  if (url.protocol === 'https:') return true;
+  if (url.protocol !== 'http:') return false;
+  return CONTAINER_HOSTS.has(url.hostname) || /^127(?:\.\d{1,3}){3}$/.test(url.hostname);
+}
+
 async function fromContainer(): Promise<AwsCredentials | undefined> {
   const relative = process.env['AWS_CONTAINER_CREDENTIALS_RELATIVE_URI'];
   const full = process.env['AWS_CONTAINER_CREDENTIALS_FULL_URI'];
   if (!relative && !full) return undefined;
   const url = new URL(relative ? `http://169.254.170.2${relative}` : (full as string));
+  if (!relative && !isAllowedContainerHost(url)) {
+    internalWarn(
+      `ignoring AWS_CONTAINER_CREDENTIALS_FULL_URI: ${url.host} is not https or a loopback / ECS / EKS address`
+    );
+    return undefined;
+  }
   const headers: Record<string, string> = {};
   const tokenFile = process.env['AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE'];
   const token = tokenFile

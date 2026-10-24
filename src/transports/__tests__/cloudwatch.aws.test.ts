@@ -190,6 +190,25 @@ describe('AwsCredentialProvider', () => {
     }
   });
 
+  it('never sends the container token to a host outside the AWS allowlist', async () => {
+    let hits = 0;
+    const srv = await listen((_req, res) => {
+      hits += 1;
+      res.end('{}');
+    });
+    process.env['LOGIXIA_SILENT_INTERNAL'] = '1';
+    try {
+      // 0.0.0.0 reaches the local server but is not loopback/ECS/EKS by the AWS rule.
+      process.env['AWS_CONTAINER_CREDENTIALS_FULL_URI'] = srv.url.replace('127.0.0.1', '0.0.0.0');
+      process.env['AWS_CONTAINER_AUTHORIZATION_TOKEN'] = 'secret-token';
+      await expect(new AwsCredentialProvider({}).get()).rejects.toThrow(/no AWS credentials/);
+      expect(hits).toBe(0);
+    } finally {
+      delete process.env['LOGIXIA_SILENT_INTERNAL'];
+      await srv.close();
+    }
+  });
+
   it('reads EC2 instance metadata through IMDSv2', async () => {
     const seen: string[] = [];
     const srv = await listen((req, res) => {
