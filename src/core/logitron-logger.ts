@@ -325,6 +325,7 @@ export class LogixiaLogger<
     flushOnExit({
       timeout: normalized.timeout ?? 5000,
       signals: normalized.signals ?? ['SIGTERM', 'SIGINT'],
+      ...(normalized.exit ? { exit: normalized.exit } : {}),
     });
   }
 
@@ -793,9 +794,7 @@ export class LogixiaLogger<
 
     // ── Feature 8: Sampling ───────────────────────────────────────────────────
     if (this._sampler) {
-      const traceId = this.config.traceId
-        ? (TraceContext.instance.getCurrentTraceId() ?? this.fallbackTraceId)
-        : undefined;
+      const traceId = this.config.traceId ? TraceContext.instance.getCurrentTraceId() : undefined;
       if (!this._sampler.shouldEmit(level, traceId)) return;
     }
 

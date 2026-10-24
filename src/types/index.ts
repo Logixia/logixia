@@ -158,14 +158,17 @@ export interface SamplingConfig {
    */
   perLevel?: Partial<Record<string, number>>;
   /**
-   * Hard cap on logs emitted per second across all levels.
-   * Excess entries are silently dropped and counted in the sampling stats.
+   * Hard cap on logs emitted per second across all levels, applied after the
+   * rate / trace decision (so it also holds with `traceConsistent`). ERROR, WARN
+   * and FATAL are exempt. Excess entries are dropped and counted in the stats.
    * Default: unlimited.
    */
   maxLogsPerSecond?: number;
   /**
    * When true, all log entries sharing a traceId are either all kept or all
    * dropped — preventing a sampled trace from having missing log entries.
+   * Decisions are kept in a bounded LRU (100k traces, 5 min idle TTL) and
+   * survive stats resets. Logs with no active trace are sampled individually.
    * Default: false.
    */
   traceConsistent?: boolean;
@@ -233,6 +236,12 @@ export interface GracefulShutdownConfig {
   timeout?: number;
   /** Signals to listen on. Default: ['SIGTERM', 'SIGINT'] */
   signals?: NodeJS.Signals[];
+  /**
+   * Whether logixia ends the process after flushing. Default: 'auto' — exit only
+   * when logixia is the sole listener for the signal; if the app has its own
+   * handler it flushes and leaves the exit to the app. Exits with 128 + signal number.
+   */
+  exit?: 'auto' | 'always' | 'never';
 }
 
 export interface LoggerConfig<TLevels extends Record<string, number> = Record<string, number>> {

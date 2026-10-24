@@ -30,27 +30,25 @@ export interface SamplingStats {
 
 export class Sampler {
   private readonly config: SamplingConfig;
-  /** Trace IDs that have been sampled in this window → always emit. */
-  private readonly sampledTraces = new Set<string>();
-  /** Trace IDs that have been dropped in this window → always drop. */
-  private readonly droppedTraces = new Set<string>();
   /**
-   * Upper bound on tracked trace IDs. resetStats() only clears these Sets when a
-   * stats timer is running, so without an onStats callback they would otherwise
-   * grow unbounded for the life of the process (one entry per unique traceId) —
-   * a memory leak in any long-running service using traceConsistent sampling.
-   * When a Set hits this cap it is cleared; a re-seen trace simply gets a fresh
-   * sampling decision, which is acceptable for sampling consistency.
+   * Per-trace decisions in LRU order (Map preserves insertion order; a hit
+   * re-inserts the key). Survives resetStats() so a long trace is never
+   * re-decided mid-flight; bounded by size and by an idle TTL.
    */
+  private readonly traceDecisions = new Map<string, { emit: boolean; seenAt: number }>();
   private readonly maxTrackedTraces = 100_000;
+  private readonly traceTtlMs = 5 * 60_000;
 
   // Rate-limiting state
   private _tokenBucket = 0;
   private _lastRefillMs = Date.now();
 
   // Adaptive (anomaly-driven) sampling state — a sliding window of recent
-  // (timestamp, isError) samples used to compute the current error rate.
-  private readonly _adaptiveWindow: Array<{ t: number; err: boolean }> = [];
+  // (timestamp, isError) samples. `_adaptiveHead` marks the oldest live entry so
+  // eviction is O(1); the array is compacted once the dead prefix dominates.
+  private _adaptiveWindow: Array<{ t: number; err: boolean }> = [];
+  private _adaptiveHead = 0;
+  private _adaptiveErrors = 0;
 
   // Stats
   private _stats: SamplingStats = {
@@ -101,36 +99,17 @@ export class Sampler {
       return true;
     }
 
-    // ── 2. Trace-consistent sampling ──────────────────────────────────────────
-    if (this.config.traceConsistent && traceId) {
-      if (this.sampledTraces.has(traceId)) {
-        this._trackEmitted(lvl);
-        return true;
-      }
-      if (this.droppedTraces.has(traceId)) {
-        this._trackDropped(lvl);
-        return false;
-      }
-      // First time we see this traceId — make the sampling decision now
-      const emit = this._sampleByRate(lvl);
-      if (emit) {
-        this._rememberTrace(this.sampledTraces, traceId);
-      } else {
-        this._rememberTrace(this.droppedTraces, traceId);
-      }
-      if (emit) this._trackEmitted(lvl);
-      else this._trackDropped(lvl);
-      return emit;
-    }
-
-    // ── 3. Rate-based sampling ─────────────────────────────────────────────────
-    const emit = this._sampleByRate(lvl);
+    // ── 2. Rate-based decision (cached per trace when traceConsistent) ────────
+    const emit =
+      this.config.traceConsistent && traceId
+        ? this._decideForTrace(traceId, lvl)
+        : this._sampleByRate(lvl);
     if (!emit) {
       this._trackDropped(lvl);
       return false;
     }
 
-    // ── 4. Hard cap (token bucket) ────────────────────────────────────────────
+    // ── 3. Hard cap (token bucket) — applies to every kept entry ──────────────
     if (this.config.maxLogsPerSecond && this.config.maxLogsPerSecond > 0) {
       if (!this._consumeToken()) {
         this._trackDropped(lvl);
@@ -154,9 +133,6 @@ export class Sampler {
       byLevel: {},
       windowStart: Date.now(),
     };
-    // Clear trace sets so long-running processes don't accumulate unbounded memory
-    this.sampledTraces.clear();
-    this.droppedTraces.clear();
   }
 
   destroy(): void {
@@ -179,17 +155,23 @@ export class Sampler {
     return Math.random() < rate;
   }
 
-  /**
-   * Record one evaluated sample into the adaptive sliding window and evict
-   * entries older than the window. Cheap O(evicted) amortized.
-   */
+  /** Record one evaluated sample and evict entries older than the window. O(1) amortized. */
   private _recordAdaptiveSample(level: string): void {
     const now = Date.now();
     const windowMs = this.config.adaptive?.windowMs ?? 10_000;
-    this._adaptiveWindow.push({ t: now, err: level === 'error' || level === 'fatal' });
+    const err = level === 'error' || level === 'fatal';
+    this._adaptiveWindow.push({ t: now, err });
+    if (err) this._adaptiveErrors += 1;
+
     const cutoff = now - windowMs;
-    while (this._adaptiveWindow.length > 0 && this._adaptiveWindow[0]!.t < cutoff) {
-      this._adaptiveWindow.shift();
+    const win = this._adaptiveWindow;
+    while (this._adaptiveHead < win.length && win[this._adaptiveHead]!.t < cutoff) {
+      if (win[this._adaptiveHead]!.err) this._adaptiveErrors -= 1;
+      this._adaptiveHead += 1;
+    }
+    if (this._adaptiveHead >= 1024 && this._adaptiveHead * 2 >= win.length) {
+      this._adaptiveWindow = win.slice(this._adaptiveHead);
+      this._adaptiveHead = 0;
     }
   }
 
@@ -202,12 +184,10 @@ export class Sampler {
     const cfg = this.config.adaptive;
     if (!cfg) return 0;
     const minSamples = cfg.minSamples ?? 20;
-    const total = this._adaptiveWindow.length;
+    const total = this._adaptiveWindow.length - this._adaptiveHead;
     if (total < minSamples) return 0;
 
-    let errors = 0;
-    for (const s of this._adaptiveWindow) if (s.err) errors += 1;
-    const errorRate = errors / total;
+    const errorRate = this._adaptiveErrors / total;
     const threshold = cfg.errorRateThreshold ?? 0.05;
     return errorRate >= threshold ? (cfg.boostRate ?? 1.0) : 0;
   }
@@ -218,16 +198,28 @@ export class Sampler {
   }
 
   /**
-   * Record a trace decision, bounding the Set so it can't grow without limit.
-   * If the Set has reached the cap, clear it before inserting — stale decisions
-   * are simply re-made on next sight, which keeps memory bounded at the cost of
-   * occasional re-sampling for very high-cardinality trace workloads.
+   * Return the cached decision for a trace, or make and cache a new one. Entries
+   * idle past the TTL are re-decided; the least recently used entry is evicted
+   * once the cap is reached.
    */
-  private _rememberTrace(set: Set<string>, traceId: string): void {
-    if (set.size >= this.maxTrackedTraces) {
-      set.clear();
+  private _decideForTrace(traceId: string, level: string): boolean {
+    const now = Date.now();
+    const known = this.traceDecisions.get(traceId);
+    if (known && now - known.seenAt <= this.traceTtlMs) {
+      this.traceDecisions.delete(traceId);
+      known.seenAt = now;
+      this.traceDecisions.set(traceId, known);
+      return known.emit;
     }
-    set.add(traceId);
+
+    const emit = this._sampleByRate(level);
+    this.traceDecisions.delete(traceId);
+    this.traceDecisions.set(traceId, { emit, seenAt: now });
+    if (this.traceDecisions.size > this.maxTrackedTraces) {
+      const oldest = this.traceDecisions.keys().next().value;
+      if (oldest !== undefined) this.traceDecisions.delete(oldest);
+    }
+    return emit;
   }
 
   private _consumeToken(): boolean {
