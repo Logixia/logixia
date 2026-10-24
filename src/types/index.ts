@@ -309,7 +309,9 @@ export interface IBaseLogger {
   resetFieldState(): void;
 
   // Transport Level Management Methods
+  /** @deprecated No-op. Library code never prompts on stdin; use setTransportLevels(). */
   enableTransportLevelPrompting(): void;
+  /** @deprecated No-op. */
   disableTransportLevelPrompting(): void;
   setTransportLevels(transportId: string, levels: string[]): void;
   getTransportLevels(transportId: string): string[] | undefined;

@@ -123,3 +123,15 @@ describe('AnalyticsTransport — batch flush', () => {
     expect(new Set(transport.sent).size).toBe(10);
   });
 });
+
+describe('AnalyticsTransport — flush timer', () => {
+  it('does not keep the process alive', async () => {
+    const transport = new TestAnalyticsTransport({ batchSize: 50, flushInterval: 60000 });
+    await transport.write(makeEntry(0));
+
+    const timer = (transport as unknown as { batchTimer?: NodeJS.Timeout }).batchTimer;
+    expect(timer).toBeDefined();
+    expect(timer?.hasRef()).toBe(false);
+    await transport.close();
+  });
+});

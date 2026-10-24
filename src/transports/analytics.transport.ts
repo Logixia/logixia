@@ -67,6 +67,7 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
           internalError(`${this.name} interval flush failed`, err)
         );
       }, this.config.flushInterval);
+      this.batchTimer.unref?.();
     }
   }
 

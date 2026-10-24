@@ -534,6 +534,18 @@ const logger = createLogger({
 
 The live file keeps its name, so `tail -f logs/app.log` keeps working. Rotated files are renamed beside it: `app-2026-10-22T09-30-00-000.log.gz`, or `app-2026-10-22.log.gz` when `datePattern` is set. Files are split on line boundaries, so no line is cut in half. On restart the transport carries on from the size of the existing `app.log`.
 
+**Bounding memory under load.** Entries wait in memory until the disk accepts them, and by default there is no limit. Set `maxQueue` to cap how many unwritten entries (the batch being written included) the transport holds, and `queuePolicy` to choose what happens at the cap:
+
+```typescript
+file: {
+  filename: 'app.log',
+  maxQueue: 10000,
+  queuePolicy: 'drop-oldest', // 'drop-oldest' (default) | 'drop-newest' | 'block'
+}
+```
+
+`drop-oldest` discards the oldest waiting entry, `drop-newest` discards the incoming one, and `block` makes `write()` wait until there is room. Dropped lines are counted and reported on stderr at most once every 5 seconds, and once more on `close()`.
+
 You can also use **time-based rotation** via the `rotation` sub-key:
 
 ```typescript
@@ -2561,6 +2573,8 @@ interface LoggerConfig {
           level?: string;
           batchSize?: number;
           flushInterval?: number; // ms
+          maxQueue?: number; // cap on unwritten entries held in memory. Default: no cap
+          queuePolicy?: 'drop-oldest' | 'drop-newest' | 'block'; // Default: 'drop-oldest'
           rotation?: {
             interval?: '1h' | '6h' | '12h' | '1d' | '1w' | '1m' | '1y';
             maxSize?: string | number;

@@ -11,6 +11,19 @@ import { stringifyForLog } from '../utils/safe-stringify';
  * Validates that a SQL identifier (table/index name) contains only safe characters.
  * Prevents SQL injection via user-supplied table names.
  */
+const POSTGRES_MAX_PARAMS = 65535;
+const POSTGRES_COLUMNS = 8;
+const POSTGRES_ROWS_PER_INSERT = Math.floor(POSTGRES_MAX_PARAMS / POSTGRES_COLUMNS);
+const MYSQL_ROWS_PER_INSERT = 5000;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
 function validateSqlIdentifier(name: string, label = 'table'): void {
   if (!/^[a-zA-Z_]\w*$/.test(name)) {
     throw new Error(
@@ -314,20 +327,42 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       entry.environment,
     ]);
 
-    const placeholders = values
-      .map(
-        (_, i) =>
-          `($${i * 8 + 1}, $${i * 8 + 2}, $${i * 8 + 3}, $${i * 8 + 4}, $${i * 8 + 5}, $${i * 8 + 6}, $${i * 8 + 7}, $${i * 8 + 8})`
-      )
-      .join(', ');
+    const chunks = chunk(values, POSTGRES_ROWS_PER_INSERT);
+    const insertChunk = async (rows: unknown[][]): Promise<void> => {
+      const placeholders = rows
+        .map((_, i) => {
+          const params = Array.from(
+            { length: POSTGRES_COLUMNS },
+            (_unused, c) => `$${i * POSTGRES_COLUMNS + c + 1}`
+          );
+          return `(${params.join(', ')})`;
+        })
+        .join(', ');
 
-    const query = `
+      const query = `
       INSERT INTO ${tableName} 
       (timestamp, level, message, payload, context, trace_id, app_name, environment)
       VALUES ${placeholders}
     `;
 
-    await this.connection.query(query, values.flat());
+      await this.connection.query(query, rows.flat());
+    };
+
+    if (chunks.length === 1) {
+      await insertChunk(chunks[0] as unknown[][]);
+      return;
+    }
+
+    await this.connection.query('BEGIN');
+    try {
+      for (const rows of chunks) {
+        await insertChunk(rows);
+      }
+      await this.connection.query('COMMIT');
+    } catch (error) {
+      await this.connection.query('ROLLBACK').catch(() => {});
+      throw error;
+    }
   }
 
   private async flushToMySQL(entries: TransportLogEntry[]): Promise<void> {
@@ -349,7 +384,22 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       VALUES ?
     `;
 
-    await this.connection.query(query, [values]);
+    const chunks = chunk(values, MYSQL_ROWS_PER_INSERT);
+    if (chunks.length === 1) {
+      await this.connection.query(query, [values]);
+      return;
+    }
+
+    await this.connection.beginTransaction();
+    try {
+      for (const rows of chunks) {
+        await this.connection.query(query, [rows]);
+      }
+      await this.connection.commit();
+    } catch (error) {
+      await this.connection.rollback().catch(() => {});
+      throw error;
+    }
   }
 
   private async flushToSQLite(entries: TransportLogEntry[]): Promise<void> {
@@ -361,20 +411,27 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    for (const entry of entries) {
-      await stmt.run(
-        entry.timestamp instanceof Date ? entry.timestamp.toISOString() : entry.timestamp,
-        entry.level,
-        entry.message,
-        stringifyForLog(entry.data || {}),
-        entry.context,
-        entry.traceId,
-        entry.appName,
-        entry.environment
-      );
+    await this.connection.exec('BEGIN');
+    try {
+      for (const entry of entries) {
+        await stmt.run(
+          entry.timestamp instanceof Date ? entry.timestamp.toISOString() : entry.timestamp,
+          entry.level,
+          entry.message,
+          stringifyForLog(entry.data || {}),
+          entry.context,
+          entry.traceId,
+          entry.appName,
+          entry.environment
+        );
+      }
+      await this.connection.exec('COMMIT');
+    } catch (error) {
+      await this.connection.exec('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      await stmt.finalize().catch(() => {});
     }
-
-    await stmt.finalize();
   }
 
   private async createPostgreSQLTable(): Promise<void> {
@@ -471,6 +528,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
         internalError('Scheduled database flush error', error);
       });
     }, this.flushInterval);
+    this.flushTimer.unref?.();
   }
 
   async close(): Promise<void> {
@@ -490,6 +548,12 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
     // attempts so a permanently-dead DB can't hang shutdown forever (the
     // flushOnExit force-exit timer is the outer backstop).
     const MAX_CLOSE_FLUSH_ATTEMPTS = 3;
+    // A drain already running has detached its snapshot, so batch.length can be
+    // 0 while rows are still being written. Wait for it before touching the
+    // connection; a failure re-buffers its entries and the loop below retries.
+    if (this.flushPromise) {
+      await this.flushPromise.catch(() => {});
+    }
     for (
       let attempt = 0;
       attempt < MAX_CLOSE_FLUSH_ATTEMPTS && this.batch.length > 0;
@@ -550,15 +614,22 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
           return await collection.countDocuments();
         }
 
-        case 'postgresql':
-        case 'mysql':
-        case 'sqlite': {
+        case 'postgresql': {
           const tableName = this.config.table || 'logs';
           const result = await this.connection.query(`SELECT COUNT(*) as count FROM ${tableName}`);
-          // pg returns bigint COUNT as a string and mysql2 as a string too, so
-          // coerce to a number — the declared return type is Promise<number>.
-          const rawCount = result.rows?.[0]?.count ?? result[0]?.count ?? 0;
-          return Number(rawCount) || 0;
+          return Number(result.rows?.[0]?.count) || 0;
+        }
+
+        case 'mysql': {
+          const tableName = this.config.table || 'logs';
+          const [rows] = await this.connection.query(`SELECT COUNT(*) as count FROM ${tableName}`);
+          return Number(rows?.[0]?.count) || 0;
+        }
+
+        case 'sqlite': {
+          const tableName = this.config.table || 'logs';
+          const row = await this.connection.get(`SELECT COUNT(*) as count FROM ${tableName}`);
+          return Number(row?.count) || 0;
         }
 
         default:
