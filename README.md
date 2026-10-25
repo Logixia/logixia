@@ -1316,21 +1316,27 @@ logixia ships this as a dedicated `logixia/correlation` sub-package. It uses the
 ```typescript
 import { correlationMiddleware } from 'logixia/correlation';
 
-// Zero-config — reads X-Correlation-ID / X-Request-ID from the incoming request.
-// Generates a UUID v4 if no header is present.
+// Zero-config — reads X-Correlation-ID from the incoming request.
+// Generates a UUID v4 if the header is missing or invalid.
 // Sets X-Correlation-ID on the response.
 app.use(correlationMiddleware());
 
 // Custom config:
 app.use(
   correlationMiddleware({
-    header: 'X-Correlation-ID', // header to read / write. Default: 'X-Correlation-ID'
-    generateId: () => crypto.randomUUID(),
+    header: 'X-Correlation-ID', // header to read / write (matched case-insensitively). Default: 'x-correlation-id'
+    generate: () => crypto.randomUUID(), // used when no usable incoming ID. Default: crypto.randomUUID()
     trustIncoming: true, // honour the header from the client. Default: true
     setResponseHeader: true, // echo the ID back in the response. Default: true
   })
 );
 ```
+
+An incoming ID is only used if it is at most 128 characters long and contains only
+`A-Z`, `a-z`, `0-9`, `.`, `_`, `:` and `-`. Anything else (newlines, spaces, or base64-style
+`+`, `/`, `=`) is replaced with a freshly generated ID, so client-supplied text can't end up in
+every log line. Set `trustIncoming: false` to ignore the incoming header entirely and always
+generate a new ID. `correlationFastifyHook()` takes the same options.
 
 ### Correlation Fastify hook
 
