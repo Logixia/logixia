@@ -84,6 +84,13 @@ export interface CorrelationMiddlewareOptions {
    */
   generate?: () => string;
   /**
+   * When `false`, the incoming correlation header is ignored and a new ID is
+   * always generated. Use this at the edge when client-supplied IDs should not
+   * be trusted.
+   * @default true
+   */
+  trustIncoming?: boolean;
+  /**
    * When `true`, the response will include the correlation ID header so
    * clients can log it client-side.
    * @default true
@@ -173,6 +180,7 @@ export function correlationMiddleware(options: CorrelationMiddlewareOptions = {}
     header = 'x-correlation-id',
     originServiceHeader = 'x-origin-service',
     generate = generateCorrelationId,
+    trustIncoming = true,
     setResponseHeader = true,
   } = options;
 
@@ -184,7 +192,8 @@ export function correlationMiddleware(options: CorrelationMiddlewareOptions = {}
     const headers = (req['headers'] ?? {}) as Record<string, string | undefined>;
 
     // Node lower-cases incoming header names, so look up with lower-cased keys.
-    const correlationId = validIncomingId(headers[header.toLowerCase()]) ?? generate();
+    const incomingId = trustIncoming ? validIncomingId(headers[header.toLowerCase()]) : undefined;
+    const correlationId = incomingId ?? generate();
     const originService = headers[originServiceHeader.toLowerCase()];
 
     if (setResponseHeader) {
@@ -220,6 +229,7 @@ export function correlationFastifyHook(options: CorrelationMiddlewareOptions = {
     header = 'x-correlation-id',
     originServiceHeader = 'x-origin-service',
     generate = generateCorrelationId,
+    trustIncoming = true,
     setResponseHeader = true,
   } = options;
 
@@ -231,7 +241,8 @@ export function correlationFastifyHook(options: CorrelationMiddlewareOptions = {
     const headers = (request['headers'] ?? {}) as Record<string, string | undefined>;
 
     // Node lower-cases incoming header names, so look up with lower-cased keys.
-    const correlationId = validIncomingId(headers[header.toLowerCase()]) ?? generate();
+    const incomingId = trustIncoming ? validIncomingId(headers[header.toLowerCase()]) : undefined;
+    const correlationId = incomingId ?? generate();
     const originService = headers[originServiceHeader.toLowerCase()];
 
     if (setResponseHeader) {
