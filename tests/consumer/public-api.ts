@@ -5,6 +5,7 @@ import express from 'express';
 import Fastify from 'fastify';
 import type {
   ILoggerDefault,
+  LogixiaPlugin,
   ITransport as RootTransport,
   TransportLogEntry as RootEntry,
 } from 'logixia';
@@ -12,6 +13,8 @@ import {
   createExpressContextMiddleware,
   createFastifyContextHook,
   createLogger,
+  createTypedLogger,
+  defineLogSchema,
   wideEventMiddleware,
 } from 'logixia';
 import {
@@ -119,6 +122,25 @@ const handWritten: ILoggerDefault = {
 // The mock logger is assignable to the logger interfaces.
 const mock = createMockLogger();
 const asDefault: ILoggerDefault = mock.logger;
+
+// Plugins: inline literals type-check (no excess-property error) and the callbacks are typed.
+logger.use({ name: 'inline', onLog: (entry) => entry });
+const plugin: LogixiaPlugin = { name: 'p', onShutdown: () => undefined };
+logger.use(plugin);
+
+// TypeScript interfaces (no index signature) work as typed-log field shapes.
+interface OrderFields {
+  orderId: string;
+  amount?: number;
+}
+const orderSchema = defineLogSchema<OrderFields>({
+  orderId: { type: 'string', required: true },
+  amount: { type: 'number' },
+});
+const orderLogger = createTypedLogger<OrderFields>(logger, orderSchema);
+void orderLogger.info('created', { orderId: 'o1' });
+// @ts-expect-error unknown field is rejected
+void orderLogger.info('created', { orderIdd: 'o1' });
 
 // Custom transports are implementable against the public transport types.
 class MemoryTransport implements ITransport, IAsyncTransport, IBatchTransport {
