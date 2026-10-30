@@ -74,3 +74,6 @@ lib
 logs
 *.log
 release/
+
+# Documentation website (VitePress) build cache
+website/.vitepress/cache/

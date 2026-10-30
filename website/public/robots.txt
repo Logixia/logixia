@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://logixia.github.io/logixia/sitemap.xml
