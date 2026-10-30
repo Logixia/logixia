@@ -1,2 +1,0 @@
-Icons in this folder are from Lucide (https://lucide.dev), lucide-static@1.61.0, ISC License,
-Copyright (c) 2026 Lucide Icons and Contributors. Stroke colour changed to the logixia lilac.

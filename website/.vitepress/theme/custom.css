@@ -36,17 +36,12 @@
   --vp-c-tip-3: #16a34a;
   --vp-c-tip-soft: rgba(22, 163, 74, 0.1);
 
-  --vp-home-hero-name-color: transparent;
-  --vp-home-hero-name-background: linear-gradient(120deg, #9333ea 25%, #16a34a);
-  --vp-home-hero-image-background-image: radial-gradient(
-    closest-side,
-    rgba(168, 85, 247, 0.28),
-    rgba(168, 85, 247, 0)
-  );
-  --vp-home-hero-image-filter: blur(48px);
-
   --lx-card-bg: #ffffff;
   --lx-card-border: #e4e4e7;
+  --lx-panel-bg: #fafafa;
+  --lx-code-str: #15803d;
+  --lx-code-num: #b45309;
+  --lx-code-err: #b91c1c;
   --lx-icon-bg: rgba(168, 85, 247, 0.1);
   --lx-icon-border: rgba(168, 85, 247, 0.25);
 }
@@ -78,15 +73,12 @@
   --vp-code-copy-code-bg: #18181b;
   --vp-local-search-bg: #0e0e12;
 
-  --vp-home-hero-name-background: linear-gradient(120deg, #c084fc 25%, #4ade80);
-  --vp-home-hero-image-background-image: radial-gradient(
-    closest-side,
-    rgba(168, 85, 247, 0.4),
-    rgba(168, 85, 247, 0)
-  );
-
   --lx-card-bg: #0e0e12;
   --lx-card-border: #27272a;
+  --lx-panel-bg: #0b0b0f;
+  --lx-code-str: #4ade80;
+  --lx-code-num: #fbbf24;
+  --lx-code-err: #f87171;
   --lx-icon-bg: rgba(168, 85, 247, 0.12);
   --lx-icon-border: rgba(168, 85, 247, 0.28);
 }
@@ -115,86 +107,91 @@
   height: 22px;
 }
 
-/* Mono labels, like the brand board's eyebrow text */
-.lx-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 20px;
-  padding: 6px 14px;
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 999px;
-  font-family: var(--vp-font-family-mono);
-  font-size: 12px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--vp-c-text-2);
-  background: var(--vp-c-bg-alt);
-}
-
-.lx-eyebrow::before {
-  content: '';
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--lx-green);
-  box-shadow: 0 0 10px rgba(74, 222, 128, 0.6);
-}
-
 /* ── Home page ──────────────────────────────────────────────────────────── */
 
 .dark .VPHome {
   background:
-    radial-gradient(900px 520px at 75% -120px, rgba(168, 85, 247, 0.14), transparent 70%),
-    radial-gradient(700px 420px at 100% 900px, rgba(74, 222, 128, 0.05), transparent 70%);
-}
-
-.VPHero .tagline {
-  max-width: 640px;
-}
-
-.VPFeature {
-  background: var(--lx-card-bg) !important;
-  border: 1px solid var(--lx-card-border) !important;
-  transition:
-    border-color 0.2s ease,
-    transform 0.2s ease;
-}
-
-.VPFeature:hover {
-  border-color: var(--lx-violet) !important;
-  transform: translateY(-2px);
-}
-
-.VPFeature .icon {
-  background: var(--lx-icon-bg) !important;
-  border: 1px solid var(--lx-icon-border);
+    radial-gradient(820px 480px at 82% -60px, rgba(168, 85, 247, 0.12), transparent 70%),
+    radial-gradient(640px 420px at 100% 1100px, rgba(74, 222, 128, 0.04), transparent 70%);
 }
 
 .VPHome .vp-doc {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 24px;
+  max-width: none;
+  margin: 0;
+  padding: 0;
 }
 
-.VPHome .vp-doc h2 {
+.lx-section {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 24px 64px;
+}
+
+.lx-section > h2 {
+  margin-top: 88px;
+  padding-top: 0;
   border-top: 0;
-  margin-top: 56px;
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+.lx-section > p,
+.lx-section > table {
+  max-width: 760px;
 }
 
 .home-cta {
-  margin: 56px 0 24px;
-  padding: 36px 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 32px;
+  margin: 96px 0 24px;
+  padding: 40px;
   border: 1px solid var(--lx-card-border);
-  border-radius: 16px;
-  text-align: center;
+  border-radius: 20px;
   background:
     radial-gradient(600px 220px at 50% 0, rgba(168, 85, 247, 0.16), transparent 70%),
     var(--lx-card-bg);
 }
 
+.home-cta h2 {
+  grid-column: 1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
 .home-cta p {
-  margin: 8px 0;
+  grid-column: 1;
+  margin: 8px 0 0;
+  color: var(--vp-c-text-2);
+}
+
+.home-cta p:last-child {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .home-cta {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 28px 20px;
+  }
+
+  .home-cta p:last-child {
+    grid-column: 1;
+    grid-row: auto;
+    margin-top: 16px;
+  }
+
+  .lx-section {
+    padding: 16px 16px 48px;
+  }
 }
 
 .home-cta a.cta-primary,
@@ -251,9 +248,5 @@
   * {
     scroll-behavior: auto !important;
     transition: none !important;
-  }
-
-  .VPFeature:hover {
-    transform: none;
   }
 }
