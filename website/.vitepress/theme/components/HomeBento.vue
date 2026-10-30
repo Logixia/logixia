@@ -8,7 +8,7 @@ const transports = [
   ['File', 'size and date rotation'],
   ['PostgreSQL · MySQL · MongoDB', 'batched inserts'],
   ['CloudWatch · GCP · Azure', 'signed, batched'],
-  ['Datadog · OTLP', 'gzip, retries'],
+  ['Datadog · OTLP', 'batched export'],
   ['Slack · Discord', 'throttled alerts'],
 ];
 
@@ -76,12 +76,7 @@ const extras = [
             <span class="method">GET</span> /orders/42
             <span class="hdr">traceparent: 00-4bf92f35…-01</span>
           </p>
-          <p
-            v-for="(l, i) in ['auth ok', 'orders.find 38ms', 'response 200']"
-            :key="l"
-            class="tl"
-            :style="{ '--i': i }"
-          >
+          <p v-for="l in ['auth ok', 'orders.find 38ms', 'response 200']" :key="l" class="tl">
             <span class="tid">4bf92f35</span><span class="msg">{{ l }}</span>
           </p>
         </div>
@@ -373,9 +368,6 @@ pre.demo {
   display: flex;
   gap: 12px;
   padding: 3px 0;
-  opacity: 0;
-  animation: rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  animation-delay: calc(0.3s + var(--i) * 0.25s);
 }
 
 .tid {
@@ -442,6 +434,7 @@ pre.demo {
 }
 
 .sinks li {
+  margin: 0;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -496,6 +489,7 @@ pre.demo {
 }
 
 .extras li {
+  margin: 0;
   border-bottom: 1px solid var(--vp-c-divider);
 }
 
@@ -530,17 +524,6 @@ pre.demo {
   font-size: 13.5px;
   line-height: 1.55;
   color: var(--vp-c-text-2);
-}
-
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
 }
 
 @media (max-width: 960px) {
@@ -583,9 +566,5 @@ pre.demo {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tl {
-    opacity: 1;
-    animation: none;
-  }
 }
 </style>

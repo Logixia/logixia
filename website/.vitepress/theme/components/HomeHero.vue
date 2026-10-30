@@ -58,7 +58,7 @@ const runtimes = ['MIT', 'TypeScript', 'Node', 'Bun', 'Deno', 'Edge'];
       </ul>
     </div>
 
-    <figure class="panel" aria-label="Example: creating a logger and its output">
+    <figure class="panel" aria-label="Example: creating a logger, with illustrative output">
       <div class="panel-bar">
         <span class="lights" aria-hidden="true"><i /><i /><i /></span>
         <span class="file">server.ts</span>
@@ -66,15 +66,19 @@ const runtimes = ['MIT', 'TypeScript', 'Node', 'Bun', 'Deno', 'Edge'];
       <pre
         class="code"
       ><code><span class="k">const</span> logger = <span class="f">createLogger</span>({
+  appName: <span class="s">'api'</span>,
+  traceId: <span class="k">true</span>,
+  redact: { paths: [<span class="s">'**.password'</span>, <span class="s">'**.token'</span>] },
   transports: {
-    console:  { format: <span class="s">'json'</span> },
+    console:  { format: <span class="s">'text'</span> },
     file:     { filename: <span class="s">'app.log'</span>, maxSize: <span class="s">'50MB'</span> },
     database: { type: <span class="s">'postgresql'</span>, database: <span class="s">'app'</span> },
   },
-  redact: { paths: [<span class="s">'**.password'</span>, <span class="s">'**.token'</span>] },
 });
 
-<span class="k">await</span> logger.<span class="f">info</span>(<span class="s">'Server started'</span>, { port: <span class="n">3000</span> });</code></pre>
+<span class="k">await</span> logger.<span class="f">info</span>(<span class="s">'Server started'</span>, { port: <span class="n">3000</span> });
+<span class="k">await</span> logger.<span class="f">warn</span>(<span class="s">'slow query'</span>, { ms: <span class="n">812</span> });
+<span class="k">await</span> logger.<span class="f">error</span>(<span class="s">'charge failed'</span>, { password: <span class="s">'hunter2'</span> });</code></pre>
       <div class="output" aria-label="Log output">
         <p class="line" style="--i: 0">
           <span class="lvl info">INFO</span><span class="t">12:04:11</span>Server started
@@ -82,7 +86,7 @@ const runtimes = ['MIT', 'TypeScript', 'Node', 'Bun', 'Deno', 'Edge'];
         </p>
         <p class="line" style="--i: 1">
           <span class="lvl warn">WARN</span><span class="t">12:04:12</span>slow query
-          <span class="kv">orders.find 812ms</span>
+          <span class="kv">ms=812</span>
         </p>
         <p class="line" style="--i: 2">
           <span class="lvl error">ERROR</span><span class="t">12:04:13</span>charge failed

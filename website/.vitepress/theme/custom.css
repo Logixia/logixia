@@ -4,10 +4,7 @@
  * ground #050505 / #0E0E12, surface #18181B, line #27272A, muted #71717A.
  */
 :root {
-  --lx-violet: #a855f7;
-  --lx-lilac: #c084fc;
   --lx-green: #4ade80;
-  --lx-deep-violet: #7c3aed;
 
   --vp-font-family-base:
     'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -42,8 +39,6 @@
   --lx-code-str: #15803d;
   --lx-code-num: #b45309;
   --lx-code-err: #b91c1c;
-  --lx-icon-bg: rgba(168, 85, 247, 0.1);
-  --lx-icon-border: rgba(168, 85, 247, 0.25);
 }
 
 .dark {
@@ -79,14 +74,10 @@
   --lx-code-str: #4ade80;
   --lx-code-num: #fbbf24;
   --lx-code-err: #f87171;
-  --lx-icon-bg: rgba(168, 85, 247, 0.12);
-  --lx-icon-border: rgba(168, 85, 247, 0.28);
 }
 
 /* ── Typography ─────────────────────────────────────────────────────────── */
 
-.VPHero .name,
-.VPHero .text,
 .vp-doc h1,
 .VPNavBarTitle .title {
   font-weight: 700;
