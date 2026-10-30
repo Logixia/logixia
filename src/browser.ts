@@ -228,6 +228,10 @@ function byteLength(s: string): number {
   return new TextEncoder().encode(s).length;
 }
 
+function isKeepaliveError(error: unknown): boolean {
+  return error instanceof Error && /keepalive/i.test(error.message);
+}
+
 /**
  * Browser transport that batches log entries and sends them to a remote
  * HTTP endpoint via `fetch` (available in all modern browsers and Edge runtimes).
@@ -256,6 +260,9 @@ export class BrowserRemoteTransport implements IBrowserTransport {
   private readonly headers: Record<string, string>;
 
   private batch: BrowserLogEntry[] = [];
+  private keepaliveSupported = true;
+  private failedFlushCount = 0;
+  private lastFlushError: unknown;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private droppedEntries = 0;
 
@@ -297,6 +304,16 @@ export class BrowserRemoteTransport implements IBrowserTransport {
     return this.droppedEntries;
   }
 
+  /** Number of flush attempts that failed with a network error and were re-buffered. */
+  get failedFlushes(): number {
+    return this.failedFlushCount;
+  }
+
+  /** The most recent network error from a failed flush, if any. */
+  get lastError(): unknown {
+    return this.lastFlushError;
+  }
+
   write(entry: BrowserLogEntry): void {
     this.batch.push(entry);
     // Enforce the buffer cap so a down endpoint cannot grow the buffer
@@ -322,16 +339,23 @@ export class BrowserRemoteTransport implements IBrowserTransport {
       const keepalive = byteLength(body) < 60_000;
       let res: Response;
       try {
-        res = await fetch(this.url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...this.headers },
-          body,
-          keepalive,
-        });
-      } catch {
-        // Network failure: restore and stop — best effort in browser.
-        this.batch.unshift(...entries);
-        return;
+        res = await this.send(body, this.keepaliveSupported ? keepalive : undefined);
+      } catch (error) {
+        if (this.keepaliveSupported && isKeepaliveError(error)) {
+          // Some runtimes (Cloudflare Workers) reject the option outright:
+          // remember that and retry this batch without it.
+          this.keepaliveSupported = false;
+          try {
+            res = await this.send(body);
+          } catch (retryError) {
+            this.recordFailure(entries, retryError);
+            return;
+          }
+        } else {
+          // Network failure: restore and stop — best effort in browser.
+          this.recordFailure(entries, error);
+          return;
+        }
       }
       if (!res.ok) {
         if (res.status >= 500 || res.status === 429) {
@@ -344,6 +368,21 @@ export class BrowserRemoteTransport implements IBrowserTransport {
         return;
       }
     }
+  }
+
+  private send(body: string, keepalive?: boolean): Promise<Response> {
+    return fetch(this.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...this.headers },
+      body,
+      ...(keepalive !== undefined ? { keepalive } : {}),
+    });
+  }
+
+  private recordFailure(entries: BrowserLogEntry[], error: unknown): void {
+    this.batch.unshift(...entries);
+    this.failedFlushCount += 1;
+    this.lastFlushError = error;
   }
 
   private scheduleFlush(): void {

@@ -148,6 +148,54 @@ describe('BrowserRemoteTransport', () => {
     t.destroy();
   });
 
+  it('retries once without keepalive when fetch throws on the option, and remembers it', async () => {
+    fetchMock.mockImplementation((_url: string, init: { keepalive?: boolean }) => {
+      if ('keepalive' in init) {
+        throw new TypeError(
+          "The 'keepalive' field on 'RequestInitializerDict' is not implemented."
+        );
+      }
+      return Promise.resolve({ ok: true });
+    });
+    const t = new BrowserRemoteTransport({ url: 'https://logs.example/ingest', batchSize: 1000 });
+    t.write(makeEntry(1));
+    await t.flush();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect('keepalive' in fetchMock.mock.calls[1]![1]).toBe(false);
+    expect(t.failedFlushes).toBe(0);
+
+    t.write(makeEntry(2));
+    await t.flush();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect('keepalive' in fetchMock.mock.calls[2]![1]).toBe(false);
+    t.destroy();
+  });
+
+  it('retries without keepalive when fetch rejects with a keepalive TypeError', async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError('keepalive is not supported'));
+    const t = new BrowserRemoteTransport({ url: 'https://logs.example/ingest', batchSize: 1000 });
+    t.write(makeEntry(1));
+    await t.flush();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(t.failedFlushes).toBe(0);
+    t.destroy();
+  });
+
+  it('re-buffers and reports a network failure through failedFlushes / lastError', async () => {
+    const boom = new TypeError('network down');
+    fetchMock.mockRejectedValueOnce(boom);
+    const t = new BrowserRemoteTransport({ url: 'https://logs.example/ingest', batchSize: 1000 });
+    t.write(makeEntry(1));
+    await t.flush();
+    expect(t.failedFlushes).toBe(1);
+    expect(t.lastError).toBe(boom);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await t.flush(); // the entry was re-buffered and now succeeds
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    t.destroy();
+  });
+
   it('disables keepalive for bodies at the 64KB limit', async () => {
     const t = new BrowserRemoteTransport({ url: 'https://logs.example/ingest', batchSize: 1000 });
     for (let i = 0; i < 40; i += 1) t.write(makeBigEntry(i)); // ~80KB serialised
