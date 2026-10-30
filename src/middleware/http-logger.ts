@@ -27,7 +27,11 @@ import type { HttpRequestShape, HttpResponseShape } from '../types/http-shapes';
 import { internalError } from '../utils/internal-log';
 import { resolveRequestTraceId, resolveTraceHeaders } from '../utils/request-trace';
 import { stringifyForLog } from '../utils/safe-stringify';
-import { DEFAULT_REDACT_HEADERS, DEFAULT_REDACT_QUERY_PARAMS } from '../utils/sensitive-names';
+import {
+  DEFAULT_REDACT_HEADERS,
+  DEFAULT_REDACT_QUERY_PARAMS,
+  redactUrlQuery as sanitizeUrl,
+} from '../utils/sensitive-names';
 
 // ── Shared types ─────────────────────────────────────────────────────────────
 
@@ -94,35 +98,6 @@ export type OutgoingResponse = HttpResponseShape;
 
 function buildNameSet(defaults: readonly string[], extra: readonly string[] | undefined) {
   return new Set([...defaults, ...(extra ?? [])].map((n) => n.toLowerCase()));
-}
-
-function safeDecode(value: string): string {
-  try {
-    return decodeURIComponent(value.replace(/\+/g, ' '));
-  } catch {
-    return value;
-  }
-}
-
-/** Replace the values of sensitive query parameters, leaving the rest verbatim. */
-function sanitizeUrl(url: string, redactParams: Set<string>): string {
-  const q = url.indexOf('?');
-  if (q === -1) return url;
-  const hashAt = url.indexOf('#', q);
-  const query = url.slice(q + 1, hashAt === -1 ? undefined : hashAt);
-  const hash = hashAt === -1 ? '' : url.slice(hashAt);
-  const cleaned = query
-    .split('&')
-    .map((pair) => {
-      const eq = pair.indexOf('=');
-      const rawKey = eq === -1 ? pair : pair.slice(0, eq);
-      const decoded = safeDecode(rawKey);
-      const bracket = decoded.indexOf('[');
-      const name = (bracket === -1 ? decoded : decoded.slice(0, bracket)).toLowerCase();
-      return redactParams.has(name) && eq !== -1 ? `${rawKey}=[REDACTED]` : pair;
-    })
-    .join('&');
-  return `${url.slice(0, q)}?${cleaned}${hash}`;
 }
 
 function sanitizeHeaders(

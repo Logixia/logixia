@@ -80,3 +80,32 @@ export const DEFAULT_REDACT_QUERY_PARAMS: readonly string[] = [
   'sig',
   'auth',
 ];
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value.replace(/\+/g, ' '));
+  } catch {
+    return value;
+  }
+}
+
+/** Replace the values of sensitive query parameters, leaving the rest verbatim. */
+export function redactUrlQuery(url: string, redactParams: ReadonlySet<string>): string {
+  const q = url.indexOf('?');
+  if (q === -1) return url;
+  const hashAt = url.indexOf('#', q);
+  const query = url.slice(q + 1, hashAt === -1 ? undefined : hashAt);
+  const hash = hashAt === -1 ? '' : url.slice(hashAt);
+  const cleaned = query
+    .split('&')
+    .map((pair) => {
+      const eq = pair.indexOf('=');
+      const rawKey = eq === -1 ? pair : pair.slice(0, eq);
+      const decoded = safeDecode(rawKey);
+      const bracket = decoded.indexOf('[');
+      const name = (bracket === -1 ? decoded : decoded.slice(0, bracket)).toLowerCase();
+      return redactParams.has(name) && eq !== -1 ? `${rawKey}=[REDACTED]` : pair;
+    })
+    .join('&');
+  return `${url.slice(0, q)}?${cleaned}${hash}`;
+}

@@ -139,6 +139,34 @@ describe('wideEventMiddleware', () => {
     expect(typeof data.durationMs).toBe('number');
   });
 
+  it('redacts sensitive query params in the logged url', () => {
+    const { logger, events } = makeLogger();
+    const mw = wideEventMiddleware(logger);
+    const res = fakeRes();
+    mw(
+      { method: 'GET', url: '/cb?code=abc&page=2&access_token=zzz&ref=x#frag', headers: {} },
+      res,
+      () => {}
+    );
+    res.fire('finish');
+    expect(events[0]!.data!.url).toBe(
+      '/cb?code=[REDACTED]&page=2&access_token=[REDACTED]&ref=x#frag'
+    );
+  });
+
+  it('prefers originalUrl and supports custom redactQueryParams', () => {
+    const { logger, events } = makeLogger();
+    const mw = wideEventMiddleware(logger, { redactQueryParams: ['session'] });
+    const res = fakeRes();
+    mw(
+      { method: 'GET', url: '/inner', originalUrl: '/outer?session=s1&token=t1&q=1', headers: {} },
+      res,
+      () => {}
+    );
+    res.fire('finish');
+    expect(events[0]!.data!.url).toBe('/outer?session=[REDACTED]&token=[REDACTED]&q=1');
+  });
+
   it('emits only once when both finish and close fire', () => {
     const { logger, events } = makeLogger();
     const mw = wideEventMiddleware(logger);
