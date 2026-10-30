@@ -168,6 +168,19 @@ function resolveInitialLevel(config: LoggerConfig): LogLevelString {
 
 // ── Logger class ─────────────────────────────────────────────────────────────
 
+/**
+ * The logixia logger. Create instances with {@link createLogger} so that custom
+ * levels from `levelOptions.levels` also become methods.
+ *
+ * @example
+ * ```ts
+ * const logger = createLogger({ appName: 'api', environment: 'production' });
+ * await logger.info('Server started', { port: 3000 });
+ * const req = logger.child('RequestHandler', { requestId: 'r-1' });
+ * await req.error(new Error('boom'));
+ * await logger.close(); // flush buffered transports before exit
+ * ```
+ */
 export class LogixiaLogger<
   TConfig extends LoggerConfig<Record<string, number>> = LoggerConfig,
 > implements ILoggerDefault {
@@ -469,6 +482,11 @@ export class LogixiaLogger<
 
   // ── Public logging API ───────────────────────────────────────────────────────
 
+  /**
+   * Log at `error` level. An `Error` is logged with its message and serialized
+   * (name, message, stack) under `data.error`; a string is logged as-is.
+   * `data` is merged into the entry payload.
+   */
   async error(messageOrError: string | Error, data?: Record<string, unknown>): Promise<void> {
     if (isError(messageOrError)) {
       await this.log('error', messageOrError.message, {
@@ -480,36 +498,58 @@ export class LogixiaLogger<
     }
   }
 
+  /** Log `message` at `warn` level; `data` is merged into the entry payload. */
   async warn(message: string, data?: Record<string, unknown>): Promise<void> {
     await this.log('warn', message, data);
   }
 
+  /** Log `message` at `info` level; `data` is merged into the entry payload. */
   async info(message: string, data?: Record<string, unknown>): Promise<void> {
     await this.log('info', message, data);
   }
 
+  /** Log `message` at `debug` level; `data` is merged into the entry payload. */
   async debug(message: string, data?: Record<string, unknown>): Promise<void> {
     await this.log('debug', message, data);
   }
 
+  /** Log `message` at `trace` level; `data` is merged into the entry payload. */
   async trace(message: string, data?: Record<string, unknown>): Promise<void> {
     await this.log('trace', message, data);
   }
 
+  /** Log `message` at `verbose` level; `data` is merged into the entry payload. */
   async verbose(message: string, data?: Record<string, unknown>): Promise<void> {
     await this.log('verbose', message, data);
   }
 
+  /**
+   * Log at an arbitrary level name, including custom levels. Levels below the
+   * active threshold are dropped.
+   */
   async logLevel(level: string, message: string, data?: Record<string, unknown>): Promise<void> {
     await this.log(level, message, data);
   }
 
   // ── Timer API ────────────────────────────────────────────────────────────────
 
+  /** Start a named timer; finish it with {@link timeEnd}. Reusing a label restarts it. */
   time(label: string): void {
     this.timers.set(label, { label, startTime: Date.now() });
   }
 
+  /**
+   * Stop the timer `label`, log its duration at `info` level, and return the
+   * elapsed milliseconds. Logs a `warn` and returns `undefined` if the timer
+   * does not exist.
+   *
+   * @example
+   * ```ts
+   * logger.time('db');
+   * await query();
+   * const ms = await logger.timeEnd('db');
+   * ```
+   */
   async timeEnd(label: string): Promise<number | undefined> {
     const timer = this.timers.get(label);
     if (!timer) {
@@ -543,6 +583,15 @@ export class LogixiaLogger<
 
   // ── Level & context management ───────────────────────────────────────────────
 
+  /**
+   * Change the minimum log level at runtime. Unknown level names are ignored
+   * with a warning and the current level is kept.
+   *
+   * @example
+   * ```ts
+   * logger.setLevel('debug');
+   * ```
+   */
   setLevel(level: LogLevelString): void {
     const canonical = canonicalLevel(level, this._levelValues);
     if (canonical === undefined) {
@@ -561,6 +610,7 @@ export class LogixiaLogger<
     this._buildPerfCaches();
   }
 
+  /** Return the currently configured minimum log level (`info` if none was set). */
   getLevel(): LogLevelString {
     return (this.config.levelOptions?.level as LogLevelString) ?? LogLevel.INFO;
   }
@@ -621,16 +671,19 @@ export class LogixiaLogger<
     return { ...this.config.namespaceLevels };
   }
 
+  /** Set the context label (e.g. a class or module name) attached to every subsequent entry. */
   setContext(context: string): void {
     this.context = typeof context === 'string' ? context : safeToString(context);
   }
 
+  /** Return the current context label, or `undefined` if none is set. */
   getContext(): string | undefined {
     return this.context;
   }
 
   // ── Field management ─────────────────────────────────────────────────────────
 
+  /** Show `fieldName` in log output, overriding the config for this logger instance. */
   enableField(fieldName: string): void {
     this.fieldState.set(fieldName, true);
     this._fieldCache.set(fieldName, true);
@@ -639,6 +692,7 @@ export class LogixiaLogger<
     internalLog(`Field '${fieldName}' enabled`);
   }
 
+  /** Hide `fieldName` from log output, overriding the config for this logger instance. */
   disableField(fieldName: string): void {
     this.fieldState.set(fieldName, false);
     this._fieldCache.set(fieldName, false);
@@ -647,6 +701,7 @@ export class LogixiaLogger<
     internalLog(`Field '${fieldName}' disabled`);
   }
 
+  /** Whether `fieldName` is currently shown: runtime override first, then config, default `true`. */
   isFieldEnabled(fieldName: string): boolean {
     if (this.fieldState.has(fieldName)) return this.fieldState.get(fieldName)!;
     if (this.config.fields?.[fieldName as keyof typeof this.config.fields] !== undefined) {
@@ -655,6 +710,7 @@ export class LogixiaLogger<
     return true;
   }
 
+  /** Return the visibility (`true` = shown) of every standard log field. */
   getFieldState(): Record<string, boolean> {
     const allFields = [
       'timestamp',
@@ -673,6 +729,7 @@ export class LogixiaLogger<
     return Object.fromEntries(allFields.map((f) => [f, this.isFieldEnabled(f)]));
   }
 
+  /** Drop all runtime enable/disable overrides so field visibility follows the config again. */
   resetFieldState(): void {
     this.fieldState.clear();
     internalLog('Field state reset to configuration defaults');
@@ -692,11 +749,13 @@ export class LogixiaLogger<
     else internalWarn('Transport manager not initialized');
   }
 
+  /** Restrict `transportId` to only the given `levels`. Warns if no transports are configured. */
   setTransportLevels(transportId: string, levels: string[]): void {
     if (this.transportManager) this.transportManager.setTransportLevels(transportId, levels);
     else internalWarn('Transport manager not initialized');
   }
 
+  /** Return the levels `transportId` is restricted to, or `undefined` if it has none. */
   getTransportLevels(transportId: string): string[] | undefined {
     if (this.transportManager) return this.transportManager.getTransportLevels(transportId);
     internalWarn('Transport manager not initialized');
@@ -708,12 +767,25 @@ export class LogixiaLogger<
     else internalWarn('Transport manager not initialized');
   }
 
+  /** Return the identifiers of the configured transports (empty if none). */
   getAvailableTransports(): string[] {
     return this.transportManager?.getTransports() ?? [];
   }
 
   // ── Child logger ─────────────────────────────────────────────────────────────
 
+  /**
+   * Create a child logger with its own `context` that shares this logger's
+   * configuration and transports. `data` is merged into the bound fields
+   * inherited from this logger and added to every entry the child writes.
+   * Closing a child does not close the shared transports.
+   *
+   * @example
+   * ```ts
+   * const req = logger.child('Checkout', { requestId: 'r-42' });
+   * await req.info('started'); // entry includes requestId
+   * ```
+   */
   child(context: string, data?: Record<string, unknown>): ILogger {
     const childLogger = new LogixiaLogger(this.config, context, this);
     // Inherit the parent's bound fields plus any child-specific data. The
@@ -756,10 +828,12 @@ export class LogixiaLogger<
 
   // ── Flush / health / close ───────────────────────────────────────────────────
 
+  /** Flush buffered entries in all transports without closing them. */
   async flush(): Promise<void> {
     if (this.transportManager) await this.transportManager.flush();
   }
 
+  /** Report whether the transports are healthy; `healthy: false` if no transport manager exists. */
   async healthCheck(): Promise<{ healthy: boolean; details: Record<string, unknown> }> {
     if (!this.transportManager) {
       return { healthy: false, details: { error: 'TransportManager not initialized' } };
@@ -767,6 +841,16 @@ export class LogixiaLogger<
     return this.transportManager.healthCheck();
   }
 
+  /**
+   * Warn about timers that were never ended, then flush and close all transports,
+   * stop the sampler and run plugin shutdown hooks. On a child logger only the
+   * timer warnings run; the shared transports stay open. Call once on shutdown.
+   *
+   * @example
+   * ```ts
+   * process.on('SIGTERM', async () => { await logger.close(); process.exit(0); });
+   * ```
+   */
   async close(): Promise<void> {
     for (const [label, timer] of this.timers) {
       await this.warn(`Timer '${label}' was not ended properly`, {
@@ -1042,6 +1126,22 @@ export class LogixiaLogger<
 
 // ── Factory ───────────────────────────────────────────────────────────────────
 
+/**
+ * Create a logger from `config`, with an optional default `context` label.
+ *
+ * Every key of `levelOptions.levels` that is not already a method becomes an
+ * async method on the returned logger, typed through the config, and routes to
+ * {@link LogixiaLogger.logLevel}.
+ *
+ * @example
+ * ```ts
+ * const logger = createLogger({
+ *   appName: 'api',
+ *   levelOptions: { level: 'info', levels: { audit: 35 } },
+ * });
+ * await logger.audit('user exported data', { userId: 'u1' });
+ * ```
+ */
 export function createLogger<T extends LoggerConfig<Record<string, number>>>(
   config: T,
   context?: string
