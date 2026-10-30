@@ -42,10 +42,10 @@ import { internalError, internalWarn } from '../utils/internal-log';
 import { sanitizeIncomingId, TraceContext } from '../utils/trace.utils';
 import {
   LOGIXIA_LOGGER_CONFIG,
-  LOGIXIA_LOGGER_SERVICE,
+  LOGIXIA_LOGGER_PREFIX,
   LogixiaLoggerModule,
 } from './logitron-logger.module';
-import type { LogixiaLoggerService } from './logitron-nestjs.service';
+import { LogixiaLoggerService } from './logitron-nestjs.service';
 import { resolveResponseHeader } from './trace.middleware';
 
 // ── @InjectLogger() ──────────────────────────────────────────────────────────
@@ -53,15 +53,23 @@ import { resolveResponseHeader } from './trace.middleware';
 /**
  * Inject the Logixia logger registered in the current NestJS DI container.
  *
- * Equivalent to `@Inject(LOGIXIA_LOGGER_SERVICE)`; `LogixiaLoggerModule.forRoot[Async]()`
- * provides that token as an alias of the root `LogixiaLoggerService`.
+ * With no argument it injects the root `LogixiaLoggerService` provided by
+ * `LogixiaLoggerModule.forRoot[Async]()`. With a `context` it injects the child
+ * logger that `LogixiaLoggerModule.forFeature(context)` provides for that context
+ * (the feature module must be imported where it is used).
  *
  * @example
  * ```ts
  * constructor(@InjectLogger() private readonly logger: LogixiaLoggerService) {}
+ *
+ * // with LogixiaLoggerModule.forFeature('orders') imported:
+ * constructor(@InjectLogger('orders') private readonly logger: LogixiaLoggerService) {}
  * ```
  */
-export const InjectLogger = (): ParameterDecorator => Inject(LOGIXIA_LOGGER_SERVICE);
+export const InjectLogger = (context?: string): ParameterDecorator =>
+  context === undefined
+    ? Inject(LogixiaLoggerService)
+    : Inject(`${LOGIXIA_LOGGER_PREFIX}${context.toUpperCase()}`);
 
 // ── @LogMethod() ─────────────────────────────────────────────────────────────
 
@@ -278,7 +286,7 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
 
   constructor(
     @Optional()
-    @Inject(LOGIXIA_LOGGER_SERVICE)
+    @Inject(LogixiaLoggerService)
     logger?: LogixiaLoggerService,
     @Optional()
     @Inject(LOGIXIA_LOGGER_CONFIG)
