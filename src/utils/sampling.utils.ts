@@ -13,6 +13,19 @@ import type { SamplingConfig } from '../types';
 // is included for the same reason.
 const ALWAYS_EMIT_LEVELS = new Set(['error', 'warn', 'fatal']);
 
+const MAX_CACHED_TRACE_ID_LENGTH = 256;
+
+function isCacheableTraceId(id: string): boolean {
+  if (typeof id !== 'string' || id.length === 0 || id.length > MAX_CACHED_TRACE_ID_LENGTH) {
+    return false;
+  }
+  for (let i = 0; i < id.length; i++) {
+    const c = id.charCodeAt(i);
+    if (c < 0x20 || (c >= 0x7f && c <= 0x9f)) return false;
+  }
+  return true;
+}
+
 // ── Sampler ───────────────────────────────────────────────────────────────────
 
 export interface SamplingStats {
@@ -32,12 +45,17 @@ export class Sampler {
   private readonly config: SamplingConfig;
   /**
    * Per-trace decisions in LRU order (Map preserves insertion order; a hit
-   * re-inserts the key). Survives resetStats() so a long trace is never
-   * re-decided mid-flight; bounded by size and by an idle TTL.
+   * re-inserts the key). Survives resetStats() so a long trace is not re-decided
+   * mid-flight. Bounded by size, by an idle TTL (refreshed on hit) and by a hard
+   * lifetime measured from the first decision.
    */
-  private readonly traceDecisions = new Map<string, { emit: boolean; seenAt: number }>();
+  private readonly traceDecisions = new Map<
+    string,
+    { emit: boolean; firstAt: number; seenAt: number }
+  >();
   private readonly maxTrackedTraces = 100_000;
   private readonly traceTtlMs = 5 * 60_000;
+  private readonly traceMaxLifetimeMs = 60 * 60_000;
 
   // Rate-limiting state
   private _tokenBucket = 0;
@@ -199,13 +217,20 @@ export class Sampler {
 
   /**
    * Return the cached decision for a trace, or make and cache a new one. Entries
-   * idle past the TTL are re-decided; the least recently used entry is evicted
-   * once the cap is reached.
+   * idle past the TTL, or older than the hard lifetime, are re-decided; the least
+   * recently used entry is evicted once the cap is reached. IDs that are empty,
+   * too long or contain control characters are sampled independently and never cached.
    */
   private _decideForTrace(traceId: string, level: string): boolean {
+    if (!isCacheableTraceId(traceId)) return this._sampleByRate(level);
+
     const now = Date.now();
     const known = this.traceDecisions.get(traceId);
-    if (known && now - known.seenAt <= this.traceTtlMs) {
+    if (
+      known &&
+      now - known.seenAt <= this.traceTtlMs &&
+      now - known.firstAt <= this.traceMaxLifetimeMs
+    ) {
       this.traceDecisions.delete(traceId);
       known.seenAt = now;
       this.traceDecisions.set(traceId, known);
@@ -214,7 +239,7 @@ export class Sampler {
 
     const emit = this._sampleByRate(level);
     this.traceDecisions.delete(traceId);
-    this.traceDecisions.set(traceId, { emit, seenAt: now });
+    this.traceDecisions.set(traceId, { emit, firstAt: now, seenAt: now });
     if (this.traceDecisions.size > this.maxTrackedTraces) {
       const oldest = this.traceDecisions.keys().next().value;
       if (oldest !== undefined) this.traceDecisions.delete(oldest);

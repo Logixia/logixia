@@ -1291,6 +1291,15 @@ The filter returns a consistent structured shape on every error:
 }
 ```
 
+The `debug` block (stack trace, service, duration) is **off by default** and is never sent to clients unless you opt in, for example in local development only:
+
+```typescript
+new LogixiaExceptionFilter(undefined, undefined, {
+  exposeDebug: process.env.NODE_ENV === 'development',
+  // exposeCause: true,  // also include the underlying error message (may contain internal detail)
+});
+```
+
 And every log line carries `method`, `url`, `status`, `request_id` as structured fields — not a plain string:
 
 ```

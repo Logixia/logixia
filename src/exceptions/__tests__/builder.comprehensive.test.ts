@@ -188,6 +188,8 @@ describe('ErrorResponseBuilder.build — LogixiaException', () => {
     const { response } = ErrorResponseBuilder.build({
       exception: baseException,
       path: '/api',
+      exposeDebug: true,
+      exposeCause: true,
       service: 'auth-service',
     });
     expect(response.debug?.service).toBe('auth-service');
@@ -198,6 +200,8 @@ describe('ErrorResponseBuilder.build — LogixiaException', () => {
     const { response } = ErrorResponseBuilder.build({
       exception: baseException,
       path: '/api',
+      exposeDebug: true,
+      exposeCause: true,
       startTime,
     });
     expect(typeof response.debug?.duration_ms).toBe('number');
@@ -208,6 +212,8 @@ describe('ErrorResponseBuilder.build — LogixiaException', () => {
     const { response } = ErrorResponseBuilder.build({
       exception: baseException,
       path: '/api',
+      exposeDebug: true,
+      exposeCause: true,
     });
     expect(typeof response.debug?.stack).toBe('string');
   });
@@ -221,7 +227,12 @@ describe('ErrorResponseBuilder.build — LogixiaException', () => {
       message: 'DB failed',
       cause,
     });
-    const { response } = ErrorResponseBuilder.build({ exception: ex, path: '/api' });
+    const { response } = ErrorResponseBuilder.build({
+      exception: ex,
+      path: '/api',
+      exposeDebug: true,
+      exposeCause: true,
+    });
     expect(response.debug?.cause).toBe('root cause');
   });
 });
@@ -391,6 +402,8 @@ describe('ErrorResponseBuilder.build — plain Error and unknown values', () => 
     const { response } = ErrorResponseBuilder.build({
       exception: new Error('stack test'),
       path: '/api',
+      exposeDebug: true,
+      exposeCause: true,
     });
     expect(typeof response.debug?.stack).toBe('string');
   });
@@ -404,6 +417,8 @@ describe('ErrorResponseBuilder.build — optional params', () => {
     const { response } = ErrorResponseBuilder.build({
       exception: new Error('test'),
       path: '/api',
+      exposeDebug: true,
+      exposeCause: true,
       startTime,
     });
     expect(response.debug?.duration_ms).toBeGreaterThanOrEqual(0);
@@ -422,6 +437,8 @@ describe('ErrorResponseBuilder.build — optional params', () => {
     const { response } = ErrorResponseBuilder.build({
       exception: new Error('test'),
       path: '/api',
+      exposeDebug: true,
+      exposeCause: true,
       service: 'worker',
     });
     expect(response.debug?.service).toBe('worker');

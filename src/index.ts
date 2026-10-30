@@ -20,8 +20,13 @@ import { LogLevel } from './types';
 // Type exports
 export * from './core/logitron-logger.module';
 export * from './core/logitron-nestjs.service';
-export type { LogMethodOptions } from './core/nestjs-extras';
-export { InjectLogger, LogixiaExceptionFilter, LogMethod } from './core/nestjs-extras';
+export type { LogixiaExceptionFilterOptions, LogMethodOptions } from './core/nestjs-extras';
+export {
+  InjectLogger,
+  LOGIXIA_EXCEPTION_FILTER_OPTIONS,
+  LogixiaExceptionFilter,
+  LogMethod,
+} from './core/nestjs-extras';
 export * from './formatters';
 export * from './types';
 export * from './utils/error.utils';
@@ -107,7 +112,8 @@ export type {
   MetricConfig,
   MetricsMap,
 } from './metrics';
-export { createMetricsPlugin, MetricsPlugin } from './metrics';
+export type { MetricsPluginOptions } from './metrics';
+export { createMetricsPlugin, MetricsPlugin, OVERFLOW_LABEL_VALUE } from './metrics';
 
 // Core exports
 export { DEFAULT_CONFIG, LogixiaLogger, LogixiaLoggerService };

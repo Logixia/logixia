@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { Command } from 'commander';
 
-import { formatAsTable, safeParseLogs } from '../utils';
+import { formatAsTable, safeParseLogs, sanitizeForTerminal } from '../utils';
 
 function parseDurationToMs(input?: string) {
   if (!input) return;
@@ -51,7 +51,7 @@ export async function analyzeFileContents(raw: string, opts: any = {}) {
     );
   }
 
-  const byLevel: Record<string, number> = {};
+  const byLevel: Record<string, number> = Object.create(null);
   for (const e of filtered) {
     const l = (e.level || 'info').toUpperCase();
     byLevel[l] = (byLevel[l] || 0) + 1;
@@ -82,7 +82,7 @@ export const analyzeCommand = new Command('analyze')
     const result = await analyzeFileContents(raw, opts);
 
     if (opts.format === 'json') {
-      console.log(JSON.stringify(result, null, 2));
+      console.log(sanitizeForTerminal(JSON.stringify(result, null, 2)));
       return;
     }
 

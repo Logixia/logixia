@@ -5,7 +5,7 @@ import path from 'node:path';
 import { Command } from 'commander';
 import pc from 'picocolors';
 
-import { safeParseLogs } from '../utils';
+import { csvField, safeParseLogs, sanitizeForTerminal, sanitizeInline } from '../utils';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -110,14 +110,14 @@ export function formatTime(ts: unknown): string {
   if (!ts) return '            ';
   try {
     const d = new Date(String(ts));
-    if (Number.isNaN(d.getTime())) return String(ts).slice(0, 12).padEnd(12);
+    if (Number.isNaN(d.getTime())) return sanitizeInline(String(ts).slice(0, 12)).padEnd(12);
     const hh = String(d.getHours()).padStart(2, '0');
     const mm = String(d.getMinutes()).padStart(2, '0');
     const ss = String(d.getSeconds()).padStart(2, '0');
     const ms = String(d.getMilliseconds()).padStart(3, '0');
     return `${hh}:${mm}:${ss}.${ms}`;
   } catch {
-    return String(ts).slice(0, 12).padEnd(12);
+    return sanitizeInline(String(ts).slice(0, 12)).padEnd(12);
   }
 }
 
@@ -164,7 +164,7 @@ export function buildDetailLines(entry: LogEntry | undefined): string[] {
 
   // Pretty-print all fields except `stack` (handled separately below)
   const { stack, ...rest } = entry;
-  const jsonText = JSON.stringify(rest, null, 2);
+  const jsonText = sanitizeForTerminal(JSON.stringify(rest, null, 2));
   for (const l of jsonText.split('\n')) {
     lines.push('  ' + syntaxColorJson(l));
   }
@@ -173,7 +173,7 @@ export function buildDetailLines(entry: LogEntry | undefined): string[] {
   if (stack) {
     lines.push('');
     lines.push(pc.bold(pc.red('  ▼ STACK TRACE')));
-    for (const sl of String(stack).split('\n')) {
+    for (const sl of sanitizeForTerminal(String(stack)).split('\n')) {
       if (!sl.trim()) continue;
       if (sl.trim().startsWith('at ')) {
         lines.push(coloriseStackFrame(sl));
@@ -401,19 +401,20 @@ export class TUIExplorer {
 
       const entry = this.filteredEntries[entryIdx]!;
       const isSelected = entryIdx === this.selectedIndex;
-      const level = normalizeLevel(entry.level);
+      const level = sanitizeInline(normalizeLevel(entry.level));
       const time = formatTime(entry.timestamp);
-      const msg = String(entry.message ?? '');
+      const msg = sanitizeInline(String(entry.message ?? ''));
 
       // Compact summary of extra fields
       const extraFields = Object.entries(entry)
         .filter(([k]) => !['timestamp', 'level', 'message', 'stack'].includes(k))
         .map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : String(v)}`)
         .join(' ');
+      const extraFieldsSafe = sanitizeInline(extraFields);
 
       const msgSlot = Math.floor(msgWidth * 0.65);
       const msgPart = this.truncate(msg, msgSlot);
-      const extraPart = this.truncate(extraFields, msgWidth - msgPart.length - 2);
+      const extraPart = this.truncate(extraFieldsSafe, msgWidth - msgPart.length - 2);
       const msgDisplay = msgPart + (extraPart ? pc.dim('  ' + extraPart) : '');
 
       const line = ` ${time} ` + levelBadge(level) + ' ' + this.pad(msgDisplay, msgWidth);
@@ -660,13 +661,12 @@ export class TUIExplorer {
       if (ext === '.csv') {
         const entries = this.filteredEntries;
         const allKeys = [...new Set(entries.flatMap((e) => Object.keys(e)))];
-        const header = allKeys.join(',');
+        const header = allKeys.map((k) => csvField(k)).join(',');
         const rows = entries.map((e) =>
           allKeys
             .map((k) => {
               const v = e[k];
-              const s = typeof v === 'string' ? v : JSON.stringify(v ?? '');
-              return `"${s.replace(/"/g, '""')}"`;
+              return csvField(v, true);
             })
             .join(',')
         );

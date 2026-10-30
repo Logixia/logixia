@@ -39,7 +39,7 @@ import { ErrorResponseBuilder } from '../exceptions/builder';
 import { isLogixiaException } from '../exceptions/exception';
 import type { LoggerConfig, LogLevelString, TraceIdConfig } from '../types';
 import { internalError, internalWarn } from '../utils/internal-log';
-import { TraceContext } from '../utils/trace.utils';
+import { sanitizeIncomingId, TraceContext } from '../utils/trace.utils';
 import {
   LOGIXIA_LOGGER_CONFIG,
   LOGIXIA_LOGGER_PREFIX,
@@ -232,8 +232,12 @@ export function LogMethod(options: LogMethodOptions = {}): MethodDecorator {
  *  2. NestJS `HttpException` — status + message extracted
  *  3. Unknown / plain Error  — falls back to 500 `server_error`
  *
- * **Debug stripping in production:**
- * The `debug` block is automatically stripped when `NODE_ENV === 'production'`.
+ * **Debug block (off by default):**
+ * Responses never include the `debug` block (stack trace, service, duration)
+ * unless `exposeDebug: true` is passed in the filter options. The underlying
+ * `cause` is only added when `exposeCause: true` is also set. Enable explicitly
+ * for local development only, e.g.
+ * `new LogixiaExceptionFilter(logger, undefined, { exposeDebug: process.env.NODE_ENV === 'development' })`.
  *
  * **Trace ID headers:**
  * `X-Trace-ID` and `X-Request-ID` are echoed back on every error response so
@@ -248,10 +252,27 @@ export function LogMethod(options: LogMethodOptions = {}): MethodDecorator {
  * app.useGlobalFilters(new LogixiaExceptionFilter(logger));
  * ```
  */
+export interface LogixiaExceptionFilterOptions {
+  /**
+   * Include the `debug` block (stack trace, service, duration) in error responses.
+   * @default false
+   */
+  exposeDebug?: boolean;
+  /**
+   * Include `debug.cause` as well. Requires `exposeDebug`.
+   * @default false
+   */
+  exposeCause?: boolean;
+}
+
+/** Injection token for {@link LogixiaExceptionFilterOptions}. */
+export const LOGIXIA_EXCEPTION_FILTER_OPTIONS = 'LOGIXIA_EXCEPTION_FILTER_OPTIONS';
+
 @Catch()
 export class LogixiaExceptionFilter implements ExceptionFilter {
   private readonly _logger: LogixiaLoggerService | undefined;
   private readonly _traceConfig: TraceIdConfig | undefined;
+  private readonly _options: LogixiaExceptionFilterOptions;
 
   constructor(
     @Optional()
@@ -259,8 +280,12 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
     logger?: LogixiaLoggerService,
     @Optional()
     @Inject(LOGIXIA_LOGGER_CONFIG)
-    loggerConfig?: Partial<LoggerConfig>
+    loggerConfig?: Partial<LoggerConfig>,
+    @Optional()
+    @Inject(LOGIXIA_EXCEPTION_FILTER_OPTIONS)
+    options?: LogixiaExceptionFilterOptions
   ) {
+    this._options = options ?? {};
     // Prefer the injected logger; fall back to the global module logger so
     // `new LogixiaExceptionFilter()` (registered in main.ts before DI resolves)
     // still logs without needing an explicit logger argument.
@@ -293,8 +318,8 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
     // Fall back to header/request.id only if ALS has nothing (e.g. traceId disabled).
     const traceId =
       TraceContext.instance.getCurrentTraceId() ??
-      (request.headers?.['x-trace-id'] as string | undefined) ??
-      request.id ??
+      sanitizeIncomingId(request.headers?.['x-trace-id']) ??
+      sanitizeIncomingId(request.id) ??
       undefined;
 
     const { response: errorResponse, httpStatus } = ErrorResponseBuilder.build({
@@ -302,6 +327,8 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
       traceId,
       path: request.url ?? '/',
       startTime: request.startTime,
+      exposeDebug: this._options.exposeDebug === true,
+      exposeCause: this._options.exposeCause === true,
     });
 
     // ── Logging ──────────────────────────────────────────────────────────────
@@ -346,20 +373,23 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
       }
     }
 
-    // ── Strip debug in production ─────────────────────────────────────────
-    if (process.env['NODE_ENV'] === 'production') {
-      delete errorResponse.debug;
-    }
-
     // ── Response headers ──────────────────────────────────────────────────
     if (errorResponse.meta.trace_id) {
       const traceHeader = resolveResponseHeader(this._traceConfig);
       if (traceHeader) {
-        response.setHeader(traceHeader, errorResponse.meta.trace_id);
+        try {
+          response.setHeader(traceHeader, errorResponse.meta.trace_id);
+        } catch {
+          /* headers already sent or invalid — the body still carries the trace id */
+        }
       }
     }
     if (httpStatus === 429) {
-      response.setHeader('Retry-After', '60');
+      try {
+        response.setHeader('Retry-After', '60');
+      } catch {
+        /* headers already sent */
+      }
     }
 
     response.status(httpStatus).json(errorResponse);

@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { Command } from 'commander';
 
-import { safeParseLogs } from '../utils';
+import { csvField, safeParseLogs } from '../utils';
 
 export async function exportLogs(raw: string, opts: any = {}) {
   const entries = safeParseLogs(raw);
@@ -28,21 +28,11 @@ function exportAsCSV(entries: any[], fields: string[] | null): string {
   const lines: string[] = [];
 
   // Header
-  lines.push(columns.join(','));
+  lines.push(columns.map((c) => csvField(c)).join(','));
 
   // Rows
   for (const entry of entries) {
-    const row = columns.map((col) => {
-      const value = entry[col];
-      if (value === undefined || value === null) return '';
-
-      // Escape CSV values
-      const str = String(value);
-      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    });
+    const row = columns.map((col) => csvField(entry[col]));
     lines.push(row.join(','));
   }
 

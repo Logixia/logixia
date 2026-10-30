@@ -5,6 +5,8 @@ import path from 'node:path';
 import { Command } from 'commander';
 import pc from 'picocolors';
 
+import { escapeRegExp, sanitizeForTerminal } from '../utils';
+
 function parseFilter(filter?: string): { field: string; value: string } | null {
   if (!filter) return null;
   const match = filter.match(/^(\w+):(.+)$/);
@@ -26,11 +28,12 @@ function applyFilter(line: string, filter: { field: string; value: string } | nu
   }
 }
 
-function highlightLine(line: string, highlight?: string): string {
+export function highlightLine(rawLine: string, highlight?: string): string {
+  const line = sanitizeForTerminal(rawLine);
   if (!highlight) return line;
 
   try {
-    const parsed = JSON.parse(line);
+    const parsed = JSON.parse(rawLine);
     const level = (parsed.level || '').toUpperCase();
 
     // Color by level
@@ -43,7 +46,7 @@ function highlightLine(line: string, highlight?: string): string {
   } catch {
     // Highlight pattern matches. picocolors doesn't chain like chalk did
     // (`chalk.bgYellow.black(...)`), so we nest the calls explicitly.
-    const regex = new RegExp(highlight, 'gi');
+    const regex = new RegExp(escapeRegExp(sanitizeForTerminal(highlight)), 'gi');
     return line.replace(regex, (match) => pc.bgYellow(pc.black(match)));
   }
 }

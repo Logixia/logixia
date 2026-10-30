@@ -1,3 +1,5 @@
+import type { AddressInfo } from 'node:net';
+
 /**
  * Tests for dynamic runtime log-level reconfiguration (R3 + R4).
  *
@@ -5,7 +7,6 @@
  * signal cycler, and the HTTP admin handler (GET reads, POST sets, bad input
  * rejected).
  */
-
 import { LogixiaLogger } from '../../core/logitron-logger';
 import type { LogLevelString, NamespaceLevels } from '../../types';
 import {
@@ -153,7 +154,14 @@ describe('createLevelControlHandler', () => {
     const logger = makeLogger();
     const handler = createLevelControlHandler(logger);
     const res = fakeRes();
-    handler({ method: 'POST', body: { level: 'debug' } } as never, res);
+    handler(
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: { level: 'debug' },
+      } as never,
+      res
+    );
     expect(res.statusCode).toBe(200);
     expect(logger.getLevel()).toBe('debug');
   });
@@ -162,14 +170,28 @@ describe('createLevelControlHandler', () => {
     const logger = makeLogger();
     const handler = createLevelControlHandler(logger);
     const res = fakeRes();
-    handler({ method: 'POST', body: { namespaceLevels: { 'db.*': 'trace' } } } as never, res);
+    handler(
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: { namespaceLevels: { 'db.*': 'trace' } },
+      } as never,
+      res
+    );
     expect(logger.getNamespaceLevels!()).toEqual({ 'db.*': 'trace' });
   });
 
   it('rejects an unknown level with 400', () => {
     const handler = createLevelControlHandler(makeLogger());
     const res = fakeRes();
-    handler({ method: 'POST', body: { level: 'loud' } } as never, res);
+    handler(
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: { level: 'loud' },
+      } as never,
+      res
+    );
     expect(res.statusCode).toBe(400);
     expect(JSON.parse(res.body).error).toContain('unknown level');
   });
@@ -188,6 +210,7 @@ describe('createLevelControlHandler', () => {
     const listeners: Record<string, (c?: unknown) => void> = {};
     const req = {
       method: 'POST',
+      headers: { 'content-type': 'application/json; charset=utf-8' },
       on(event: string, cb: (c?: unknown) => void) {
         listeners[event] = cb;
       },
@@ -196,6 +219,100 @@ describe('createLevelControlHandler', () => {
     listeners['data']!('{"level":');
     listeners['data']!('"warn"}');
     listeners['end']!();
+    expect(logger.getLevel()).toBe('warn');
+  });
+
+  it('rejects a POST without a JSON content type with 415 and does not change the level', () => {
+    const logger = makeLogger();
+    const handler = createLevelControlHandler(logger);
+    for (const headers of [undefined, { 'content-type': 'text/plain' }, {}]) {
+      const res = fakeRes();
+      handler({ method: 'POST', headers, body: { level: 'debug' } } as never, res);
+      expect(res.statusCode).toBe(415);
+    }
+    expect(logger.getLevel()).toBe('info');
+  });
+
+  it('rejects an oversized streamed body with 413', () => {
+    const logger = makeLogger();
+    const handler = createLevelControlHandler(logger);
+    const res = fakeRes();
+    const listeners: Record<string, (c?: unknown) => void> = {};
+    handler(
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        on(event: string, cb: (c?: unknown) => void) {
+          listeners[event] = cb;
+        },
+      },
+      res
+    );
+    listeners['data']!('x'.repeat(20 * 1024));
+    listeners['end']!();
+    expect(res.statusCode).toBe(413);
+    expect(logger.getLevel()).toBe('info');
+  });
+
+  it('rejects an oversized declared content-length with 413', () => {
+    const handler = createLevelControlHandler(makeLogger());
+    const res = fakeRes();
+    handler(
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'content-length': '999999' },
+      },
+      res
+    );
+    expect(res.statusCode).toBe(413);
+  });
+
+  it('uses a pre-parsed req.body even when req.on exists (body-parser consumed the stream)', () => {
+    const logger = makeLogger();
+    const handler = createLevelControlHandler(logger);
+    const res = fakeRes();
+    handler(
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: { level: 'debug' },
+        on: () => {
+          /* stream already consumed: never emits */
+        },
+      },
+      res
+    );
+    expect(res.statusCode).toBe(200);
+    expect(logger.getLevel()).toBe('debug');
+  });
+
+  it('works behind a body-parsing middleware on a real http server', async () => {
+    const http = await import('node:http');
+    const logger = makeLogger();
+    const handler = createLevelControlHandler(logger);
+    const server = http.createServer((req, res) => {
+      let raw = '';
+      req.on('data', (c) => (raw += c));
+      req.on('end', () => {
+        (req as unknown as { body: unknown }).body = JSON.parse(raw);
+        handler(req, res);
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, r));
+    const { port } = server.address() as AddressInfo;
+    const status = await new Promise<number>((resolve, reject) => {
+      const rq = http.request(
+        { port, method: 'POST', headers: { 'content-type': 'application/json' } },
+        (rs) => {
+          rs.resume();
+          resolve(rs.statusCode ?? 0);
+        }
+      );
+      rq.on('error', reject);
+      rq.end('{"level":"warn"}');
+    });
+    server.close();
+    expect(status).toBe(200);
     expect(logger.getLevel()).toBe('warn');
   });
 });

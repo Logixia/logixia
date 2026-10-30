@@ -25,6 +25,7 @@
 import type { IBaseLogger } from '../types';
 import { internalError } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
+import { sanitizeIncomingId } from '../utils/trace.utils';
 
 // ── Shared types ─────────────────────────────────────────────────────────────
 
@@ -239,6 +240,7 @@ export function createExpressMiddleware(
     slowRequestThresholdMs = 1000,
   } = options;
   const nameSets = resolveNameSets(options);
+  const traceHeaderName = traceIdHeader.toLowerCase();
 
   return function logixiaHttpMiddleware(
     req: IncomingRequest,
@@ -250,7 +252,7 @@ export function createExpressMiddleware(
       return;
     }
 
-    const traceId = (req.headers?.[traceIdHeader] as string | undefined) ?? shortId();
+    const traceId = sanitizeIncomingId(req.headers?.[traceHeaderName]) ?? shortId();
     const startMs = Date.now();
     const baseFields = buildBaseFields(req, traceId, options, nameSets);
 
@@ -333,6 +335,7 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
     slowRequestThresholdMs = 1000,
   } = options;
   const nameSets = resolveNameSets(options);
+  const traceHeaderName = traceIdHeader.toLowerCase();
 
   function logixiaFastifyPlugin(fastify: FastifyInstance, _opts: unknown, done: () => void): void {
     fastify.addHook('onRequest', (request: unknown, _reply: unknown, hookDone: () => void) => {
@@ -342,7 +345,7 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
         return;
       }
 
-      const traceId = (req.headers?.[traceIdHeader] as string | undefined) ?? shortId();
+      const traceId = sanitizeIncomingId(req.headers?.[traceHeaderName]) ?? shortId();
       req._logixiaStart = Date.now();
       req._logixiaId = traceId;
 

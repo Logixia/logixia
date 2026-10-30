@@ -5,18 +5,18 @@ import path from 'node:path';
 import { Command } from 'commander';
 import pc from 'picocolors';
 
-import { safeParseLogs } from '../utils';
+import { safeParseLogs, sanitizeForTerminal, sanitizeInline } from '../utils';
 
 export async function generateStats(raw: string, opts: any = {}) {
   const entries = safeParseLogs(raw);
   const group = opts.groupBy || 'level';
 
-  const agg: Record<string, number> = {};
+  const agg: Record<string, number> = Object.create(null);
   let minTime: Date | null = null;
   let maxTime: Date | null = null;
 
   for (const e of entries) {
-    const key = (e[group] || e.level || 'unknown').toString().toUpperCase();
+    const key = String(e[group] || e.level || 'unknown').toUpperCase();
     agg[key] = (agg[key] || 0) + 1;
 
     // Track time range
@@ -39,7 +39,7 @@ function formatStatsOutput(stats: unknown, filename: string): string {
   const s = stats as Record<string, unknown>;
   const lines: string[] = [];
 
-  lines.push(pc.bold(`\nLog Statistics for ${path.basename(filename)}`));
+  lines.push(pc.bold(`\nLog Statistics for ${sanitizeInline(path.basename(filename))}`));
   lines.push(pc.bold('='.repeat(50)));
   lines.push(pc.cyan(`Total Entries: ${(s['total'] as number).toLocaleString()}`));
 
@@ -54,7 +54,7 @@ function formatStatsOutput(stats: unknown, filename: string): string {
   lines.push('');
   lines.push(
     pc.bold(
-      `${(s['groupBy'] as string).charAt(0).toUpperCase() + (s['groupBy'] as string).slice(1)} Distribution:`
+      `${sanitizeInline((s['groupBy'] as string).charAt(0).toUpperCase() + (s['groupBy'] as string).slice(1))} Distribution:`
     )
   );
 
@@ -63,7 +63,8 @@ function formatStatsOutput(stats: unknown, filename: string): string {
     ([, a], [, b]) => (b as number) - (a as number)
   );
 
-  for (const [key, count] of sorted) {
+  for (const [rawKey, count] of sorted) {
+    const key = sanitizeInline(rawKey);
     const percentage = (((count as number) / (s['total'] as number)) * 100).toFixed(1);
     const bar = '█'.repeat(Math.floor(((count as number) / (s['total'] as number)) * 30));
 
@@ -100,7 +101,7 @@ export const statsCommand = new Command('stats')
     const stats = await generateStats(raw, opts);
 
     if (opts.format === 'json') {
-      console.log(JSON.stringify(stats, null, 2));
+      console.log(sanitizeForTerminal(JSON.stringify(stats, null, 2)));
     } else {
       console.log(formatStatsOutput(stats, file));
     }

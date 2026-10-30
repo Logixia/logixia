@@ -3,6 +3,7 @@
  */
 
 import type { LogEntry } from '../types';
+import { csvField } from '../utils/csv.utils';
 import { BasicLogIndexer } from './core/basic-log-indexer';
 import { BasicSearchEngine } from './core/basic-search-engine';
 import { CorrelationEngine } from './engines/correlation-engine';
@@ -332,13 +333,13 @@ export class SearchManager {
     }
 
     const fields = options.fields || ['timestamp', 'level', 'appName', 'message'];
-    const headers = fields.join(',');
+    const headers = fields.map((f) => csvField(f)).join(',');
 
     const rows = logs.map((log) => {
       return fields
         .map((field) => {
           const value = (log as unknown as Record<string, unknown>)[field];
-          return this.escapeCSVValue(value);
+          return csvField(value);
         })
         .join(',');
     });
@@ -390,20 +391,5 @@ export class SearchManager {
       // Not an object — path lookup stops here
       return current;
     }, obj);
-  }
-
-  private escapeCSVValue(value: unknown): string {
-    if (value === null || value === undefined) {
-      return '';
-    }
-
-    const str = typeof value === 'object' ? JSON.stringify(value) : String(value);
-
-    // Escape quotes and wrap in quotes if contains comma, newline, or quote
-    if (str.includes(',') || str.includes('\n') || str.includes('"')) {
-      return `"${str.replace(/"/g, '""')}"`;
-    }
-
-    return str;
   }
 }

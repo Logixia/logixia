@@ -154,7 +154,7 @@ describe('correlation helpers', () => {
   });
 
   describe('childFromRequest', () => {
-    it('passes request metadata and the first forwarded IP to logger.child', () => {
+    it('passes request metadata to logger.child and ignores X-Forwarded-For by default', () => {
       const child = { child: jest.fn() };
       child.child.mockReturnValue(child);
 
@@ -167,6 +167,7 @@ describe('correlation helpers', () => {
           },
           method: 'POST',
           url: '/orders',
+          socket: { remoteAddress: '203.0.113.9' },
         },
         child
       );
@@ -177,8 +178,88 @@ describe('correlation helpers', () => {
         method: 'POST',
         url: '/orders',
         userAgent: 'test-agent',
-        ip: '203.0.113.7',
+        ip: '203.0.113.9',
       });
+    });
+
+    it('uses the first forwarded IP only with trustProxy', () => {
+      const child = { child: jest.fn() };
+      child.child.mockReturnValue(child);
+      childFromRequest(
+        { headers: { 'x-forwarded-for': ' 203.0.113.7, 10.0.0.2' }, ip: '203.0.113.9' },
+        child,
+        { trustProxy: true }
+      );
+      expect(child.child.mock.calls[0]![0]).toMatchObject({ ip: '203.0.113.7' });
+    });
+
+    it('caps the user agent length', () => {
+      const child = { child: jest.fn() };
+      childFromRequest({ headers: { 'user-agent': 'a'.repeat(5000) } }, child);
+      expect(child.child.mock.calls[0]![0].userAgent).toHaveLength(512);
+    });
+
+    it('passes a bindings object to pino-like loggers and does not swallow their errors', () => {
+      const pinoLike = { child: jest.fn((b: unknown) => ({ child: jest.fn(), b }) as never) };
+      childFromRequest({ headers: {}, method: 'GET' }, pinoLike as never);
+      expect(pinoLike.child.mock.calls[0]![0]).toMatchObject({ method: 'GET' });
+
+      const broken = {
+        child: jest.fn(() => {
+          throw new TypeError('pino internal');
+        }),
+      };
+      expect(() => childFromRequest({ headers: {} }, broken as never)).toThrow('pino internal');
+      expect(broken.child).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses child(context, data) for the mock logger', async () => {
+      const { createMockLogger } = await import('../testing/mock-logger');
+      const mock = createMockLogger().logger;
+      const spy = jest.spyOn(mock, 'child');
+      childFromRequest({ headers: {}, method: 'GET' }, mock as never);
+      expect(spy.mock.calls[0]![0]).toBe('request');
+      expect(spy.mock.calls[0]![1]).toMatchObject({ method: 'GET' });
+    });
+
+    it('uses child(context, data) for LogixiaLoggerService', async () => {
+      const { LogixiaLoggerService } = await import('../core/logitron-nestjs.service');
+      const svc = new LogixiaLoggerService({
+        appName: 'a',
+        format: { json: false, colorize: false },
+      } as never);
+      const spy = jest.spyOn(svc, 'child');
+      expect(() => childFromRequest({ headers: {}, method: 'GET' }, svc as never)).not.toThrow();
+      expect(spy.mock.calls[0]![0]).toBe('request');
+    });
+
+    it('works with a real LogixiaLogger', async () => {
+      const { createLogger } = await import('../index');
+      const logger = createLogger({ appName: 'a', format: { json: false, colorize: false } });
+      expect(() => childFromRequest({ headers: {}, method: 'GET' }, logger as never)).not.toThrow();
+    });
+  });
+
+  describe('incoming id validation', () => {
+    it('drops unsafe message ids and origin service values', () => {
+      expect(
+        extractMessageCorrelationId({ headers: { 'x-correlation-id': 'a\r\nb' } })
+      ).toBeUndefined();
+      expect(
+        extractMessageCorrelationId({
+          MessageAttributes: { correlationId: { StringValue: 'x'.repeat(200) } },
+        })
+      ).toBeUndefined();
+      expect(extractMessageCorrelationId({ correlationId: '\u001b[2J' })).toBeUndefined();
+    });
+
+    it('ignores an invalid x-origin-service header', () => {
+      const mw = correlationMiddleware();
+      let seen: Record<string, unknown> | undefined;
+      mw({ headers: { 'x-origin-service': 'evil\u001b[2J' } }, {}, () => {
+        seen = LogixiaContext.get();
+      });
+      expect(seen?.originService).toBeUndefined();
     });
   });
 

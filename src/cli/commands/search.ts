@@ -5,7 +5,7 @@ import path from 'node:path';
 import { Command } from 'commander';
 import pc from 'picocolors';
 
-import { formatAsTable, safeParseLogs } from '../utils';
+import { formatAsTable, safeParseLogs, sanitizeForTerminal } from '../utils';
 
 interface SearchCriteria {
   field?: string;
@@ -43,7 +43,7 @@ export async function searchLogs(raw: string, opts: any = {}) {
 
 function formatSearchResults(results: any[], format: string, _context: number): string {
   if (format === 'json') {
-    return JSON.stringify(results, null, 2);
+    return sanitizeForTerminal(JSON.stringify(results, null, 2));
   }
 
   if (format === 'table') {
@@ -61,7 +61,7 @@ function formatSearchResults(results: any[], format: string, _context: number): 
 
   return results
     .map((r, idx) => {
-      const line = JSON.stringify(r);
+      const line = sanitizeForTerminal(JSON.stringify(r));
       const prefix = pc.gray(String(idx + 1) + ':');
       return `${prefix} ${line}`;
     })

@@ -40,6 +40,20 @@ export interface BuildParams {
    * When present, `debug.duration_ms` is computed automatically.
    */
   startTime?: number | undefined;
+  /**
+   * Include the `debug` block (stack trace, service, duration) in the response.
+   * Disabled by default so internal details are never returned to clients unless
+   * the caller opts in.
+   * @default false
+   */
+  exposeDebug?: boolean | undefined;
+  /**
+   * Also include `debug.cause` (the underlying error message). Only applies when
+   * `exposeDebug` is enabled, because causes often carry connection strings or
+   * other internal detail.
+   * @default false
+   */
+  exposeCause?: boolean | undefined;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -101,14 +115,18 @@ function isHttpException(
 function buildDebug(
   error: unknown,
   service: string | undefined,
-  durationMs: number | undefined
+  durationMs: number | undefined,
+  expose: { debug?: boolean | undefined; cause?: boolean | undefined }
 ): LogixiaErrorResponse['debug'] {
+  if (expose.debug !== true) return undefined;
   const stack = error instanceof Error ? error.stack : undefined;
 
   const causeRaw =
     error instanceof Error ? (error as Error & { cause?: unknown }).cause : undefined;
   let cause: string | undefined;
-  if (causeRaw instanceof Error) {
+  if (expose.cause !== true) {
+    cause = undefined;
+  } else if (causeRaw instanceof Error) {
     cause = causeRaw.message;
   } else if (causeRaw !== undefined && causeRaw !== null) {
     cause = String(causeRaw);
@@ -161,7 +179,16 @@ export class ErrorResponseBuilder {
   static build<TCode extends string = string, TType extends string = string>(
     params: BuildParams
   ): { response: LogixiaErrorResponse<TCode, TType>; httpStatus: number } {
-    const { exception, path, service, startTime, traceId: rawTraceId } = params;
+    const {
+      exception,
+      path,
+      service,
+      startTime,
+      traceId: rawTraceId,
+      exposeDebug,
+      exposeCause,
+    } = params;
+    const expose = { debug: exposeDebug, cause: exposeCause };
     // ALS is authoritative → caller-supplied → undefined (field omitted from response).
     const traceId = TraceContext.instance.getCurrentTraceId() ?? rawTraceId;
     const timestamp = new Date().toISOString();
@@ -169,7 +196,7 @@ export class ErrorResponseBuilder {
 
     // ── 1. LogixiaException ────────────────────────────────────────────────
     if (isLogixiaException<TCode, TType>(exception)) {
-      const debug = buildDebug(exception, service, durationMs);
+      const debug = buildDebug(exception, service, durationMs, expose);
 
       const errorBlock: LogixiaErrorResponse<TCode, TType>['error'] = {
         type: exception.errorType,
@@ -215,7 +242,7 @@ export class ErrorResponseBuilder {
 
       const type = httpStatusToType(status) as TType;
       const code = `HTTP_${status}` as TCode;
-      const debug = buildDebug(exception, service, durationMs);
+      const debug = buildDebug(exception, service, durationMs, expose);
 
       const response: LogixiaErrorResponse<TCode, TType> = {
         success: false,
@@ -229,7 +256,7 @@ export class ErrorResponseBuilder {
 
     // ── 3. Unknown / plain Error ──────────────────────────────────────────
     const err = exception instanceof Error ? exception : new Error(String(exception));
-    const debug = buildDebug(err, service, durationMs);
+    const debug = buildDebug(err, service, durationMs, expose);
 
     const response: LogixiaErrorResponse<TCode, TType> = {
       success: false,
