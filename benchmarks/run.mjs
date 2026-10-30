@@ -57,10 +57,19 @@ const restore = () => {
 
 // ── Library instances ────────────────────────────────────────────────────────
 const pinoLogger = pino({ level: 'info' }, devNull);
+// winston's Stream transport buffers unboundedly when a logger outpaces its
+// pipeline (hundreds of MB per scenario). A synchronous null transport keeps
+// memory bounded and still pays winston's format cost.
+class NullTransport extends winston.Transport {
+  log(info, callback) {
+    void info[Symbol.for('message')];
+    callback();
+  }
+}
 const winstonLogger = winston.createLogger({
   level: 'info',
   format: winston.format.json(),
-  transports: [new winston.transports.Stream({ stream: devNull })],
+  transports: [new NullTransport()],
 });
 const bunyanLogger = bunyan
   ? bunyan.createLogger({ name: 'bench', streams: [{ level: 'info', stream: devNull }] })
@@ -120,9 +129,13 @@ function formatResults(bench) {
   });
 }
 
+// tinybench keeps one latency sample per call (millions for a fast logger), so
+// memory grows with run time. Override with BENCH_TIME_MS on constrained hosts.
+const BENCH_TIME_MS = Number(process.env.BENCH_TIME_MS ?? 3000);
+
 // ── Suite builder ──────────────────────────────────────────────────────────────
 function suite(name, fns) {
-  const bench = new Bench({ name, time: 3000 });
+  const bench = new Bench({ name, time: BENCH_TIME_MS });
   bench.add('pino', fns.pino);
   bench.add('winston', fns.winston);
   if (bunyanLogger && fns.bunyan) bench.add('bunyan', fns.bunyan);

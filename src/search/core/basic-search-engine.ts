@@ -8,6 +8,7 @@ import type {
   CorrelatedLogs,
   LogCorrelationSummary,
   ParsedNLQuery,
+  RelativeTime,
   SearchFilters,
   SearchHighlight,
   SearchOptions,
@@ -20,6 +21,7 @@ import type {
   TimeRange,
 } from '../types';
 import type { ILogSearchEngine } from './search-engine.interface';
+import { extractUserId } from './user-id';
 
 /**
  * Basic search engine implementation
@@ -80,10 +82,11 @@ export class BasicSearchEngine implements ILogSearchEngine {
     options?: SearchOptions
   ): Promise<SearchResult[]> {
     // Apply filters first
-    const filteredLogs = this.applyFilters(this.logs, filters);
+    const textCache = new Map<LogEntry, string>();
+    const filteredLogs = this.applyFilters(this.logs, filters, textCache);
 
     // Perform text search
-    const results = this.performTextSearch(filteredLogs, query, options);
+    const results = this.performTextSearch(filteredLogs, query, options, textCache);
 
     // Add to search history
     this.addToSearchHistory(query);
@@ -107,7 +110,7 @@ export class BasicSearchEngine implements ILogSearchEngine {
    */
   async naturalLanguageSearch(query: string): Promise<SearchResult[]> {
     const parsed = await this.parseNaturalLanguageQuery(query);
-    return this.search(parsed.originalQuery, parsed.filters, {
+    return this.search(parsed.textQuery ?? parsed.originalQuery, parsed.filters, {
       semanticSearch: true,
       includeContext: true,
     });
@@ -279,31 +282,39 @@ export class BasicSearchEngine implements ILogSearchEngine {
   async parseNaturalLanguageQuery(query: string): Promise<ParsedNLQuery> {
     const filters: SearchFilters = {};
     const lowerQuery = query.toLowerCase();
+    let remainder = query;
+    const consume = (re: RegExp): void => {
+      remainder = remainder.replace(re, ' ');
+    };
 
-    // Extract levels
     const levels: string[] = [];
-    if (lowerQuery.includes('error')) levels.push('error');
-    if (lowerQuery.includes('warn')) levels.push('warn');
-    if (lowerQuery.includes('info')) levels.push('info');
-    if (levels.length > 0) filters.levels = levels;
+    if (/\berrors?\b/i.test(query)) levels.push('error');
+    if (/\bwarn(?:ing)?s?\b/i.test(query)) levels.push('warn');
+    if (/\binfo\b/i.test(query)) levels.push('info');
+    if (levels.length > 0) {
+      filters.levels = levels;
+      consume(/\b(?:errors?|warn(?:ing)?s?|info)\b/gi);
+    }
 
-    // Extract time range
     const timeRange = this.extractTimeRange(query);
-    if (timeRange) filters.timeRange = timeRange;
+    if (timeRange) {
+      filters.timeRange = timeRange;
+      consume(/\b(?:last|past)\s+(?:\d+\s+)?(?:second|minute|hour|day)s?\b/gi);
+      consume(/\btoday\b/gi);
+    }
 
-    // Extract service names (basic pattern matching)
-    const serviceMatch = query.match(/from\s+(?:the\s+)?(\w+)\s+service/i);
+    const serviceMatch = query.match(/from\s+(?:the\s+)?([\w-]+)\s+service/i);
     if (serviceMatch?.[1]) {
       filters.services = [serviceMatch[1]];
+      consume(/from\s+(?:the\s+)?[\w-]+\s+service/gi);
     }
 
-    // Extract user ID
-    const userMatch = query.match(/user\s+(?:id\s+)?(\w+)/i);
-    if (userMatch?.[1]) {
-      filters.userIds = [userMatch[1]];
+    const userMatch = extractUserId(query);
+    if (userMatch) {
+      filters.userIds = [userMatch.id];
+      remainder = remainder.replace(userMatch.span, ' ');
     }
 
-    // Determine intent
     let intent: ParsedNLQuery['intent'] = 'general_search';
     if (lowerQuery.includes('error')) intent = 'find_errors';
     if (lowerQuery.includes('trace') || lowerQuery.includes('request')) intent = 'trace_request';
@@ -311,8 +322,15 @@ export class BasicSearchEngine implements ILogSearchEngine {
     if (lowerQuery.includes('slow') || lowerQuery.includes('performance'))
       intent = 'performance_analysis';
 
+    const textQuery = remainder
+      .split(/\s+/)
+      .map(trimPunctuation)
+      .filter((w) => w && !NL_FILLER_WORDS.has(w.toLowerCase()))
+      .join(' ');
+
     return {
       originalQuery: query,
+      textQuery,
       intent,
       entities: [],
       filters,
@@ -362,8 +380,15 @@ export class BasicSearchEngine implements ILogSearchEngine {
 
   // Private helper methods
 
-  private applyFilters(logs: LogEntry[], filters?: SearchFilters): LogEntry[] {
+  private applyFilters(
+    logs: LogEntry[],
+    filters: SearchFilters | undefined,
+    textCache: Map<LogEntry, string>
+  ): LogEntry[] {
     if (!filters) return logs;
+
+    const range = filters.timeRange ? resolveTimeRange(filters.timeRange) : undefined;
+    const excludes = (filters.excludePatterns ?? []).filter(Boolean).map((p) => p.toLowerCase());
 
     return logs.filter((log) => {
       // Level filter
@@ -382,21 +407,38 @@ export class BasicSearchEngine implements ILogSearchEngine {
       }
 
       // Time range filter
-      if (filters.timeRange) {
+      if (range) {
         const logTime = new Date(log.timestamp).getTime();
-        const start =
-          typeof filters.timeRange.start === 'number'
-            ? filters.timeRange.start
-            : filters.timeRange.start.getTime();
+        if (logTime < range.start) return false;
+        if (range.end !== undefined && logTime > range.end) return false;
+      }
 
-        if (logTime < start) return false;
+      if (filters.userIds && !matchesAny(extractPayloadId(log, USER_ID_KEYS), filters.userIds)) {
+        return false;
+      }
 
-        if (filters.timeRange.end) {
-          const end =
-            typeof filters.timeRange.end === 'number'
-              ? filters.timeRange.end
-              : filters.timeRange.end.getTime();
-          if (logTime > end) return false;
+      if (
+        filters.sessionIds &&
+        !matchesAny(extractPayloadId(log, SESSION_ID_KEYS), filters.sessionIds)
+      ) {
+        return false;
+      }
+
+      if (filters.minSeverity !== undefined && levelSeverity(log.level) < filters.minSeverity) {
+        return false;
+      }
+
+      if (excludes.length > 0) {
+        const text = this.lowerSearchableText(log, textCache);
+        if (excludes.some((p) => text.includes(p))) return false;
+      }
+
+      if (filters.customFields) {
+        for (const [key, expected] of Object.entries(filters.customFields)) {
+          const actual = getPath(log, key);
+          if (!fieldMatches(actual === undefined ? getPath(log.payload, key) : actual, expected)) {
+            return false;
+          }
         }
       }
 
@@ -418,7 +460,8 @@ export class BasicSearchEngine implements ILogSearchEngine {
   private performTextSearch(
     logs: LogEntry[],
     query: string,
-    options?: SearchOptions
+    options: SearchOptions | undefined,
+    textCache: Map<LogEntry, string>
   ): SearchResult[] {
     if (!query) {
       return logs.map((log) => ({ log, score: 1 }));
@@ -428,7 +471,7 @@ export class BasicSearchEngine implements ILogSearchEngine {
     const results: SearchResult[] = [];
 
     for (const log of logs) {
-      const searchableText = this.getSearchableText(log).toLowerCase();
+      const searchableText = this.lowerSearchableText(log, textCache);
       let score = 0;
       const highlights: SearchHighlight[] = [];
       const matchedTerms: string[] = [];
@@ -460,6 +503,15 @@ export class BasicSearchEngine implements ILogSearchEngine {
     }
 
     return results;
+  }
+
+  private lowerSearchableText(log: LogEntry, cache: Map<LogEntry, string>): string {
+    let text = cache.get(log);
+    if (text === undefined) {
+      text = this.getSearchableText(log).toLowerCase();
+      cache.set(log, text);
+    }
+    return text;
   }
 
   private getSearchableText(log: LogEntry): string {
@@ -603,28 +655,20 @@ export class BasicSearchEngine implements ILogSearchEngine {
   private extractTimeRange(query: string): TimeRange | undefined {
     const lowerQuery = query.toLowerCase();
 
-    // Last hour
-    if (lowerQuery.includes('last hour') || lowerQuery.includes('past hour')) {
-      return {
-        start: new Date(Date.now() - 60 * 60 * 1000),
-      };
+    const relativeMatch = lowerQuery.match(
+      /\b(?:last|past)\s+(?:(\d+)\s+)?(seconds?|minutes?|hours?|days?)\b/
+    );
+    if (relativeMatch?.[2]) {
+      const value = relativeMatch[1] ? Number.parseInt(relativeMatch[1], 10) : 1;
+      const unit = `${relativeMatch[2].replace(/s$/, '')}s` as RelativeTime['unit'];
+      const relative: RelativeTime = { value, unit };
+      return { start: resolveTimeRange({ start: 0, relative }).start, relative };
     }
 
-    // Last N hours
-    const hoursMatch = query.match(/last\s+(\d+)\s+hours?/i);
-    if (hoursMatch) {
-      return {
-        start: new Date(Date.now() - Number.parseInt(hoursMatch[1] ?? '0') * 60 * 60 * 1000),
-      };
-    }
-
-    // Today
     if (lowerQuery.includes('today')) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      return {
-        start: today,
-      };
+      return { start: today };
     }
 
     return undefined;
@@ -663,4 +707,139 @@ export class BasicSearchEngine implements ILogSearchEngine {
     // eslint-disable-next-line sonarjs/pseudo-random -- non-security preset ID generation
     return `preset_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
   }
+}
+
+const UNIT_MS: Record<RelativeTime['unit'], number> = {
+  seconds: 1000,
+  minutes: 60_000,
+  hours: 3_600_000,
+  days: 86_400_000,
+};
+
+const LEVEL_SEVERITY: Record<string, number> = {
+  trace: 0,
+  verbose: 1,
+  debug: 1,
+  info: 2,
+  log: 2,
+  warn: 3,
+  warning: 3,
+  error: 4,
+  fatal: 5,
+  critical: 5,
+};
+
+const USER_ID_KEYS = ['userId', 'user_id', 'userid'];
+const SESSION_ID_KEYS = ['sessionId', 'session_id', 'sessionid'];
+
+const NL_FILLER_WORDS = new Set([
+  'show',
+  'me',
+  'find',
+  'get',
+  'list',
+  'search',
+  'display',
+  'all',
+  'any',
+  'the',
+  'a',
+  'an',
+  'in',
+  'of',
+  'for',
+  'from',
+  'with',
+  'during',
+  'within',
+  'over',
+  'logs',
+  'log',
+  'entries',
+  'entry',
+  'messages',
+  'message',
+  'events',
+  'event',
+  'recent',
+  'and',
+  'only',
+  'please',
+  'last',
+  'past',
+]);
+
+/** Strip leading and trailing non-word characters. */
+function trimPunctuation(word: string): string {
+  const isWord = (c: string | undefined): boolean => c !== undefined && /\w/.test(c);
+  let start = 0;
+  let end = word.length;
+  while (start < end && !isWord(word[start])) start++;
+  while (end > start && !isWord(word[end - 1])) end--;
+  return word.slice(start, end);
+}
+
+/** Severity rank of a level name; higher is more severe. Unknown levels rank as info. */
+function levelSeverity(level: unknown): number {
+  if (typeof level !== 'string') return LEVEL_SEVERITY['info']!;
+  return LEVEL_SEVERITY[level.toLowerCase()] ?? LEVEL_SEVERITY['info']!;
+}
+
+function resolveTimeRange(range: TimeRange): { start: number; end: number | undefined } {
+  const toMs = (v: Date | number): number => (typeof v === 'number' ? v : v.getTime());
+  if (range.relative) {
+    const { value, unit } = range.relative;
+    return {
+      start: Date.now() - value * UNIT_MS[unit],
+      end: range.end === undefined ? undefined : toMs(range.end),
+    };
+  }
+  return { start: toMs(range.start), end: range.end === undefined ? undefined : toMs(range.end) };
+}
+
+function getPath(obj: unknown, path: string): unknown {
+  let cur: unknown = obj;
+  for (const part of path.split('.')) {
+    if (cur === null || typeof cur !== 'object') return undefined;
+    cur = (cur as Record<string, unknown>)[part];
+  }
+  return cur;
+}
+
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a);
+  const kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  return ka.every((k) =>
+    deepEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k])
+  );
+}
+
+/**
+ * Type-aware equality: primitives by ===, except a numeric string matches a numeric
+ * log value; objects and arrays by deep equality. A missing field never matches.
+ */
+function fieldMatches(actual: unknown, expected: unknown): boolean {
+  if (actual === undefined) return false;
+  if (typeof actual === 'number' && typeof expected === 'string' && expected.trim() !== '') {
+    return Number(expected) === actual;
+  }
+  return deepEqual(actual, expected);
+}
+
+function extractPayloadId(log: LogEntry, keys: string[]): string | undefined {
+  const payload = log.payload;
+  if (!payload) return undefined;
+  for (const key of keys) {
+    const v = payload[key];
+    if (v !== undefined && v !== null) return String(v);
+  }
+  return undefined;
+}
+
+function matchesAny(value: string | undefined, allowed: string[]): boolean {
+  return value !== undefined && allowed.includes(value);
 }
