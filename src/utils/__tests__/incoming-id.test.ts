@@ -57,7 +57,7 @@ describe('createExpressContextMiddleware trace id', () => {
     createExpressContextMiddleware()({ headers: { 'x-trace-id': 'a\r\nb' } }, {}, () => {
       seen = LogixiaContext.get()?.traceId;
     });
-    expect(seen).toMatch(/^[0-9a-f]{8}$/);
+    expect(seen).toMatch(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/);
   });
 
   it('keeps a valid incoming trace id', () => {
