@@ -39,6 +39,7 @@ import {
   httpRequest,
 } from './batch-buffer';
 import { mergeCoreFields } from './entry-fields';
+import { protectSecrets } from './secret-config';
 
 export interface GCPMonitoredResource {
   type: string;
@@ -128,6 +129,7 @@ export class GCPTransport implements IAsyncTransport {
   private readonly credentials: { client_email: string; private_key: string } | undefined;
 
   constructor(config: GCPTransportConfig) {
+    protectSecrets(this, ['credentials', 'accessToken']);
     this.projectId =
       config.projectId ??
       process.env['GOOGLE_CLOUD_PROJECT'] ??
@@ -145,6 +147,7 @@ export class GCPTransport implements IAsyncTransport {
       batchSize: this.batchSize,
       maxBufferSize: config.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE,
       send: (entries) => this.writeEntries(entries),
+      secrets: () => this.secretValues(),
     });
 
     this.flushTimer = setInterval(() => {
@@ -310,6 +313,15 @@ export class GCPTransport implements IAsyncTransport {
     );
   }
 
+  private secretValues(token?: string): (string | undefined)[] {
+    return [
+      ...(this.credentials?.private_key.split('\n') ?? []),
+      this.credentials?.private_key,
+      this.accessToken ?? undefined,
+      token,
+    ];
+  }
+
   private async writeEntries(entries: TransportLogEntry[]): Promise<void> {
     const token = await this.getAccessToken();
     if (!token) {
@@ -328,6 +340,7 @@ export class GCPTransport implements IAsyncTransport {
       body,
       timeoutMs: this.requestTimeoutMs,
       label: 'GCP Logging API',
+      secrets: () => this.secretValues(token),
     });
   }
 }

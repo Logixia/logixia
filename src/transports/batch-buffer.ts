@@ -13,6 +13,7 @@ import * as http from 'node:http';
 import * as https from 'node:https';
 
 import { internalError, internalWarn } from '../utils/internal-log';
+import { scrubbing, scrubError } from './secret-config';
 
 export const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 export const DEFAULT_MAX_BUFFER_SIZE = 10_000;
@@ -43,6 +44,8 @@ export interface HttpRequestOptions {
   body?: string;
   timeoutMs: number;
   label: string;
+  /** Secret values to scrub from any error this request raises. URL userinfo is always scrubbed. */
+  secrets?: () => (string | undefined)[];
 }
 
 export interface HttpResult {
@@ -52,6 +55,10 @@ export interface HttpResult {
 
 /** One request with a hard timeout. Rejects with HttpError on any non-2xx status. */
 export function httpRequest(opts: HttpRequestOptions): Promise<HttpResult> {
+  return sendRequest(opts).catch(scrubbing(opts.secrets ?? (() => [])));
+}
+
+function sendRequest(opts: HttpRequestOptions): Promise<HttpResult> {
   const { url, method = 'POST', headers = {}, body, timeoutMs, label } = opts;
   const transport = url.protocol === 'http:' ? http : https;
   return new Promise<HttpResult>((resolve, reject) => {
@@ -90,6 +97,8 @@ export interface BatchBufferOptions<T> {
   batchSize: number;
   maxBufferSize?: number;
   send: (items: T[]) => Promise<void>;
+  /** Secret values to scrub from send errors before they are stored or logged. */
+  secrets?: () => (string | undefined)[];
   /** Overrides the default drop-on-4xx rule. Return true to keep and retry the batch. */
   shouldRetry?: (err: unknown) => boolean;
 }
@@ -154,6 +163,7 @@ export class BatchBuffer<T> {
         await this.opts.send(batch);
         this.failures = 0;
       } catch (err) {
+        scrubError(err, this.opts.secrets?.() ?? []);
         const retry = this.opts.shouldRetry
           ? this.opts.shouldRetry(err)
           : !isPermanentHttpError(err);

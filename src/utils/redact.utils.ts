@@ -22,6 +22,7 @@
 import type { RedactConfig } from '../types';
 import { safeToString } from './coerce.utils';
 import { serializeError } from './error.utils';
+import { SENSITIVE_KEY_NAMES } from './sensitive-names';
 
 export type { RedactConfig };
 
@@ -67,34 +68,7 @@ const PII_CONSERVATIVE_PATTERNS: readonly RegExp[] = [
 /**
  * Conservative field-name paths auto-redacted by name regardless of value.
  */
-const PII_CONSERVATIVE_PATHS: readonly string[] = [
-  '**.password',
-  '**.passwd',
-  '**.secret',
-  '**.token',
-  '**.apiKey',
-  '**.api_key',
-  '**.accessToken',
-  '**.access_token',
-  '**.refreshToken',
-  '**.refresh_token',
-  '**.authorization',
-  '**.credentials',
-  '**.privateKey',
-  '**.private_key',
-  '**.clientSecret',
-  '**.client_secret',
-  '**.cookie',
-  '**.set-cookie',
-  '**.x-api-key',
-  '**.session',
-  '**.proxy-authorization',
-  '**.x-auth-token',
-  '**.x-access-token',
-  '**.aws_secret_access_key',
-  '**.awsSecretAccessKey',
-  '**.secretAccessKey',
-];
+const PII_CONSERVATIVE_PATHS: readonly string[] = SENSITIVE_KEY_NAMES.map((name) => `**.${name}`);
 
 /**
  * Aggressive patterns: also catch personal data that could identify a person.

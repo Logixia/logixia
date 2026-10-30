@@ -34,6 +34,7 @@
  * ```
  */
 
+import { protectSecrets } from './transports/secret-config';
 import { stringifyForLog } from './utils/safe-stringify';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -209,7 +210,7 @@ function validateRemoteUrl(raw: string): string {
   try {
     parsed = new URL(raw);
   } catch {
-    throw new TypeError(`BrowserRemoteTransport: invalid url "${raw}"`);
+    throw new TypeError(`BrowserRemoteTransport: invalid url [redacted]`);
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new TypeError(
@@ -292,6 +293,7 @@ export class BrowserRemoteTransport implements IBrowserTransport {
     this.flushIntervalMs = options.flushIntervalMs ?? 5000;
     this.maxBufferSize = options.maxBufferSize ?? 1000;
     if (options.level !== undefined) this.level = options.level;
+    protectSecrets(this, ['headers', 'url']);
     this.scheduleFlush();
   }
 

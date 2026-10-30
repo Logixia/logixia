@@ -7,6 +7,7 @@ import type {
 import { internalError } from '../utils/internal-log';
 import { BufferCap } from './buffer-cap';
 import { mergeCoreFields } from './entry-fields';
+import { collectSecrets, protectSecrets, scrubError } from './secret-config';
 
 /**
  * Thrown by sendBatch() when part of a batch was already delivered. drain()
@@ -55,23 +56,33 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
       enableEventTracking: true,
       ...config,
     };
+    protectSecrets(this, ['config']);
     this.level = config.level;
     this.batchSize = this.config.batchSize || 50;
     this.flushInterval = this.config.flushInterval || 10000;
     this.cap = new BufferCap(name, config.maxBufferSize, this.batchSize);
   }
 
+  /** Secret strings to scrub from errors: everything secret-looking in the config. Override to add more. */
+  protected secretValues(): string[] {
+    return collectSecrets(this.config);
+  }
+
   async write(entry: TransportLogEntry): Promise<void> {
-    if (!this.isReady) await this.ensureReady();
+    try {
+      if (!this.isReady) await this.ensureReady();
 
-    if (this.shouldSkipEntry(entry)) {
-      return;
-    }
+      if (this.shouldSkipEntry(entry)) {
+        return;
+      }
 
-    if (this.config.batchSize && this.config.batchSize > 1) {
-      this.addToBatch(entry);
-    } else {
-      await this.sendEntry(entry);
+      if (this.config.batchSize && this.config.batchSize > 1) {
+        this.addToBatch(entry);
+      } else {
+        await this.sendEntry(entry);
+      }
+    } catch (error) {
+      throw scrubError(error, this.secretValues());
     }
   }
 
@@ -124,6 +135,7 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
       try {
         await this.sendBatch(entriesToSend);
       } catch (error) {
+        scrubError(error, this.secretValues());
         internalError(`Analytics transport ${this.name} flush failed`, error);
         // Re-add failed entries to the front of the batch for retry, then stop.
         this.batch.unshift(...(error instanceof PartialBatchError ? error.unsent : entriesToSend));

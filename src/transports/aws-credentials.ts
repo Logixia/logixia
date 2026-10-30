@@ -13,6 +13,7 @@ import * as path from 'node:path';
 import { internalWarn } from '../utils/internal-log';
 import { type AwsCredentials } from './aws-sigv4';
 import { httpRequest } from './batch-buffer';
+import { protectSecrets } from './secret-config';
 
 const REFRESH_MARGIN_MS = 5 * 60 * 1000;
 const FAILURE_BACKOFF_MS = 30 * 1000;
@@ -161,6 +162,7 @@ export class AwsCredentialProvider {
   private readonly explicit: AwsCredentials | undefined;
 
   constructor(config: AwsCredentialConfig) {
+    protectSecrets(this, ['cached', 'explicit']);
     if (config.accessKeyId && config.secretAccessKey) {
       this.explicit = {
         accessKeyId: config.accessKeyId,
@@ -197,6 +199,19 @@ export class AwsCredentialProvider {
     }
     this.cached = found;
     return found;
+  }
+
+  /** Secret values this provider may hold, for scrubbing error text. */
+  secretValues(): (string | undefined)[] {
+    const env = process.env;
+    return [
+      this.explicit?.secretAccessKey,
+      this.explicit?.sessionToken,
+      this.cached?.secretAccessKey,
+      this.cached?.sessionToken,
+      env['AWS_SECRET_ACCESS_KEY'],
+      env['AWS_SESSION_TOKEN'],
+    ];
   }
 
   invalidate(): void {
