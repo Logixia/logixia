@@ -305,7 +305,9 @@ export interface IBaseLogger {
   timeEnd(label: string): Promise<number | undefined>;
   timeAsync<T>(label: string, fn: () => Promise<T>): Promise<T>;
 
+  /** Set the minimum log level at runtime. Unknown levels are ignored with a warning. */
   setLevel(level: LogLevel | string): void;
+  /** Return the configured minimum log level (not the per-namespace effective one). */
   getLevel(): string;
   setContext(context: string): void;
   getContext(): string | undefined;
@@ -337,9 +339,43 @@ export interface IBaseLogger {
   unuse(pluginName: string): this;
 }
 
-// Type for custom level methods based on config
+/**
+ * Runtime controls implemented by loggers returned from `createLogger`.
+ * Kept separate from {@link IBaseLogger} and {@link ILogger}, so existing
+ * implementations of those (mocks, adapters) keep compiling.
+ */
+export interface ILoggerRuntimeControls {
+  /**
+   * Replace the per-namespace level map at runtime.
+   * @example logger.setNamespaceLevels({ 'db.*': 'debug', '*': 'info' });
+   */
+  setNamespaceLevels(levels: NamespaceLevels): void;
+  /** Merge entries into the existing per-namespace level map at runtime. */
+  patchNamespaceLevels(levels: NamespaceLevels): void;
+  /** Return a copy of the current per-namespace level map. */
+  getNamespaceLevels(): NamespaceLevels;
+  /** Flush buffered entries in all transports without closing them. */
+  flush(): Promise<void>;
+  /** Report whether the transports are healthy. */
+  healthCheck(): Promise<{ healthy: boolean; details: Record<string, unknown> }>;
+}
+
+/**
+ * Logger member names a custom level must not use: a level with one of these
+ * names would shadow, or be shadowed by, a built-in logger method. The built-in
+ * level methods (`error`, `warn`, `info`, `debug`, `trace`, `verbose`) are valid level names.
+ */
+export type ReservedLevelName = Exclude<
+  keyof IBaseLogger | keyof ILoggerRuntimeControls,
+  'error' | 'warn' | 'info' | 'debug' | 'trace' | 'verbose'
+>;
+
+// Type for custom level methods based on config; reserved names never become level methods
 export type CustomLevelMethods<T extends Record<string, number>> = {
-  [K in keyof T]: (message: string, data?: Record<string, unknown>) => Promise<void>;
+  [K in keyof T as K extends ReservedLevelName ? never : K]: (
+    message: string,
+    data?: Record<string, unknown>
+  ) => Promise<void>;
 };
 
 // Generic logger type that combines base logger with custom level methods
@@ -351,15 +387,28 @@ export type ILogger<TLevels extends Record<string, number> = {}> = IBaseLogger &
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- marker interface for backward compat
 export interface ILoggerDefault extends IBaseLogger {}
 
+/** What `createLogger` returns for a config with custom levels: the logger plus its runtime controls. */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- empty default is intentional for optional generic
+export type LogixiaLoggerInstance<TLevels extends Record<string, number> = {}> = {
+  /** Child loggers carry the runtime controls too. */
+  child(context: string, data?: Record<string, unknown>): LogixiaLoggerInstance<TLevels>;
+} & ILogger<TLevels> &
+  ILoggerRuntimeControls;
+
+/** What `createLogger` returns for a config without custom levels. */
+export interface LogixiaLoggerDefault extends ILoggerDefault, ILoggerRuntimeControls {
+  child(context: string, data?: Record<string, unknown>): LogixiaLoggerDefault;
+}
+
 // Helper type to create logger with specific custom levels
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic type needs any to accept all LoggerConfig shapes
 export type LoggerWithLevels<T extends LoggerConfig<any>> = T['levelOptions'] extends {
   levels: infer L;
 }
   ? L extends Record<string, number>
-    ? ILogger<L>
-    : ILoggerDefault
-  : ILoggerDefault;
+    ? LogixiaLoggerInstance<L>
+    : LogixiaLoggerDefault
+  : LogixiaLoggerDefault;
 
 // Helper type to extract levels from config for IntelliSense
 export type ExtractLevels<T> = T extends LoggerConfig<infer L> ? L : Record<string, number>;

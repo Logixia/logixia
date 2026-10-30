@@ -23,6 +23,7 @@
  */
 
 import type { IBaseLogger } from '../types';
+import type { HttpRequestShape, HttpResponseShape } from '../types/http-shapes';
 import { internalError } from '../utils/internal-log';
 import { resolveRequestTraceId, resolveTraceHeaders } from '../utils/request-trace';
 import { stringifyForLog } from '../utils/safe-stringify';
@@ -86,21 +87,8 @@ export interface HttpLoggerOptions {
 }
 
 // Minimal structural types so we don't need @types/express / fastify in core
-export interface IncomingRequest {
-  method?: string;
-  url?: string;
-  headers?: Record<string, string | string[] | undefined>;
-  body?: unknown;
-  socket?: { remoteAddress?: string };
-  ip?: string;
-}
-
-export interface OutgoingResponse {
-  statusCode?: number;
-  on?: (event: string, cb: () => void) => void;
-  once?: (event: string, cb: () => void) => void;
-  getHeader?: (name: string) => string | number | string[] | undefined;
-}
+export type IncomingRequest = HttpRequestShape;
+export type OutgoingResponse = HttpResponseShape;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

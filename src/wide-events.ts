@@ -34,6 +34,7 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 
+import type { HttpRequestShape, HttpResponseShape } from './types/http-shapes';
 import { getCurrentTraceId } from './utils/trace.utils';
 
 /** The accumulating event fields for the current scope. */
@@ -155,18 +156,8 @@ export async function withWideEvent<T>(
 
 // ── HTTP middleware ─────────────────────────────────────────────────────────
 
-interface MwReq {
-  method?: string | undefined;
-  url?: string | undefined;
-  originalUrl?: string | undefined;
-  ip?: string | undefined;
-  headers?: Record<string, unknown> | undefined;
-  socket?: { remoteAddress?: string } | undefined;
-}
-interface MwRes {
-  statusCode?: number;
-  once?: (event: string, cb: () => void) => void;
-}
+type MwReq = HttpRequestShape;
+type MwRes = HttpResponseShape;
 
 export interface WideEventMiddlewareOptions extends WideEventOptions {
   /** Derive extra initial fields from the request. */

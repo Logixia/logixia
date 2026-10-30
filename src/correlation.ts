@@ -54,6 +54,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { LogixiaContext } from './context/async-context';
+import type { HttpRequestShape, HttpResponseShape } from './types/http-shapes';
 import { sanitizeIncomingId } from './utils/trace.utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -183,11 +184,11 @@ export function correlationMiddleware(options: CorrelationMiddlewareOptions = {}
   } = options;
 
   return function logixiaCorrelationMiddleware(
-    req: Record<string, unknown>,
-    res: Record<string, unknown>,
+    req: HttpRequestShape,
+    res: HttpResponseShape,
     next: () => void
   ): void {
-    const headers = (req['headers'] ?? {}) as Record<string, string | undefined>;
+    const headers = req.headers ?? {};
 
     // Node lower-cases incoming header names, so look up with lower-cased keys.
     const incomingId = trustIncoming ? validIncomingId(headers[header.toLowerCase()]) : undefined;
@@ -195,10 +196,7 @@ export function correlationMiddleware(options: CorrelationMiddlewareOptions = {}
     const originService = validIncomingId(headers[originServiceHeader.toLowerCase()]);
 
     if (setResponseHeader) {
-      const setHeader = res['setHeader'] as ((name: string, value: string) => void) | undefined;
-      if (typeof setHeader === 'function') {
-        setHeader.call(res, header, correlationId);
-      }
+      res.setHeader?.(header, correlationId);
     }
 
     const ctx: CorrelationContext = {
@@ -232,11 +230,11 @@ export function correlationFastifyHook(options: CorrelationMiddlewareOptions = {
   } = options;
 
   return function logixiaCorrelationFastifyHook(
-    request: Record<string, unknown>,
-    reply: Record<string, unknown>,
+    request: HttpRequestShape,
+    reply: HttpResponseShape,
     done: () => void
   ): void {
-    const headers = (request['headers'] ?? {}) as Record<string, string | undefined>;
+    const headers = request.headers ?? {};
 
     // Node lower-cases incoming header names, so look up with lower-cased keys.
     const incomingId = trustIncoming ? validIncomingId(headers[header.toLowerCase()]) : undefined;
@@ -244,10 +242,7 @@ export function correlationFastifyHook(options: CorrelationMiddlewareOptions = {
     const originService = validIncomingId(headers[originServiceHeader.toLowerCase()]);
 
     if (setResponseHeader) {
-      const replyHeader = reply['header'] as ((name: string, value: string) => void) | undefined;
-      if (typeof replyHeader === 'function') {
-        replyHeader.call(reply, header, correlationId);
-      }
+      reply.header?.(header, correlationId);
     }
 
     const ctx: CorrelationContext = {
@@ -391,21 +386,21 @@ export interface ChildFromRequestOptions {
  * ```
  */
 export function childFromRequest<TLogger extends { child(...args: never[]): TLogger }>(
-  req: Record<string, unknown>,
+  req: HttpRequestShape,
   logger: TLogger,
   options: ChildFromRequestOptions = {}
 ): TLogger {
   const correlationHeader = options.correlationHeader ?? 'x-correlation-id';
 
-  const headers = (req['headers'] ?? {}) as Record<string, string | undefined>;
+  const headers = req.headers ?? {};
   // Node lower-cases incoming header names, so look up with a lower-cased key.
   const correlationId =
     validIncomingId(headers[correlationHeader.toLowerCase()]) ??
     getCurrentCorrelationId() ??
     generateCorrelationId();
 
-  const method = req['method'] as string | undefined;
-  const url = (req['url'] as string | undefined) ?? (req['originalUrl'] as string | undefined);
+  const method = req.method;
+  const url = req.url ?? req.originalUrl;
   const rawUserAgent = headers['user-agent'];
   const userAgent =
     typeof rawUserAgent === 'string' ? rawUserAgent.slice(0, MAX_USER_AGENT_LENGTH) : undefined;
@@ -438,8 +433,8 @@ function usesStringContext(logger: object): boolean {
 }
 
 function resolveClientIp(
-  req: Record<string, unknown>,
-  headers: Record<string, string | undefined>,
+  req: HttpRequestShape,
+  headers: Record<string, string | string[] | undefined>,
   trustProxy: boolean
 ): string | undefined {
   if (trustProxy) {
@@ -447,9 +442,9 @@ function resolveClientIp(
     const first = typeof forwarded === 'string' ? forwarded.split(',')[0]?.trim() : undefined;
     if (first) return first.slice(0, MAX_IP_LENGTH);
   }
-  const fromReq = req['ip'];
+  const fromReq = req.ip;
   if (typeof fromReq === 'string' && fromReq) return fromReq.slice(0, MAX_IP_LENGTH);
-  const remote = (req['socket'] as Record<string, unknown> | undefined)?.['remoteAddress'];
+  const remote = req.socket?.remoteAddress;
   return typeof remote === 'string' ? remote.slice(0, MAX_IP_LENGTH) : undefined;
 }
 
