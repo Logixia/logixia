@@ -8,6 +8,7 @@ import type {
   CorrelatedLogs,
   LogCorrelationSummary,
   ParsedNLQuery,
+  RelativeTime,
   SearchFilters,
   SearchHighlight,
   SearchOptions,
@@ -107,7 +108,7 @@ export class BasicSearchEngine implements ILogSearchEngine {
    */
   async naturalLanguageSearch(query: string): Promise<SearchResult[]> {
     const parsed = await this.parseNaturalLanguageQuery(query);
-    return this.search(parsed.originalQuery, parsed.filters, {
+    return this.search(parsed.textQuery ?? parsed.originalQuery, parsed.filters, {
       semanticSearch: true,
       includeContext: true,
     });
@@ -279,31 +280,40 @@ export class BasicSearchEngine implements ILogSearchEngine {
   async parseNaturalLanguageQuery(query: string): Promise<ParsedNLQuery> {
     const filters: SearchFilters = {};
     const lowerQuery = query.toLowerCase();
+    let remainder = query;
+    const consume = (re: RegExp): void => {
+      remainder = remainder.replace(re, ' ');
+    };
 
-    // Extract levels
     const levels: string[] = [];
-    if (lowerQuery.includes('error')) levels.push('error');
-    if (lowerQuery.includes('warn')) levels.push('warn');
-    if (lowerQuery.includes('info')) levels.push('info');
-    if (levels.length > 0) filters.levels = levels;
+    if (/\berrors?\b/i.test(query)) levels.push('error');
+    if (/\bwarn(?:ing)?s?\b/i.test(query)) levels.push('warn');
+    if (/\binfo\b/i.test(query)) levels.push('info');
+    if (levels.length > 0) {
+      filters.levels = levels;
+      consume(/\b(?:errors?|warn(?:ing)?s?|info)\b/gi);
+    }
 
-    // Extract time range
     const timeRange = this.extractTimeRange(query);
-    if (timeRange) filters.timeRange = timeRange;
+    if (timeRange) {
+      filters.timeRange = timeRange;
+      consume(/\b(?:last|past)\s+(?:\d+\s+)?(?:second|minute|hour|day)s?\b/gi);
+      consume(/\btoday\b/gi);
+    }
 
-    // Extract service names (basic pattern matching)
-    const serviceMatch = query.match(/from\s+(?:the\s+)?(\w+)\s+service/i);
+    const serviceMatch = query.match(/from\s+(?:the\s+)?([\w-]+)\s+service/i);
     if (serviceMatch?.[1]) {
       filters.services = [serviceMatch[1]];
+      consume(/from\s+(?:the\s+)?[\w-]+\s+service/gi);
     }
 
-    // Extract user ID
-    const userMatch = query.match(/user\s+(?:id\s+)?(\w+)/i);
+    const userMatch =
+      query.match(/\buser(?:\s+id)?\s+([\w-]*\d[\w-]*)/i) ?? query.match(/\buser\s+id\s+([\w-]+)/i);
     if (userMatch?.[1]) {
       filters.userIds = [userMatch[1]];
+      consume(/\buser(?:\s+id)?\s+[\w-]+/gi);
     }
 
-    // Determine intent
     let intent: ParsedNLQuery['intent'] = 'general_search';
     if (lowerQuery.includes('error')) intent = 'find_errors';
     if (lowerQuery.includes('trace') || lowerQuery.includes('request')) intent = 'trace_request';
@@ -311,8 +321,14 @@ export class BasicSearchEngine implements ILogSearchEngine {
     if (lowerQuery.includes('slow') || lowerQuery.includes('performance'))
       intent = 'performance_analysis';
 
+    const textQuery = remainder
+      .split(/\s+/)
+      .filter((w) => w && !NL_FILLER_WORDS.has(w.toLowerCase().replace(/[^\w-]/g, '')))
+      .join(' ');
+
     return {
       originalQuery: query,
+      textQuery,
       intent,
       entities: [],
       filters,
@@ -384,19 +400,37 @@ export class BasicSearchEngine implements ILogSearchEngine {
       // Time range filter
       if (filters.timeRange) {
         const logTime = new Date(log.timestamp).getTime();
-        const start =
-          typeof filters.timeRange.start === 'number'
-            ? filters.timeRange.start
-            : filters.timeRange.start.getTime();
+        const { start, end } = resolveTimeRange(filters.timeRange);
 
         if (logTime < start) return false;
+        if (end !== undefined && logTime > end) return false;
+      }
 
-        if (filters.timeRange.end) {
-          const end =
-            typeof filters.timeRange.end === 'number'
-              ? filters.timeRange.end
-              : filters.timeRange.end.getTime();
-          if (logTime > end) return false;
+      if (filters.userIds && !matchesAny(extractPayloadId(log, USER_ID_KEYS), filters.userIds)) {
+        return false;
+      }
+
+      if (
+        filters.sessionIds &&
+        !matchesAny(extractPayloadId(log, SESSION_ID_KEYS), filters.sessionIds)
+      ) {
+        return false;
+      }
+
+      if (filters.minSeverity !== undefined && levelSeverity(log.level) < filters.minSeverity) {
+        return false;
+      }
+
+      if (filters.excludePatterns && filters.excludePatterns.length > 0) {
+        const text = this.getSearchableText(log).toLowerCase();
+        if (filters.excludePatterns.some((p) => p && text.includes(p.toLowerCase()))) {
+          return false;
+        }
+      }
+
+      if (filters.customFields) {
+        for (const [key, expected] of Object.entries(filters.customFields)) {
+          if (!fieldMatches(getPath(log, key) ?? getPath(log.payload, key), expected)) return false;
         }
       }
 
@@ -603,28 +637,20 @@ export class BasicSearchEngine implements ILogSearchEngine {
   private extractTimeRange(query: string): TimeRange | undefined {
     const lowerQuery = query.toLowerCase();
 
-    // Last hour
-    if (lowerQuery.includes('last hour') || lowerQuery.includes('past hour')) {
-      return {
-        start: new Date(Date.now() - 60 * 60 * 1000),
-      };
+    const relativeMatch = lowerQuery.match(
+      /\b(?:last|past)\s+(?:(\d+)\s+)?(seconds?|minutes?|hours?|days?)\b/
+    );
+    if (relativeMatch?.[2]) {
+      const value = relativeMatch[1] ? Number.parseInt(relativeMatch[1], 10) : 1;
+      const unit = `${relativeMatch[2].replace(/s$/, '')}s` as RelativeTime['unit'];
+      const relative: RelativeTime = { value, unit };
+      return { start: resolveTimeRange({ start: 0, relative }).start, relative };
     }
 
-    // Last N hours
-    const hoursMatch = query.match(/last\s+(\d+)\s+hours?/i);
-    if (hoursMatch) {
-      return {
-        start: new Date(Date.now() - Number.parseInt(hoursMatch[1] ?? '0') * 60 * 60 * 1000),
-      };
-    }
-
-    // Today
     if (lowerQuery.includes('today')) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      return {
-        start: today,
-      };
+      return { start: today };
     }
 
     return undefined;
@@ -663,4 +689,108 @@ export class BasicSearchEngine implements ILogSearchEngine {
     // eslint-disable-next-line sonarjs/pseudo-random -- non-security preset ID generation
     return `preset_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
   }
+}
+
+const UNIT_MS: Record<RelativeTime['unit'], number> = {
+  seconds: 1000,
+  minutes: 60_000,
+  hours: 3_600_000,
+  days: 86_400_000,
+};
+
+const LEVEL_SEVERITY: Record<string, number> = {
+  trace: 0,
+  verbose: 1,
+  debug: 1,
+  info: 2,
+  log: 2,
+  warn: 3,
+  warning: 3,
+  error: 4,
+  fatal: 5,
+  critical: 5,
+};
+
+const USER_ID_KEYS = ['userId', 'user_id', 'userid'];
+const SESSION_ID_KEYS = ['sessionId', 'session_id', 'sessionid'];
+
+const NL_FILLER_WORDS = new Set([
+  'show',
+  'me',
+  'find',
+  'get',
+  'list',
+  'search',
+  'display',
+  'all',
+  'any',
+  'the',
+  'a',
+  'an',
+  'in',
+  'of',
+  'for',
+  'from',
+  'with',
+  'during',
+  'within',
+  'over',
+  'logs',
+  'log',
+  'entries',
+  'entry',
+  'messages',
+  'message',
+  'events',
+  'event',
+  'recent',
+  'and',
+  'only',
+  'please',
+  'last',
+  'past',
+]);
+
+/** Severity rank of a level name; higher is more severe. Unknown levels rank as info. */
+function levelSeverity(level: string): number {
+  return LEVEL_SEVERITY[level.toLowerCase()] ?? 2;
+}
+
+function resolveTimeRange(range: TimeRange): { start: number; end: number | undefined } {
+  const toMs = (v: Date | number): number => (typeof v === 'number' ? v : v.getTime());
+  if (range.relative) {
+    const { value, unit } = range.relative;
+    return {
+      start: Date.now() - value * UNIT_MS[unit],
+      end: range.end === undefined ? undefined : toMs(range.end),
+    };
+  }
+  return { start: toMs(range.start), end: range.end === undefined ? undefined : toMs(range.end) };
+}
+
+function getPath(obj: unknown, path: string): unknown {
+  let cur: unknown = obj;
+  for (const part of path.split('.')) {
+    if (cur === null || typeof cur !== 'object') return undefined;
+    cur = (cur as Record<string, unknown>)[part];
+  }
+  return cur;
+}
+
+function fieldMatches(actual: unknown, expected: unknown): boolean {
+  return actual === expected || String(actual) === String(expected);
+}
+
+function extractPayloadId(log: LogEntry, keys: string[]): string | undefined {
+  const payload = log.payload;
+  if (!payload) return undefined;
+  for (const key of keys) {
+    const v = payload[key];
+    if (v !== undefined && v !== null) return String(v);
+  }
+  return undefined;
+}
+
+function matchesAny(value: string | undefined, allowed: string[]): boolean {
+  return value !== undefined && allowed.includes(value);
 }

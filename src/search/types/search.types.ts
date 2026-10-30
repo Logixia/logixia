@@ -245,6 +245,8 @@ export interface AnomalyDetection {
  */
 export interface ParsedNLQuery {
   originalQuery: string;
+  /** Free-text left after recognized filter phrases and filler words are removed; may be empty. */
+  textQuery?: string;
   intent: QueryIntent;
   entities: QueryEntity[];
   filters: SearchFilters;
