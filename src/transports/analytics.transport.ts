@@ -4,7 +4,11 @@ import type {
   ITransport,
   TransportLogEntry,
 } from '../types/transport.types';
-import { internalError } from '../utils/internal-log';
+import { internalError, internalWarn } from '../utils/internal-log';
+import { mergeCoreFields } from './entry-fields';
+
+const DEFAULT_MAX_BUFFER_SIZE = 10_000;
+const DROP_WARN_INTERVAL_MS = 5000;
 
 export abstract class AnalyticsTransport implements ITransport, IBatchTransport {
   public readonly name: string;
@@ -27,6 +31,8 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
   private flushPromise?: Promise<void> | undefined;
   /** Set on the first write. Subclass fields don't exist yet while the base constructor runs. */
   private initPromise?: Promise<void> | undefined;
+  private dropped = 0;
+  private lastDropWarning = 0;
 
   constructor(name: string, config: AnalyticsTransportConfig) {
     this.name = name;
@@ -58,6 +64,7 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
 
   addToBatch(entry: TransportLogEntry): void {
     this.batch.push(entry);
+    this.enforceBufferCap();
 
     if (this.batch.length >= (this.config.batchSize || 50)) {
       this.flush().catch((err: unknown) => internalError(`${this.name} batch flush failed`, err));
@@ -107,9 +114,30 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
         internalError(`Analytics transport ${this.name} flush failed`, error);
         // Re-add failed entries to the front of the batch for retry, then stop.
         this.batch.unshift(...entriesToSend);
+        this.enforceBufferCap();
         return;
       }
     }
+  }
+
+  /** Drops the oldest entries beyond `maxBufferSize` and reports how many went. */
+  private enforceBufferCap(): void {
+    const max = this.config.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE;
+    const excess = this.batch.length - max;
+    if (excess <= 0) return;
+    this.batch.splice(0, excess);
+    this.dropped += excess;
+    this.reportDropped(DROP_WARN_INTERVAL_MS, max);
+  }
+
+  private reportDropped(minGapMs: number, max: number): void {
+    const now = Date.now();
+    if (this.dropped === 0 || now - this.lastDropWarning < minGapMs) return;
+    internalWarn(
+      `${this.name}: buffer full (${max}), dropped ${this.dropped} oldest entr${this.dropped === 1 ? 'y' : 'ies'}`
+    );
+    this.dropped = 0;
+    this.lastDropWarning = now;
   }
 
   async close(): Promise<void> {
@@ -136,6 +164,7 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
       );
     }
 
+    this.reportDropped(0, this.config.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE);
     await this.cleanup();
   }
 
@@ -146,27 +175,18 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
   }
 
   protected transformEntry(entry: TransportLogEntry): Record<string, unknown> {
-    const transformed: Record<string, unknown> = {
+    const core: Record<string, unknown> = {
       timestamp: entry.timestamp.toISOString(),
       level: entry.level,
       message: entry.message,
-      ...entry.data,
+      context: entry.context,
+      traceId: entry.traceId,
+      appName: entry.appName,
+      environment: entry.environment,
     };
-
-    if (entry.context) {
-      transformed.context = entry.context;
-    }
-
-    if (entry.traceId) {
-      transformed.traceId = entry.traceId;
-    }
-
-    if (entry.appName) {
-      transformed.appName = entry.appName;
-    }
-
-    if (entry.environment) {
-      transformed.environment = entry.environment;
+    const transformed = mergeCoreFields(core, entry.data, this.reservedKeys());
+    for (const key of ['context', 'traceId', 'appName', 'environment']) {
+      if (!core[key]) delete transformed[key];
     }
 
     // Add custom properties
@@ -175,6 +195,11 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
     }
 
     return transformed;
+  }
+
+  /** Provider-specific field names a payload key must not replace. */
+  protected reservedKeys(): readonly string[] {
+    return [];
   }
 
   /**
