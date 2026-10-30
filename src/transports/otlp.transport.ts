@@ -34,7 +34,7 @@ import {
   DEFAULT_REQUEST_TIMEOUT_MS,
   HttpError,
 } from './batch-buffer';
-import { protectSecrets, scrubError, urlSecrets } from './secret-config';
+import { collectSecrets, protectSecrets, scrubError } from './secret-config';
 
 export interface OtlpLogTransportConfig {
   /** OTLP/HTTP logs endpoint, e.g. `http://localhost:4318/v1/logs`. */
@@ -147,6 +147,7 @@ export class OtlpLogTransport implements IAsyncTransport {
       batchSize: this.batchSize,
       maxBufferSize: config.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE,
       send: (entries) => this.send(entries),
+      secrets: () => this.secretValues(),
     });
 
     const resource: Record<string, unknown> = {
@@ -222,6 +223,10 @@ export class OtlpLogTransport implements IAsyncTransport {
     return this.buffer.flush();
   }
 
+  private secretValues(): string[] {
+    return collectSecrets({ headers: this.headers, url: this.url });
+  }
+
   private async send(entries: TransportLogEntry[]): Promise<void> {
     if (typeof fetch !== 'function') {
       internalWarn('OtlpLogTransport: global fetch unavailable — cannot export logs');
@@ -240,7 +245,7 @@ export class OtlpLogTransport implements IAsyncTransport {
         throw new HttpError(res.status, '', 'OTLP export');
       }
     } catch (err) {
-      scrubError(err, [...Object.values(this.headers), ...urlSecrets(this.url)]);
+      scrubError(err, this.secretValues());
       if (controller.signal.aborted) {
         throw new Error(`OTLP export timed out after ${this.requestTimeoutMs}ms`, { cause: err });
       }

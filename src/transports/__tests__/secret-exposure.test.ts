@@ -52,28 +52,37 @@ jest.mock('../batch-buffer', () => {
   const actual = jest.requireActual('../batch-buffer');
   return {
     ...actual,
-    httpRequest: jest.fn((opts: { url: URL; headers?: unknown; body?: string; label: string }) => {
-      requests.push({ url: opts.url.href, headers: opts.headers, body: opts.body });
-      if (opts.url.hostname === 'oauth2.googleapis.com') {
-        return Promise.resolve({
-          status: 200,
-          body: JSON.stringify({ access_token: 'ya29.GCP-ACCESS-TOKEN' }),
-        });
+    httpRequest: jest.fn(
+      (opts: {
+        url: URL;
+        headers?: unknown;
+        body?: string;
+        label: string;
+        secrets?: () => string[];
+      }) => {
+        requests.push({ url: opts.url.href, headers: opts.headers, body: opts.body });
+        if (opts.url.hostname === 'oauth2.googleapis.com') {
+          return Promise.resolve({
+            status: 200,
+            body: JSON.stringify({ access_token: 'ya29.GCP-ACCESS-TOKEN' }),
+          });
+        }
+        if (opts.url.hostname === 'login.microsoftonline.com') {
+          return Promise.resolve({
+            status: 200,
+            body: JSON.stringify({ access_token: 'AZURE-ACCESS-TOKEN', expires_in: 3600 }),
+          });
+        }
+        const { scrubbing } = jest.requireActual('../secret-config');
+        return Promise.reject(
+          new actual.HttpError(
+            400,
+            JSON.stringify({ echoedHeaders: opts.headers, echoedBody: opts.body }),
+            opts.label
+          )
+        ).catch(scrubbing(opts.secrets ?? (() => [])));
       }
-      if (opts.url.hostname === 'login.microsoftonline.com') {
-        return Promise.resolve({
-          status: 200,
-          body: JSON.stringify({ access_token: 'AZURE-ACCESS-TOKEN', expires_in: 3600 }),
-        });
-      }
-      return Promise.reject(
-        new actual.HttpError(
-          400,
-          JSON.stringify({ echoedHeaders: opts.headers, echoedBody: opts.body }),
-          opts.label
-        )
-      );
-    }),
+    ),
   };
 });
 
@@ -462,7 +471,7 @@ describe('secret-config helpers', () => {
     scrubError(err, ['SECRET-VALUE']);
     expect(err.message).not.toContain('SECRET-VALUE');
     expect(String((err.cause as Error).message)).not.toContain('SECRET-VALUE');
-    expect(redactUrl('not a url')).toBe(REDACTED);
+    expect(redactUrl('https://[bad')).toBe(REDACTED);
   });
 
   it('keeps HttpError bodies readable when nothing secret is in them', () => {

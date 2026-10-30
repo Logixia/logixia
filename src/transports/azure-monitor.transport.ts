@@ -38,7 +38,7 @@ import {
   DEFAULT_REQUEST_TIMEOUT_MS,
   httpRequest,
 } from './batch-buffer';
-import { protectSecrets, scrubbing, scrubError, scrubSecrets, urlSecrets } from './secret-config';
+import { protectSecrets, scrubError, scrubSecrets, urlSecrets } from './secret-config';
 
 /**
  * Azure AD tenant IDs are either a GUID or a verified domain (e.g. `contoso.onmicrosoft.com`).
@@ -109,6 +109,7 @@ export class AzureMonitorTransport implements IAsyncTransport {
   private readonly clientSecret: string | undefined;
 
   constructor(config: AzureMonitorTransportConfig) {
+    protectSecrets(this, ['clientSecret', 'accessToken']);
     this.endpoint = config.endpoint.replace(/\/$/, '');
     this.ruleId = config.ruleId;
     this.streamName = config.streamName;
@@ -124,13 +125,13 @@ export class AzureMonitorTransport implements IAsyncTransport {
       batchSize: this.batchSize,
       maxBufferSize: config.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE,
       send: (entries) => this.sendEntries(entries),
+      secrets: () => this.secretValues(),
     });
 
     this.flushTimer = setInterval(() => {
       this.flush().catch(() => {});
     }, this.flushInterval);
     if (this.flushTimer.unref) this.flushTimer.unref();
-    protectSecrets(this, ['clientSecret', 'accessToken']);
   }
 
   write(entry: TransportLogEntry): void {
@@ -165,6 +166,10 @@ export class AzureMonitorTransport implements IAsyncTransport {
       TraceId: entry.traceId ?? '',
       Properties: stringifyForLog(entry.data ?? {}),
     };
+  }
+
+  private secretValues(token?: string): (string | undefined)[] {
+    return [this.clientSecret, this.accessToken ?? undefined, token, ...urlSecrets(this.endpoint)];
   }
 
   private async getAccessToken(): Promise<string | null> {
@@ -202,6 +207,7 @@ export class AzureMonitorTransport implements IAsyncTransport {
         body,
         timeoutMs: this.requestTimeoutMs,
         label: 'Azure token request',
+        secrets: () => this.secretValues(),
       });
       const parsed = JSON.parse(res.body) as { access_token?: string; expires_in?: number };
       if (!parsed.access_token) return null;
@@ -209,10 +215,7 @@ export class AzureMonitorTransport implements IAsyncTransport {
       this.tokenExpiry = Date.now() + (parsed.expires_in ?? 3600) * 1000 - 60_000;
       return this.accessToken;
     } catch (err) {
-      internalError(
-        'AzureMonitorTransport token request failed',
-        scrubError(err, [this.clientSecret])
-      );
+      internalError('AzureMonitorTransport token request failed', err);
       return null;
     }
   }
@@ -250,6 +253,7 @@ export class AzureMonitorTransport implements IAsyncTransport {
       body,
       timeoutMs: this.requestTimeoutMs,
       label: 'Azure Monitor API',
-    }).catch(scrubbing(() => [this.clientSecret, this.accessToken ?? undefined, token]));
+      secrets: () => this.secretValues(token),
+    });
   }
 }

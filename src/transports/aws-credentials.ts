@@ -162,6 +162,7 @@ export class AwsCredentialProvider {
   private readonly explicit: AwsCredentials | undefined;
 
   constructor(config: AwsCredentialConfig) {
+    protectSecrets(this, ['cached', 'explicit']);
     if (config.accessKeyId && config.secretAccessKey) {
       this.explicit = {
         accessKeyId: config.accessKeyId,
@@ -169,7 +170,6 @@ export class AwsCredentialProvider {
         sessionToken: config.sessionToken,
       };
     }
-    protectSecrets(this, ['cached', 'explicit']);
   }
 
   /** Throws when no source yields credentials, so the caller keeps its buffer. */

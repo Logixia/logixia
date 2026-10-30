@@ -159,6 +159,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
   private readonly cap: BufferCap;
 
   constructor(private config: DatabaseTransportConfig) {
+    protectSecrets(this, ['config', 'connection']);
     this.batchSize = config.batchSize || 100;
     this.flushInterval = config.flushInterval || 5000; // 5 seconds
     this.cap = new BufferCap('DatabaseTransport', config.maxBufferSize, this.batchSize);
@@ -168,7 +169,6 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       validateSqlIdentifier(config.table, 'table');
     }
     this.setupFlushTimer();
-    protectSecrets(this, ['config', 'connection']);
   }
 
   private secretValues(): (string | undefined)[] {
@@ -262,6 +262,14 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
   }
 
   private async writeEntries(entries: TransportLogEntry[]): Promise<void> {
+    try {
+      await this.writeEntriesUnscrubbed(entries);
+    } catch (error) {
+      throw scrubError(error, this.secretValues());
+    }
+  }
+
+  private async writeEntriesUnscrubbed(entries: TransportLogEntry[]): Promise<void> {
     switch (this.config.type) {
       case 'mongodb':
         await this.flushToMongoDB(entries);

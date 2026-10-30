@@ -25,6 +25,7 @@
 import type { IBaseLogger } from '../types';
 import { internalError } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
+import { DEFAULT_REDACT_HEADERS, DEFAULT_REDACT_QUERY_PARAMS } from '../utils/sensitive-names';
 import { sanitizeIncomingId } from '../utils/trace.utils';
 
 // ── Shared types ─────────────────────────────────────────────────────────────
@@ -99,33 +100,6 @@ export interface OutgoingResponse {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-const DEFAULT_REDACT_HEADERS = [
-  'authorization',
-  'cookie',
-  'set-cookie',
-  'x-api-key',
-  'proxy-authorization',
-  'x-auth-token',
-  'x-access-token',
-  'x-csrf-token',
-  'x-amz-security-token',
-];
-
-const DEFAULT_REDACT_QUERY_PARAMS = [
-  'token',
-  'access_token',
-  'refresh_token',
-  'code',
-  'password',
-  'secret',
-  'api_key',
-  'apikey',
-  'key',
-  'signature',
-  'sig',
-  'auth',
-];
 
 function buildNameSet(defaults: readonly string[], extra: readonly string[] | undefined) {
   return new Set([...defaults, ...(extra ?? [])].map((n) => n.toLowerCase()));

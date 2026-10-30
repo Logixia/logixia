@@ -4,7 +4,7 @@ import { stringifyForLog } from '../utils/safe-stringify';
 import { LOGIXIA_VERSION } from '../version';
 import type { AnalyticsUser } from './analytics.transport';
 import { AnalyticsTransport } from './analytics.transport';
-import { protectSecrets, scrubError } from './secret-config';
+import { protectSecrets } from './secret-config';
 
 /**
  * Sends log entries as Segment track/identify events via the HTTP Tracking API.
@@ -28,6 +28,13 @@ export class SegmentTransport extends AnalyticsTransport {
 
     this.baseUrl = config.dataPlaneUrl || 'https://api.segment.io';
     protectSecrets(this, ['segmentConfig', 'baseUrl']);
+  }
+
+  protected override secretValues(): string[] {
+    return [
+      ...super.secretValues(),
+      Buffer.from(`${this.segmentConfig.writeKey}:`).toString('base64'),
+    ];
   }
 
   protected async initialize(): Promise<void> {
@@ -153,7 +160,6 @@ export class SegmentTransport extends AnalyticsTransport {
         );
       }
     } catch (error) {
-      scrubError(error, [this.segmentConfig.writeKey, auth]);
       throw new Error(`Failed to send data to Segment: ${(error as Error).message}`, {
         cause: error,
       });

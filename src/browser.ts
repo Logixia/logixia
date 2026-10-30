@@ -34,7 +34,7 @@
  * ```
  */
 
-import { protectSecrets, scrubSecrets } from './transports/secret-config';
+import { protectSecrets } from './transports/secret-config';
 import { stringifyForLog } from './utils/safe-stringify';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -210,7 +210,7 @@ function validateRemoteUrl(raw: string): string {
   try {
     parsed = new URL(raw);
   } catch {
-    throw new TypeError(`BrowserRemoteTransport: invalid url "${scrubSecrets(raw, [])}"`);
+    throw new TypeError(`BrowserRemoteTransport: invalid url [redacted]`);
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new TypeError(
