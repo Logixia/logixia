@@ -69,9 +69,9 @@ updates:
       time: '09:00'
       timezone: Asia/Kolkata
     open-pull-requests-limit: 5
+    # semver-*-days are not supported for the github-actions ecosystem
     cooldown:
       default-days: 7
-      semver-major-days: 14
     labels:
       - 'github-actions'
       - 'automated'

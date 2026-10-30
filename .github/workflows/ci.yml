@@ -294,4 +294,5 @@ jobs:
       - name: Publish
         env:
           TARBALL: ${{ needs.release.outputs.tarball }}
-        run: npm publish "release/$TARBALL" --provenance --access public --ignore-scripts
+        # ./ prefix: without it npm treats "release/<file>" as a GitHub owner/repo spec
+        run: npm publish "./release/$TARBALL" --provenance --access public --ignore-scripts
