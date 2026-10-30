@@ -151,6 +151,7 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "typecheck:examples": "tsc -p tsconfig.examples.json && tsc -p examples/cloudflare-worker/tsconfig.json",
+    "typecheck:express4": "node scripts/typecheck-express4.mjs",
     "check": "npm run typecheck && npm run lint:check",
     "ci": "npm run typecheck && npm run lint:check && npm run test:ci",
     "validate": "npm run clean && npm run build && npm run typecheck && npm run lint:check && npm run test:coverage",
@@ -312,18 +313,17 @@
     "@semantic-release/github": "12.0.10",
     "@semantic-release/npm": "13.2.0",
     "@semantic-release/release-notes-generator": "14.1.1",
-    "@size-limit/file": "^12.0.1",
-    "@types/express": "^4.17.0",
+    "@size-limit/file": "^14.3.0",
+    "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
-    "@types/node": "^20.0.0",
+    "@types/node": "^20.19.43",
     "@types/pg": "^8.15.5",
-    "@types/pino": "^7.0.4",
     "conventional-changelog-conventionalcommits": "8.0.0",
     "eslint": "^10.0.3",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-simple-import-sort": "^12.1.1",
-    "eslint-plugin-sonarjs": "4.2.0",
-    "eslint-plugin-unicorn": "^63.0.0",
+    "eslint-plugin-simple-import-sort": "^14.0.0",
+    "eslint-plugin-sonarjs": "^4.2.2",
+    "eslint-plugin-unicorn": "^78.0.0",
     "express": "^5.2.1",
     "fastify": "^5.12.7",
     "globals": "^17.4.0",
@@ -339,18 +339,25 @@
     "prettier": "^3.8.1",
     "reflect-metadata": "^0.2.2",
     "semantic-release": "25.0.9",
-    "size-limit": "^12.0.1",
+    "size-limit": "^14.3.0",
     "socket.io": "^4.8.3",
     "tinybench": "^6.0.0",
     "ts-jest": "^29.0.0",
     "ts-node": "^10.9.2",
-    "tsdown": "^0.15.0",
+    "tsdown": "^0.23.1",
     "typescript": "^5.0.0",
     "typescript-eslint": "^8.57.0",
     "winston": "^3.19.0"
   },
   "engines": {
     "node": ">=16.0.0"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "^22.19.0 || ^24.11.0 || >=26.0.0",
+      "onFail": "warn"
+    }
   },
   "bin": {
     "logixia": "./dist/cli/index.js"
