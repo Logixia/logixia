@@ -24,8 +24,8 @@
 
 import type { IBaseLogger } from '../types';
 import { internalError } from '../utils/internal-log';
+import { resolveRequestTraceId, resolveTraceHeaders } from '../utils/request-trace';
 import { stringifyForLog } from '../utils/safe-stringify';
-import { sanitizeIncomingId } from '../utils/trace.utils';
 
 // ── Shared types ─────────────────────────────────────────────────────────────
 
@@ -54,10 +54,13 @@ export interface HttpLoggerOptions {
    */
   extraFields?: (req: IncomingRequest) => Record<string, unknown>;
   /**
-   * Trace ID header. Default: 'x-trace-id'.
-   * If the header is absent, a short random ID is generated.
+   * Header name, or list of names tried in order, to read the trace ID from.
+   * Default: the library-wide list (`DEFAULT_TRACE_HEADERS`: traceparent,
+   * x-trace-id, x-request-id, x-correlation-id, trace-id).
+   * If none is present, `request.id` is used when it is not a framework counter,
+   * otherwise a UUID is generated and shared with the logixia context helpers.
    */
-  traceIdHeader?: string;
+  traceIdHeader?: string | readonly string[];
   /**
    * Additional headers to redact from logged output. Merged with the defaults
    * (authorization, cookie, set-cookie, x-api-key, proxy-authorization,
@@ -182,11 +185,6 @@ function fire(result: unknown): void {
   }
 }
 
-function shortId(): string {
-  // eslint-disable-next-line sonarjs/pseudo-random -- non-security request ID
-  return Math.random().toString(36).slice(2, 10);
-}
-
 interface NameSets {
   headers: Set<string>;
   queryParams: Set<string>;
@@ -233,14 +231,14 @@ export function createExpressMiddleware(
     skip,
     logBody,
     bodyMaxBytes,
-    traceIdHeader = 'x-trace-id',
+    traceIdHeader,
     requestLevel = 'debug',
     responseLevel = 'info',
     errorLevel = 'error',
     slowRequestThresholdMs = 1000,
   } = options;
   const nameSets = resolveNameSets(options);
-  const traceHeaderName = traceIdHeader.toLowerCase();
+  const traceHeaders = resolveTraceHeaders(traceIdHeader);
 
   return function logixiaHttpMiddleware(
     req: IncomingRequest,
@@ -252,7 +250,7 @@ export function createExpressMiddleware(
       return;
     }
 
-    const traceId = sanitizeIncomingId(req.headers?.[traceHeaderName]) ?? shortId();
+    const traceId = resolveRequestTraceId(req, traceHeaders);
     const startMs = Date.now();
     const baseFields = buildBaseFields(req, traceId, options, nameSets);
 
@@ -328,26 +326,25 @@ export interface FastifyInstance {
 export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOptions = {}) {
   const {
     skip,
-    traceIdHeader = 'x-trace-id',
+    traceIdHeader,
     requestLevel = 'debug',
     responseLevel = 'info',
     errorLevel = 'error',
     slowRequestThresholdMs = 1000,
   } = options;
   const nameSets = resolveNameSets(options);
-  const traceHeaderName = traceIdHeader.toLowerCase();
+  const traceHeaders = resolveTraceHeaders(traceIdHeader);
 
   function logixiaFastifyPlugin(fastify: FastifyInstance, _opts: unknown, done: () => void): void {
     fastify.addHook('onRequest', (request: unknown, _reply: unknown, hookDone: () => void) => {
-      const req = request as IncomingRequest & { _logixiaStart?: number; _logixiaId?: string };
+      const req = request as IncomingRequest & { _logixiaStart?: number };
       if (skip?.(req)) {
         hookDone();
         return;
       }
 
-      const traceId = sanitizeIncomingId(req.headers?.[traceHeaderName]) ?? shortId();
+      const traceId = resolveRequestTraceId(req, traceHeaders);
       req._logixiaStart = Date.now();
-      req._logixiaId = traceId;
 
       if (requestLevel !== 'silent') {
         fire(
@@ -362,7 +359,7 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
     });
 
     fastify.addHook('onResponse', (request: unknown, reply: unknown, hookDone: () => void) => {
-      const req = request as IncomingRequest & { _logixiaStart?: number; _logixiaId?: string };
+      const req = request as IncomingRequest & { _logixiaStart?: number };
       if (req._logixiaStart === undefined) {
         hookDone();
         return;
@@ -371,7 +368,7 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
       const rep = reply as { statusCode?: number };
       const duration = Date.now() - req._logixiaStart;
       const status = rep.statusCode ?? 0;
-      const traceId = req._logixiaId ?? shortId();
+      const traceId = resolveRequestTraceId(req, traceHeaders);
       const level = status >= 500 ? errorLevel : responseLevel;
       const baseFields = buildBaseFields(req, traceId, options, nameSets);
 
