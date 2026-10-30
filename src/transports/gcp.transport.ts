@@ -38,6 +38,7 @@ import {
   DEFAULT_REQUEST_TIMEOUT_MS,
   httpRequest,
 } from './batch-buffer';
+import { mergeCoreFields } from './entry-fields';
 
 export interface GCPMonitoredResource {
   type: string;
@@ -180,12 +181,10 @@ export class GCPTransport implements IAsyncTransport {
       resource: this.resource,
       severity: toGcpSeverity(entry.level),
       timestamp: entry.timestamp ?? new Date().toISOString(),
-      jsonPayload: {
-        message: entry.message,
-        appName: entry.appName,
-        context: entry.context,
-        ...(entry.data ?? {}),
-      },
+      jsonPayload: mergeCoreFields(
+        { message: entry.message, appName: entry.appName, context: entry.context },
+        entry.data
+      ),
     };
 
     // GCP Cloud Trace correlation

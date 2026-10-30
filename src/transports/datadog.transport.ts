@@ -136,6 +136,12 @@ export class DataDogTransport extends AnalyticsTransport {
     const transformed = this.transformEntry(entry);
 
     return {
+      ...transformed,
+      // Add DataDog specific fields
+      'dd.trace_id': entry.traceId,
+      'dd.span_id': this.generateSpanId(),
+      host: this.getHostname(),
+      source: 'nodejs',
       timestamp: entry.timestamp.toISOString(),
       level: this.mapLogLevel(entry.level),
       message: entry.message,
@@ -146,13 +152,11 @@ export class DataDogTransport extends AnalyticsTransport {
         name: 'logixia',
         thread_name: 'main',
       },
-      ...transformed,
-      // Add DataDog specific fields
-      'dd.trace_id': entry.traceId,
-      'dd.span_id': this.generateSpanId(),
-      host: this.getHostname(),
-      source: 'nodejs',
     };
+  }
+
+  protected override reservedKeys(): readonly string[] {
+    return ['service', 'version', 'env', 'logger', 'host', 'source', 'dd.trace_id', 'dd.span_id'];
   }
 
   private transformToDataDogMetric(entry: TransportLogEntry): Record<string, unknown> {

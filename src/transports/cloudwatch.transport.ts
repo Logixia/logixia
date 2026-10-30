@@ -43,6 +43,7 @@ import {
   httpRequest,
   isPermanentHttpError,
 } from './batch-buffer';
+import { mergeCoreFields } from './entry-fields';
 
 export interface CloudWatchTransportConfig {
   /** AWS region, e.g. `'us-east-1'`. Falls back to `AWS_REGION` env var. */
@@ -78,6 +79,12 @@ export interface CloudWatchTransportConfig {
   emf?: boolean;
   /** CloudWatch Metrics namespace used by EMF. @default 'Logixia' */
   emfNamespace?: string;
+  /**
+   * Payload fields published as EMF metrics. When set, only these numeric
+   * fields become metrics; when unset every numeric payload field does (up to
+   * the EMF limit of 100 per entry).
+   */
+  emfMetrics?: string[];
   /** Abort a request that has not finished after this many ms. @default 10000 */
   requestTimeoutMs?: number;
   /** Max buffered events; the oldest are dropped past this. @default 10000 */
@@ -87,6 +94,7 @@ export interface CloudWatchTransportConfig {
 }
 
 const MAX_EVENTS_PER_PUT = 10_000;
+const EMF_MAX_METRICS = 100;
 
 /** Error types worth retrying even though CloudWatch reports them as HTTP 400. */
 const RETRYABLE_TYPES = new Set([
@@ -134,6 +142,7 @@ export class CloudWatchTransport implements IAsyncTransport {
   private readonly logStreamName: string;
   private readonly emf: boolean;
   private readonly emfNamespace: string;
+  private readonly emfMetrics: ReadonlySet<string> | undefined;
 
   constructor(config: CloudWatchTransportConfig) {
     this.region =
@@ -150,6 +159,7 @@ export class CloudWatchTransport implements IAsyncTransport {
     this.emfNamespace = config.emfNamespace ?? 'Logixia';
     this.flushInterval = config.flushIntervalMs ?? 5000;
     this.emf = config.emf ?? false;
+    this.emfMetrics = config.emfMetrics ? new Set(config.emfMetrics) : undefined;
     this.level = config.level;
     this.requestTimeoutMs = config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.buffer = new BatchBuffer<CwLogEvent>({
@@ -193,29 +203,27 @@ export class CloudWatchTransport implements IAsyncTransport {
 
   private toEmf(entry: TransportLogEntry): string {
     const { level, message, data: payload, timestamp } = entry;
-    const numericFields: Record<string, number> = {};
-    for (const [k, v] of Object.entries(payload ?? {})) {
-      if (typeof v === 'number') numericFields[k] = v;
+    const fields = mergeCoreFields({ _aws: undefined, level, message }, payload);
+    const metricNames: string[] = [];
+    for (const [k, v] of Object.entries(fields)) {
+      if (k === '_aws' || k === 'level' || k === 'message' || typeof v !== 'number') continue;
+      if (this.emfMetrics && !this.emfMetrics.has(k)) continue;
+      if (metricNames.length < EMF_MAX_METRICS) metricNames.push(k);
     }
-    return stringifyForLog({
-      _aws: {
-        Timestamp: timestamp ? new Date(timestamp).getTime() : Date.now(),
-        CloudWatchMetrics:
-          Object.keys(numericFields).length > 0
-            ? [
-                {
-                  Namespace: this.emfNamespace,
-                  Dimensions: [['level']],
-                  Metrics: Object.keys(numericFields).map((n) => ({ Name: n, Unit: 'None' })),
-                },
-              ]
-            : [],
-      },
-      level,
-      message,
-      ...payload,
-      ...numericFields,
-    });
+    fields['_aws'] = {
+      Timestamp: timestamp ? new Date(timestamp).getTime() : Date.now(),
+      CloudWatchMetrics:
+        metricNames.length > 0
+          ? [
+              {
+                Namespace: this.emfNamespace,
+                Dimensions: [['level']],
+                Metrics: metricNames.map((n) => ({ Name: n, Unit: 'None' })),
+              },
+            ]
+          : [],
+    };
+    return stringifyForLog(fields);
   }
 
   private async putLogEvents(events: CwLogEvent[]): Promise<void> {
