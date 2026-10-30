@@ -56,6 +56,9 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
+      - name: Type check examples
+        run: npm run typecheck:examples
+
   # ─────────────────────────────────────────────────────────
   # 2. Tests — Node 18 / 20 / 22 matrix
   # ─────────────────────────────────────────────────────────

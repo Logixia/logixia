@@ -1,9 +1,9 @@
-import { LogixiaLogger } from '../src';
-import { TransportConfig } from '../src/types/transport.types';
+import { LogixiaLogger } from 'logixia';
+import type { TransportConfig } from '../src/types/transport.types';
 
 // Analytics Integration Example
 // This example demonstrates how to integrate various analytics tools
-// with Logitron for comprehensive data tracking and monitoring
+// with logixia for comprehensive data tracking and monitoring
 
 const analyticsConfig: TransportConfig = {
   console: {
@@ -24,7 +24,7 @@ const analyticsConfig: TransportConfig = {
     datadog: {
       apiKey: process.env.DATADOG_API_KEY || 'your-datadog-api-key',
       site: 'datadoghq.com',
-      service: 'logitron-demo',
+      service: 'logixia-demo',
       version: '1.0.0',
       batchSize: 100,
       flushInterval: 10000,
@@ -64,9 +64,8 @@ const logger = new LogixiaLogger({
 async function demonstrateAnalyticsIntegration() {
   console.log('🚀 Starting Analytics Integration Demo\n');
   
-  // Wait for all transports to be ready
-  await logger.waitForReady();
-  
+  console.log('Transports:', logger.getAvailableTransports().join(', '), '\n');
+
   // 1. Basic logging with analytics tracking
   console.log('📊 1. Basic Analytics Logging');
   logger.info('User logged in', {
@@ -190,15 +189,14 @@ async function demonstrateAnalyticsIntegration() {
   console.log('\n🔄 Flushing all analytics data...');
   await logger.flush();
   
-  // Display transport metrics
-  console.log('\n📊 Transport Metrics:');
-  const metrics = logger.getMetrics();
-  metrics.forEach(metric => {
-    if (metric.type === 'analytics') {
-      console.log(`  ${metric.name}: ${metric.logsWritten} events sent, ${metric.errors} errors`);
-    }
-  });
-  
+  // Display per-transport readiness and metrics
+  console.log('\n📊 Transport Health:');
+  const health = await logger.healthCheck();
+  for (const [name, detail] of Object.entries(health.details)) {
+    console.log(`  ${name}:`, JSON.stringify(detail));
+  }
+  await logger.close();
+
   console.log('\n✅ Analytics Integration Demo Complete!');
   console.log('\n💡 Tips:');
   console.log('  - Set environment variables for API keys in production');

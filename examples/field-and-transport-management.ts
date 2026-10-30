@@ -10,21 +10,17 @@ async function demonstrateFieldAndTransportManagement() {
     environment: 'development',
     transports: {
       console: {
-        type: 'console',
         level: 'info'
       },
       file: {
-        type: 'file',
         level: 'debug',
         filename: 'app.log'
       },
       database: {
-        type: 'database',
+        type: 'mongodb',
         level: 'error',
-        connection: {
-          type: 'mongodb',
-          url: 'mongodb://localhost:27017/logs'
-        }
+        database: 'logs',
+        connectionString: 'mongodb://localhost:27017/logs'
       }
     },
     fields: {
@@ -109,8 +105,8 @@ async function interactiveTransportConfiguration() {
   const logger = createLogger({
     appName: 'InteractiveDemo',
     transports: {
-      console: { type: 'console' },
-      file: { type: 'file', filename: 'interactive.log' }
+      console: {},
+      file: { filename: 'interactive.log' }
     }
   });
   

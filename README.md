@@ -1017,6 +1017,25 @@ class OrderService {
 
 The default headers checked for an incoming trace ID (in priority order) are: `traceparent`, `x-trace-id`, `x-request-id`, `x-correlation-id`, `trace-id`.
 
+### Hono
+
+On Node, Hono needs nothing beyond `runWithTraceId()` — wrap `await next()` and every log line in the request carries the trace ID:
+
+```typescript
+app.use(async (c, next) => {
+  const traceId =
+    extractTraceId({ headers: c.req.header() }, { header: DEFAULT_TRACE_HEADERS }) ??
+    generateTraceId();
+  await runWithTraceId(traceId, next);
+});
+```
+
+See [`examples/hono-example.ts`](./examples/hono-example.ts) (`npm run dev:hono`) for the full version.
+
+### Next.js (App Router)
+
+In a route handler on the Node.js runtime (`export const runtime = 'nodejs'`) the regular `logixia` entry works: wrap the handler body in `runWithTraceId(traceId, ...)`. See [`examples/nextjs/`](./examples/nextjs/) for a copy-paste route handler.
+
 ### NestJS trace middleware
 
 The `TraceMiddleware` class integrates directly with NestJS's middleware system. `LogixiaLoggerModule.forRoot()` applies it automatically across all routes — no manual wiring needed:
@@ -1216,12 +1235,12 @@ await logger.mysql('Slow query detected', { query, ms: 1240 });
 await logger.payment('Charge captured', { txnId, amount: 99.99 });
 ```
 
-**TraceId** — with `traceId: true`, every log line carries a correlation ID automatically. Use `LogixiaContext.run()` to scope a trace to a block (the `TraceMiddleware` does this per-request automatically):
+**TraceId** — with `traceId: true`, every log line carries a correlation ID automatically. Use `runWithTraceId()` to scope a trace to a block (the `TraceMiddleware` does this per-request automatically):
 
 ```typescript
-import { LogixiaContext } from 'logixia';
+import { runWithTraceId } from 'logixia';
 
-await LogixiaContext.run({ traceId: req.headers['x-request-id'] }, async () => {
+await runWithTraceId(String(req.headers['x-request-id']), async () => {
   await logger.info('Request received'); // traceId: "abc-123" in every line
   await logger.kafka('Event published'); // same traceId
 });
@@ -1387,6 +1406,8 @@ const app = Fastify();
 app.addHook('onRequest', correlationFastifyHook());
 ```
 
+> **Full working example** — see [`examples/fastify-example.ts`](./examples/fastify-example.ts) (`npm run dev:fastify`) for request logging, trace IDs and redaction on Fastify.
+
 ### Outbound fetch / axios
 
 Every outbound HTTP call made inside a correlated context automatically carries the `X-Correlation-ID` header.
@@ -1509,6 +1530,8 @@ const logger = new BrowserLogger({
   ],
 });
 ```
+
+**Cloudflare Workers** — see [`examples/cloudflare-worker/`](./examples/cloudflare-worker/) for a Worker that logs JSON, tags each request with `child({ requestId })` and flushes a `BrowserRemoteTransport` with `ctx.waitUntil()`. Pass `flushIntervalMs: 0` to the transport: Workers don't allow timers at global scope.
 
 The following utilities from the main package are also re-exported from `logixia/browser` (safe for non-Node runtimes):
 
