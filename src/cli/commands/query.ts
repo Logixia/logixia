@@ -34,7 +34,7 @@ import path from 'node:path';
 import { Command } from 'commander';
 import pc from 'picocolors';
 
-import { formatAsTable, safeParseLogs } from '../utils';
+import { escapeRegExp, formatAsTable, safeParseLogs, sanitizeForTerminal } from '../utils';
 
 // ── Time-range parser ─────────────────────────────────────────────────────────
 
@@ -357,6 +357,23 @@ function parseCondition(expr: string): Condition | null {
 
 // ── Filter evaluation ─────────────────────────────────────────────────────────
 
+/** Build a case-insensitive regex for a SQL LIKE pattern; only `%` and `_` are special. */
+function likeToRegExp(pattern: string): RegExp {
+  let source = '';
+  let lastWasWildcard = false;
+  for (const ch of pattern) {
+    if (ch === '%') {
+      // Collapse runs of % so repeated wildcards cannot cause heavy backtracking.
+      if (!lastWasWildcard) source += '.*';
+      lastWasWildcard = true;
+      continue;
+    }
+    lastWasWildcard = false;
+    source += ch === '_' ? '.' : escapeRegExp(ch);
+  }
+  return new RegExp(`^${source}$`, 'i');
+}
+
 function matchesCondition(row: Record<string, any>, cond: Condition): boolean {
   const rawFieldValue = row[cond.field];
   if (rawFieldValue === undefined) return false;
@@ -379,12 +396,10 @@ function matchesCondition(row: Record<string, any>, cond: Condition): boolean {
       return Number(rawFieldValue) <= Number(cond.value);
     case 'LIKE': {
       // SQL LIKE: % = wildcard, _ = single char
-      const pattern = condStr.replace(/%/g, '.*').replace(/_/g, '.');
-      return new RegExp(`^${pattern}$`, 'i').test(fieldStr);
+      return likeToRegExp(condStr).test(fieldStr);
     }
     case 'NOT LIKE': {
-      const pattern = condStr.replace(/%/g, '.*').replace(/_/g, '.');
-      return !new RegExp(`^${pattern}$`, 'i').test(fieldStr);
+      return !likeToRegExp(condStr).test(fieldStr);
     }
     case 'IN':
       return (cond.value as string[]).some((v) => String(rawFieldValue) === v);
@@ -420,15 +435,16 @@ function runAggregation(entries: any[], agg: NonNullable<ParsedQuery['aggregatio
   if (!groupBy) return pc.yellow('Aggregation requires a GROUP BY field');
 
   // Build groups
-  const groups: Record<string, any[]> = {};
+  const groups = new Map<string, any[]>();
   for (const entry of entries) {
     const key = String(entry[groupBy] ?? '(empty)');
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(entry);
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(entry);
+    else groups.set(key, [entry]);
   }
 
   if (fn === 'COUNT' || fn === 'GROUP') {
-    const rows = Object.entries(groups)
+    const rows = [...groups.entries()]
       .map(([k, v]) => ({ [groupBy]: k, count: v.length }))
       .sort((a, b) => b.count - a.count);
 
@@ -438,7 +454,7 @@ function runAggregation(entries: any[], agg: NonNullable<ParsedQuery['aggregatio
   // AVG / SUM / MIN / MAX require a numeric field
   if (!field) return pc.yellow('Numeric aggregation requires a field: AVG(field) BY group');
 
-  const rows = Object.entries(groups)
+  const rows = [...groups.entries()]
     .map(([k, v]) => {
       const nums = v.map((e) => Number(e[field!])).filter((n) => !Number.isNaN(n));
       let result: number;
@@ -483,11 +499,11 @@ function formatResults(results: any[], format: string): string {
   if (results.length === 0) return pc.yellow('No results found');
 
   if (format === 'json') {
-    return JSON.stringify(results, null, 2);
+    return sanitizeForTerminal(JSON.stringify(results, null, 2));
   }
 
   if (format === 'ndjson') {
-    return results.map((r) => JSON.stringify(r)).join('\n');
+    return results.map((r) => sanitizeForTerminal(JSON.stringify(r))).join('\n');
   }
 
   if (format === 'table') {
@@ -499,7 +515,7 @@ function formatResults(results: any[], format: string): string {
   return results
     .map((r) => {
       const level = (r.level || '').toUpperCase();
-      const line = JSON.stringify(r);
+      const line = sanitizeForTerminal(JSON.stringify(r));
       if (level === 'ERROR' || level === 'CRITICAL') return pc.red(line);
       if (level === 'WARN') return pc.yellow(line);
       if (level === 'DEBUG' || level === 'VERBOSE') return pc.gray(line);
@@ -669,7 +685,7 @@ export const queryCommand = new Command('query')
               }
             } catch {
               // Not JSON — print raw if no SQL filter
-              if (!opts.sql) console.log(line);
+              if (!opts.sql) console.log(sanitizeForTerminal(line));
             }
           }
         });

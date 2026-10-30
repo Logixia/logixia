@@ -6,15 +6,60 @@
  * `statusCode=0` field must not silently display as blank.
  */
 function cellText(value: unknown): string {
-  return value === null || value === undefined ? '' : String(value);
+  return value === null || value === undefined ? '' : sanitizeInline(String(value));
+}
+
+// C0 controls (except tab and newline), DEL, C1 controls and the Unicode line/paragraph separators.
+// eslint-disable-next-line no-control-regex -- matching control characters is the purpose
+const TERMINAL_UNSAFE = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u2028\u2029]/g;
+
+function escapeChar(ch: string): string {
+  const code = ch.charCodeAt(0);
+  return code <= 0xff
+    ? `\\x${code.toString(16).padStart(2, '0')}`
+    : `\\u${code.toString(16).padStart(4, '0')}`;
+}
+
+/**
+ * Make untrusted log text safe to print: control characters (ESC, CR, BEL, C1
+ * codes, ...) are replaced by a visible `\xNN` escape. Tabs and newlines are kept
+ * so multi-line output the CLI formats itself is unaffected.
+ */
+export function sanitizeForTerminal(text: string): string {
+  return text.replace(TERMINAL_UNSAFE, escapeChar);
+}
+
+/** Like {@link sanitizeForTerminal} but also escapes newlines and tabs (single-line cells). */
+export function sanitizeInline(text: string): string {
+  return sanitizeForTerminal(text).replace(/\n/g, '\\n').replace(/\t/g, '\\t');
+}
+
+/** Escape regular-expression metacharacters so `text` matches literally. */
+export function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const CSV_FORMULA_PREFIX = /^[=+\-@\t\r]/;
+
+/**
+ * Render one CSV field. String values that a spreadsheet would treat as a
+ * formula (leading `=`, `+`, `-`, `@`, tab or CR) are prefixed with `'`.
+ * Fields containing a comma, quote, CR or LF are quoted.
+ */
+export function csvField(value: unknown, alwaysQuote = false): string {
+  if (value === undefined || value === null) return alwaysQuote ? '""' : '';
+  let str = typeof value === 'string' ? value : String(value);
+  if (typeof value === 'string' && CSV_FORMULA_PREFIX.test(str)) str = `'${str}`;
+  if (alwaysQuote || /[",\r\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
+  return str;
 }
 
 export function formatAsTable(rows: any[], columns: string[]) {
   // very small table printer
   const colWidths: number[] = columns.map((c) =>
-    Math.max(c.length, ...rows.map((r) => cellText(r[c]).length))
+    Math.max(sanitizeInline(c).length, ...rows.map((r) => cellText(r[c]).length))
   );
-  const hdr = columns.map((c, i) => c.padEnd(colWidths[i] ?? 0)).join(' | ');
+  const hdr = columns.map((c, i) => sanitizeInline(c).padEnd(colWidths[i] ?? 0)).join(' | ');
   const sep = colWidths.map((w) => '-'.repeat(w)).join('-|-');
   const body = rows
     .map((r) => columns.map((c, i) => cellText(r[c]).padEnd(colWidths[i] ?? 0)).join(' | '))

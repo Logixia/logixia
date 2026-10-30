@@ -51,7 +51,7 @@ export async function analyzeFileContents(raw: string, opts: any = {}) {
     );
   }
 
-  const byLevel: Record<string, number> = {};
+  const byLevel: Record<string, number> = Object.create(null);
   for (const e of filtered) {
     const l = (e.level || 'info').toUpperCase();
     byLevel[l] = (byLevel[l] || 0) + 1;
