@@ -6,6 +6,7 @@
  */
 
 import type { SamplingConfig } from '../types';
+import { sanitizeIncomingId } from './trace.utils';
 
 // Safety-critical levels that are NEVER sampled below 100 % by default.
 // Per SamplingConfig docs, ERROR and WARN are always emitted unless explicitly
@@ -31,12 +32,13 @@ export interface SamplingStats {
 export class Sampler {
   private readonly config: SamplingConfig;
   /**
-   * Per-trace decisions in LRU order (Map preserves insertion order; a hit
-   * re-inserts the key). Survives resetStats() so a long trace is never
-   * re-decided mid-flight; bounded by size and by an idle TTL.
+   * Per-trace decisions in decision order (Map preserves insertion order; hits
+   * do not reorder or extend an entry). Survives resetStats() so a long trace is
+   * not re-decided mid-flight; bounded by size and by an absolute TTL counted
+   * from when the decision was made.
    */
-  private readonly traceDecisions = new Map<string, { emit: boolean; seenAt: number }>();
-  private readonly maxTrackedTraces = 100_000;
+  private readonly traceDecisions = new Map<string, { emit: boolean; decidedAt: number }>();
+  private readonly maxTrackedTraces = 10_000;
   private readonly traceTtlMs = 5 * 60_000;
 
   // Rate-limiting state
@@ -199,25 +201,28 @@ export class Sampler {
 
   /**
    * Return the cached decision for a trace, or make and cache a new one. Entries
-   * idle past the TTL are re-decided; the least recently used entry is evicted
-   * once the cap is reached.
+   * expire a fixed time after they were decided (hits do not extend them), and the
+   * oldest entry is evicted once the cap is reached. Trace IDs that are not valid
+   * identifiers are sampled independently and never cached.
    */
   private _decideForTrace(traceId: string, level: string): boolean {
+    const id = sanitizeIncomingId(traceId);
+    if (id === undefined) return this._sampleByRate(level);
+
     const now = Date.now();
-    const known = this.traceDecisions.get(traceId);
-    if (known && now - known.seenAt <= this.traceTtlMs) {
-      this.traceDecisions.delete(traceId);
-      known.seenAt = now;
-      this.traceDecisions.set(traceId, known);
+    const known = this.traceDecisions.get(id);
+    if (known && now - known.decidedAt <= this.traceTtlMs) {
       return known.emit;
     }
 
     const emit = this._sampleByRate(level);
-    this.traceDecisions.delete(traceId);
-    this.traceDecisions.set(traceId, { emit, seenAt: now });
-    if (this.traceDecisions.size > this.maxTrackedTraces) {
-      const oldest = this.traceDecisions.keys().next().value;
-      if (oldest !== undefined) this.traceDecisions.delete(oldest);
+    this.traceDecisions.delete(id);
+    this.traceDecisions.set(id, { emit, decidedAt: now });
+
+    for (const [key, entry] of this.traceDecisions) {
+      const expired = now - entry.decidedAt > this.traceTtlMs;
+      if (!expired && this.traceDecisions.size <= this.maxTrackedTraces) break;
+      this.traceDecisions.delete(key);
     }
     return emit;
   }
