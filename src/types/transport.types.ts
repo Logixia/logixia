@@ -90,10 +90,11 @@ export interface DatabaseTransportConfig {
   batchSize?: number;
   flushInterval?: number;
   filter?: (entry: TransportLogEntry) => boolean;
-  /** Most entries buffered in memory; past it the oldest are dropped. Default 10000. */
+  /**
+   * Most entries buffered in memory while the database is unreachable; past it
+   * the oldest are dropped. Default 10000, never below `batchSize`.
+   */
   maxBufferSize?: number;
-  /** Attempts per batch before it is split, and a single failing entry is dropped. Default 3. */
-  maxRetries?: number;
 }
 
 export interface ConsoleTransportConfig {

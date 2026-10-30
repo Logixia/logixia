@@ -14,6 +14,7 @@ import type {
 import { safeToString } from '../utils/coerce.utils';
 import { internalError, internalWarn } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
+import { stripControlChars } from '../utils/sanitize.utils';
 import { mergeCoreFields } from './entry-fields';
 
 const appendFile = promisify(fs.appendFile);
@@ -34,20 +35,8 @@ const DEFAULT_MAX_QUEUE = 10_000;
 const DEFAULT_FILE_MODE = 0o600;
 const DEFAULT_DIR_MODE = 0o700;
 
-// eslint-disable-next-line no-control-regex
-const CONTROL_CHARS_RE = /[\x00-\x1F\x7F-\x9F]/g;
-const CONTROL_ESCAPES: Record<string, string> = { '\n': '\\n', '\r': '\\r', '\t': '\\t' };
-
-/** Escapes CR, LF, tab and other control characters so one entry stays on one line. */
-function escapeControlChars(value: string): string {
-  return value.replace(
-    CONTROL_CHARS_RE,
-    (c) => CONTROL_ESCAPES[c] ?? `\\x${c.charCodeAt(0).toString(16).padStart(2, '0')}`
-  );
-}
-
 function csvField(value: unknown): string {
-  return `"${escapeControlChars(safeToString(value)).replace(/"/g, '""')}"`;
+  return `"${stripControlChars(safeToString(value)).replace(/"/g, '""')}"`;
 }
 
 const SIZE_UNITS: Record<string, number> = {
@@ -397,7 +386,7 @@ export class FileTransport implements ITransport, IBatchTransport {
 
       case 'text':
       default:
-        return `${entry.timestamp.toISOString()} [${escapeControlChars(safeToString(entry.level)).toUpperCase()}] ${escapeControlChars(safeToString(entry.message))}${entry.data ? ' ' + stringifyForLog(entry.data) : ''}`;
+        return `${entry.timestamp.toISOString()} [${stripControlChars(safeToString(entry.level)).toUpperCase()}] ${stripControlChars(safeToString(entry.message))}${entry.data ? ' ' + stringifyForLog(entry.data) : ''}`;
     }
   }
 

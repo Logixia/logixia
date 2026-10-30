@@ -10,6 +10,7 @@ import { ConsoleTransport } from '../console.transport';
 import { DataDogTransport } from '../datadog.transport';
 import { mergeCoreFields } from '../entry-fields';
 import { GCPTransport } from '../gcp.transport';
+import { GoogleAnalyticsTransport } from '../google-analytics.transport';
 import { MixpanelTransport } from '../mixpanel.transport';
 import { SegmentTransport } from '../segment.transport';
 
@@ -45,9 +46,20 @@ describe('mergeCoreFields', () => {
     });
   });
 
-  it('does not overwrite an existing data_ key either', () => {
-    const out = mergeCoreFields({ level: 'error' }, { level: 'a', data_level: 'b' });
-    expect(out).toEqual({ level: 'error', data_level: 'a', data_data_level: 'b' });
+  it('leaves a payload data_ key where it is and renames around it', () => {
+    const forward = mergeCoreFields({ level: 'error' }, { level: 'a', data_level: 'b' });
+    const reverse = mergeCoreFields({ level: 'error' }, { data_level: 'b', level: 'a' });
+    expect(forward).toEqual({ level: 'error', data_level: 'b', data_data_level: 'a' });
+    expect(reverse).toEqual(forward);
+  });
+
+  it('does not rename inherited property names', () => {
+    const out = mergeCoreFields(
+      { level: 'error' },
+      JSON.parse('{"constructor":1,"toString":2,"valueOf":3}')
+    );
+    expect(out).toMatchObject({ constructor: 1, toString: 2, valueOf: 3 });
+    expect(out).not.toHaveProperty('data_constructor');
   });
 
   it('skips __proto__', () => {
@@ -188,6 +200,10 @@ describe('analytics providers', () => {
         version: 'evil',
         logger: 'evil',
         host: 'evil',
+        status: 'evil',
+        ddtags: 'evil',
+        ddsource: 'evil',
+        hostname: 'evil',
         level: 'debug',
         message: 'x',
       },
@@ -203,7 +219,13 @@ describe('analytics providers', () => {
       logger: { name: 'logixia', thread_name: 'main' },
       data_service: 'evil',
       data_logger: 'evil',
+      data_status: 'evil',
+      data_ddtags: 'evil',
+      data_ddsource: 'evil',
+      data_hostname: 'evil',
     });
+    expect(log).not.toHaveProperty('status');
+    expect(log).not.toHaveProperty('ddtags');
     expect(log.host).not.toBe('evil');
   });
 
@@ -265,5 +287,35 @@ describe('analytics providers', () => {
     await t.write({ ...spoof, data: { userId: 'u1', account: 'acct-9' } });
     await t.close();
     expect(bodies[0].userId).toBe('acct-9');
+  });
+
+  it('google analytics: core params cannot be overwritten by the payload', async () => {
+    const t = new GoogleAnalyticsTransport({
+      apiKey: 'k',
+      measurementId: 'G-1',
+      apiSecret: 's',
+      batchSize: 1,
+    });
+    await t.write({
+      ...spoof,
+      data: {
+        event_category: 'evil',
+        log_level: 'evil',
+        log_message: 'evil',
+        trace_id: 'evil',
+        custom_dimension_1: 'evil',
+      },
+    });
+    await t.close();
+    const params = bodies[0].events[0].params;
+    expect(params).toMatchObject({
+      event_category: 'Error',
+      log_level: 'error',
+      log_message: 'real message',
+      trace_id: 'trace-1',
+      custom_dimension_1: 'error',
+      data_event_category: 'evil',
+      data_log_level: 'evil',
+    });
   });
 });

@@ -156,7 +156,20 @@ export class DataDogTransport extends AnalyticsTransport {
   }
 
   protected override reservedKeys(): readonly string[] {
-    return ['service', 'version', 'env', 'logger', 'host', 'source', 'dd.trace_id', 'dd.span_id'];
+    return [
+      'status',
+      'ddtags',
+      'ddsource',
+      'hostname',
+      'service',
+      'version',
+      'env',
+      'logger',
+      'host',
+      'source',
+      'dd.trace_id',
+      'dd.span_id',
+    ];
   }
 
   private transformToDataDogMetric(entry: TransportLogEntry): Record<string, unknown> {

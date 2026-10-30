@@ -5,6 +5,7 @@ import type {
 } from '../types/transport.types';
 import { safeToString } from '../utils/coerce.utils';
 import { stringifyForLog } from '../utils/safe-stringify';
+import { stripControlChars } from '../utils/sanitize.utils';
 import { mergeCoreFields } from './entry-fields';
 
 /**
@@ -41,24 +42,10 @@ export class ConsoleTransport implements ITransport {
     ['reset', '\x1b[0m'],
   ]);
 
-  // CWE-117 guard: strip ASCII control characters from user-supplied text so
-  // attacker-controlled log payloads cannot inject ANSI escapes, overwrite
-  // lines, or forge log entries on the operator's terminal. Keeps \t (0x09),
-  // writes \n and \r as the literal two-character escapes, and strips everything
-  // else in the C0 + DEL + C1 ranges. Applied only to text mode — JSON mode already escapes via
-  // JSON.stringify.
-  // eslint-disable-next-line no-control-regex
-  private static readonly CONTROL_CHARS_RE = /[\x00-\x08\x0A-\x1F\x7F-\x9F]/g;
-
-  private static readonly NEWLINE_ESCAPES: Record<string, string> = { '\n': '\\n', '\r': '\\r' };
-
   private static sanitize(value: unknown): string {
     // Coerce to string first: upstream code (NestJS internals, user payloads)
     // can pass objects / Errors here, and .replace() would throw otherwise.
-    return safeToString(value).replace(
-      ConsoleTransport.CONTROL_CHARS_RE,
-      (c) => ConsoleTransport.NEWLINE_ESCAPES[c] ?? ''
-    );
+    return stripControlChars(safeToString(value));
   }
 
   constructor(private config: ConsoleTransportConfig = {}) {

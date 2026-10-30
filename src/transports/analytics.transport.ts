@@ -4,11 +4,9 @@ import type {
   ITransport,
   TransportLogEntry,
 } from '../types/transport.types';
-import { internalError, internalWarn } from '../utils/internal-log';
+import { internalError } from '../utils/internal-log';
+import { BufferCap } from './buffer-cap';
 import { mergeCoreFields } from './entry-fields';
-
-const DEFAULT_MAX_BUFFER_SIZE = 10_000;
-const DROP_WARN_INTERVAL_MS = 5000;
 
 export abstract class AnalyticsTransport implements ITransport, IBatchTransport {
   public readonly name: string;
@@ -31,8 +29,7 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
   private flushPromise?: Promise<void> | undefined;
   /** Set on the first write. Subclass fields don't exist yet while the base constructor runs. */
   private initPromise?: Promise<void> | undefined;
-  private dropped = 0;
-  private lastDropWarning = 0;
+  private readonly cap: BufferCap;
 
   constructor(name: string, config: AnalyticsTransportConfig) {
     this.name = name;
@@ -46,6 +43,7 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
     this.level = config.level;
     this.batchSize = this.config.batchSize || 50;
     this.flushInterval = this.config.flushInterval || 10000;
+    this.cap = new BufferCap(name, config.maxBufferSize, this.batchSize);
   }
 
   async write(entry: TransportLogEntry): Promise<void> {
@@ -64,7 +62,7 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
 
   addToBatch(entry: TransportLogEntry): void {
     this.batch.push(entry);
-    this.enforceBufferCap();
+    this.cap.enforce(this.batch);
 
     if (this.batch.length >= (this.config.batchSize || 50)) {
       this.flush().catch((err: unknown) => internalError(`${this.name} batch flush failed`, err));
@@ -114,30 +112,10 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
         internalError(`Analytics transport ${this.name} flush failed`, error);
         // Re-add failed entries to the front of the batch for retry, then stop.
         this.batch.unshift(...entriesToSend);
-        this.enforceBufferCap();
+        this.cap.enforce(this.batch);
         return;
       }
     }
-  }
-
-  /** Drops the oldest entries beyond `maxBufferSize` and reports how many went. */
-  private enforceBufferCap(): void {
-    const max = this.config.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE;
-    const excess = this.batch.length - max;
-    if (excess <= 0) return;
-    this.batch.splice(0, excess);
-    this.dropped += excess;
-    this.reportDropped(DROP_WARN_INTERVAL_MS, max);
-  }
-
-  private reportDropped(minGapMs: number, max: number): void {
-    const now = Date.now();
-    if (this.dropped === 0 || now - this.lastDropWarning < minGapMs) return;
-    internalWarn(
-      `${this.name}: buffer full (${max}), dropped ${this.dropped} oldest entr${this.dropped === 1 ? 'y' : 'ies'}`
-    );
-    this.dropped = 0;
-    this.lastDropWarning = now;
   }
 
   async close(): Promise<void> {
@@ -164,7 +142,7 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
       );
     }
 
-    this.reportDropped(0, this.config.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE);
+    this.cap.report(0);
     await this.cleanup();
   }
 

@@ -77,7 +77,7 @@ describe('FileTransport hardening', () => {
       await t.close();
       const lines = read('t.log').split('\n').filter(Boolean);
       expect(lines).toHaveLength(1);
-      expect(lines[0]).toContain('ok\\n2026-01-01T00:00:00.000Z [ERROR] forged\\r\\x1b[31m\\x00');
+      expect(lines[0]).toContain('ok\\n2026-01-01T00:00:00.000Z [ERROR] forged\\r[31m');
       for (const c of ['\r', '\x1b', '\x00']) expect(read('t.log')).not.toContain(c);
     });
 

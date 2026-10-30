@@ -54,6 +54,15 @@ describe('JsonFormatter', () => {
 });
 
 describe('TextFormatter', () => {
+  it('escapes line breaks in the message so one entry stays on one line', () => {
+    const out = new TextFormatter({ colorize: false }).format(
+      baseEntry({ message: 'a\nERROR forged\r\x1b[0m' })
+    );
+    expect(out).toContain('a\\nERROR forged\\r[0m');
+    expect(out).not.toContain('\n');
+    expect(out).not.toContain('\x1b');
+  });
+
   it('formats a simple single-key payload as key=value', () => {
     const out = new TextFormatter({ colorize: false }).format(baseEntry({ payload: { count: 5 } }));
     expect(out).toContain('count=5');
