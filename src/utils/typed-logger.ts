@@ -53,11 +53,11 @@ export interface LogFieldDef {
   validate?: (value: unknown) => string | undefined;
 }
 
-export type LogSchema<TFields extends Record<string, unknown>> = {
+export type LogSchema<TFields extends object> = {
   [K in keyof TFields]: LogFieldDef;
 };
 
-export interface CompiledSchema<TFields extends Record<string, unknown>> {
+export interface CompiledSchema<TFields extends object> {
   readonly fields: LogSchema<TFields>;
   /**
    * Validate a payload against the schema.
@@ -85,7 +85,7 @@ function isProduction(): boolean {
  * Call this once at module initialisation and pass it to `createTypedLogger`.
  * In development, every log call is validated against the schema.
  */
-export function defineLogSchema<TFields extends Record<string, unknown>>(
+export function defineLogSchema<TFields extends object>(
   fields: LogSchema<TFields>
 ): CompiledSchema<TFields> {
   return {
@@ -139,7 +139,7 @@ export interface LoggerLike {
  * The `error` overload still accepts a plain `Error` object as the first arg
  * (with optional `TFields` data) so the typed logger remains a drop-in replacement.
  */
-export interface TypedLogger<TFields extends Record<string, unknown>> {
+export interface TypedLogger<TFields extends object> {
   error(error: Error, data?: Partial<TFields>): Promise<void>;
   error(message: string, data?: Partial<TFields>): Promise<void>;
   warn(message: string, data?: Partial<TFields>): Promise<void>;
@@ -157,7 +157,7 @@ export interface TypedLogger<TFields extends Record<string, unknown>> {
  * @param logger  Any object that implements `IBaseLogger` (e.g. the result of `createLogger()`)
  * @param schema  Optional schema for dev-time validation. Created with `defineLogSchema()`.
  */
-export function createTypedLogger<TFields extends Record<string, unknown>>(
+export function createTypedLogger<TFields extends object>(
   logger: LoggerLike,
   schema?: CompiledSchema<TFields>
 ): TypedLogger<TFields> {
