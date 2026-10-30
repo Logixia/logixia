@@ -21,6 +21,7 @@ import type {
   TimeRange,
 } from '../types';
 import type { ILogSearchEngine } from './search-engine.interface';
+import { extractUserId } from './user-id';
 
 /**
  * Basic search engine implementation
@@ -81,10 +82,11 @@ export class BasicSearchEngine implements ILogSearchEngine {
     options?: SearchOptions
   ): Promise<SearchResult[]> {
     // Apply filters first
-    const filteredLogs = this.applyFilters(this.logs, filters);
+    const textCache = new Map<LogEntry, string>();
+    const filteredLogs = this.applyFilters(this.logs, filters, textCache);
 
     // Perform text search
-    const results = this.performTextSearch(filteredLogs, query, options);
+    const results = this.performTextSearch(filteredLogs, query, options, textCache);
 
     // Add to search history
     this.addToSearchHistory(query);
@@ -307,11 +309,10 @@ export class BasicSearchEngine implements ILogSearchEngine {
       consume(/from\s+(?:the\s+)?[\w-]+\s+service/gi);
     }
 
-    const userMatch =
-      query.match(/\buser(?:\s+id)?\s+([\w-]*\d[\w-]*)/i) ?? query.match(/\buser\s+id\s+([\w-]+)/i);
-    if (userMatch?.[1]) {
-      filters.userIds = [userMatch[1]];
-      consume(/\buser(?:\s+id)?\s+[\w-]+/gi);
+    const userMatch = extractUserId(query);
+    if (userMatch) {
+      filters.userIds = [userMatch.id];
+      remainder = remainder.replace(userMatch.span, ' ');
     }
 
     let intent: ParsedNLQuery['intent'] = 'general_search';
@@ -323,7 +324,8 @@ export class BasicSearchEngine implements ILogSearchEngine {
 
     const textQuery = remainder
       .split(/\s+/)
-      .filter((w) => w && !NL_FILLER_WORDS.has(w.toLowerCase().replace(/[^\w-]/g, '')))
+      .map(trimPunctuation)
+      .filter((w) => w && !NL_FILLER_WORDS.has(w.toLowerCase()))
       .join(' ');
 
     return {
@@ -378,8 +380,15 @@ export class BasicSearchEngine implements ILogSearchEngine {
 
   // Private helper methods
 
-  private applyFilters(logs: LogEntry[], filters?: SearchFilters): LogEntry[] {
+  private applyFilters(
+    logs: LogEntry[],
+    filters: SearchFilters | undefined,
+    textCache: Map<LogEntry, string>
+  ): LogEntry[] {
     if (!filters) return logs;
+
+    const range = filters.timeRange ? resolveTimeRange(filters.timeRange) : undefined;
+    const excludes = (filters.excludePatterns ?? []).filter(Boolean).map((p) => p.toLowerCase());
 
     return logs.filter((log) => {
       // Level filter
@@ -398,12 +407,10 @@ export class BasicSearchEngine implements ILogSearchEngine {
       }
 
       // Time range filter
-      if (filters.timeRange) {
+      if (range) {
         const logTime = new Date(log.timestamp).getTime();
-        const { start, end } = resolveTimeRange(filters.timeRange);
-
-        if (logTime < start) return false;
-        if (end !== undefined && logTime > end) return false;
+        if (logTime < range.start) return false;
+        if (range.end !== undefined && logTime > range.end) return false;
       }
 
       if (filters.userIds && !matchesAny(extractPayloadId(log, USER_ID_KEYS), filters.userIds)) {
@@ -421,16 +428,17 @@ export class BasicSearchEngine implements ILogSearchEngine {
         return false;
       }
 
-      if (filters.excludePatterns && filters.excludePatterns.length > 0) {
-        const text = this.getSearchableText(log).toLowerCase();
-        if (filters.excludePatterns.some((p) => p && text.includes(p.toLowerCase()))) {
-          return false;
-        }
+      if (excludes.length > 0) {
+        const text = this.lowerSearchableText(log, textCache);
+        if (excludes.some((p) => text.includes(p))) return false;
       }
 
       if (filters.customFields) {
         for (const [key, expected] of Object.entries(filters.customFields)) {
-          if (!fieldMatches(getPath(log, key) ?? getPath(log.payload, key), expected)) return false;
+          const actual = getPath(log, key);
+          if (!fieldMatches(actual === undefined ? getPath(log.payload, key) : actual, expected)) {
+            return false;
+          }
         }
       }
 
@@ -452,7 +460,8 @@ export class BasicSearchEngine implements ILogSearchEngine {
   private performTextSearch(
     logs: LogEntry[],
     query: string,
-    options?: SearchOptions
+    options: SearchOptions | undefined,
+    textCache: Map<LogEntry, string>
   ): SearchResult[] {
     if (!query) {
       return logs.map((log) => ({ log, score: 1 }));
@@ -462,7 +471,7 @@ export class BasicSearchEngine implements ILogSearchEngine {
     const results: SearchResult[] = [];
 
     for (const log of logs) {
-      const searchableText = this.getSearchableText(log).toLowerCase();
+      const searchableText = this.lowerSearchableText(log, textCache);
       let score = 0;
       const highlights: SearchHighlight[] = [];
       const matchedTerms: string[] = [];
@@ -494,6 +503,15 @@ export class BasicSearchEngine implements ILogSearchEngine {
     }
 
     return results;
+  }
+
+  private lowerSearchableText(log: LogEntry, cache: Map<LogEntry, string>): string {
+    let text = cache.get(log);
+    if (text === undefined) {
+      text = this.getSearchableText(log).toLowerCase();
+      cache.set(log, text);
+    }
+    return text;
   }
 
   private getSearchableText(log: LogEntry): string {
@@ -751,9 +769,20 @@ const NL_FILLER_WORDS = new Set([
   'past',
 ]);
 
+/** Strip leading and trailing non-word characters. */
+function trimPunctuation(word: string): string {
+  const isWord = (c: string | undefined): boolean => c !== undefined && /\w/.test(c);
+  let start = 0;
+  let end = word.length;
+  while (start < end && !isWord(word[start])) start++;
+  while (end > start && !isWord(word[end - 1])) end--;
+  return word.slice(start, end);
+}
+
 /** Severity rank of a level name; higher is more severe. Unknown levels rank as info. */
-function levelSeverity(level: string): number {
-  return LEVEL_SEVERITY[level.toLowerCase()] ?? 2;
+function levelSeverity(level: unknown): number {
+  if (typeof level !== 'string') return LEVEL_SEVERITY['info']!;
+  return LEVEL_SEVERITY[level.toLowerCase()] ?? LEVEL_SEVERITY['info']!;
 }
 
 function resolveTimeRange(range: TimeRange): { start: number; end: number | undefined } {
@@ -777,8 +806,28 @@ function getPath(obj: unknown, path: string): unknown {
   return cur;
 }
 
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a);
+  const kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  return ka.every((k) =>
+    deepEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k])
+  );
+}
+
+/**
+ * Type-aware equality: primitives by ===, except a numeric string matches a numeric
+ * log value; objects and arrays by deep equality. A missing field never matches.
+ */
 function fieldMatches(actual: unknown, expected: unknown): boolean {
-  return actual === expected || String(actual) === String(expected);
+  if (actual === undefined) return false;
+  if (typeof actual === 'number' && typeof expected === 'string' && expected.trim() !== '') {
+    return Number(expected) === actual;
+  }
+  return deepEqual(actual, expected);
 }
 
 function extractPayloadId(log: LogEntry, keys: string[]): string | undefined {

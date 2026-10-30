@@ -3,6 +3,7 @@
  */
 
 import { BasicSearchEngine } from '../core/basic-search-engine';
+import { extractUserId } from '../core/user-id';
 import type {
   EntityType,
   ParsedNLQuery,
@@ -150,7 +151,6 @@ export class NLPSearchEngine extends BasicSearchEngine {
     this.entityPatterns = new Map([
       ['level', /(error|warn|warning|info|debug|trace|verbose)/i],
       ['service', /(?:from|in)\s+(?:the\s+)?(\w+)\s+(?:service|app|application)/i],
-      ['user_id', /user\s+(?:id\s+)?['"]?(\w+)['"]?/i],
       ['trace_id', /trace\s+(?:id\s+)?['"]?([\w-]+)['"]?/i],
       ['time', /(?:last|past|previous)\s+(\d+)\s+(second|minute|hour|day|week)s?/i],
       // eslint-disable-next-line sonarjs/super-linear-regex -- bounded pattern, DoS risk is acceptable for log search
@@ -181,6 +181,9 @@ export class NLPSearchEngine extends BasicSearchEngine {
 
   private extractEntities(query: string): QueryEntity[] {
     const entities: QueryEntity[] = [];
+
+    const userId = extractUserId(query);
+    if (userId) entities.push({ type: 'user_id', value: userId.id, confidence: 0.8 });
 
     for (const [type, pattern] of this.entityPatterns.entries()) {
       const matches = query.matchAll(new RegExp(pattern, 'gi'));
