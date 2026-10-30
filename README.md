@@ -1005,6 +1005,10 @@ app.use(async (c, next) => {
 
 See [`examples/hono-example.ts`](./examples/hono-example.ts) (`npm run dev:hono`) for the full version.
 
+### Next.js (App Router)
+
+In a route handler on the Node.js runtime (`export const runtime = 'nodejs'`) the regular `logixia` entry works: wrap the handler body in `LogixiaContext.run({ traceId }, ...)`. See [`examples/nextjs/`](./examples/nextjs/) for a copy-paste route handler.
+
 ### NestJS trace middleware
 
 The `TraceMiddleware` class integrates directly with NestJS's middleware system. `LogixiaLoggerModule.forRoot()` applies it automatically across all routes — no manual wiring needed:
