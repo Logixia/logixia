@@ -1,5 +1,5 @@
 /**
- * Field Configuration Example for Logitron Logger
+ * Field Configuration Example for logixia Logger
  * Demonstrates how to enable/disable fields and customize their formats
  */
 

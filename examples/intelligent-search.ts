@@ -221,7 +221,7 @@ async function main() {
 
   // Example 12: Find related logs
   console.log('=== Example 12: Find Related Logs ===');
-  const sampleLog = sampleLogs[Math.floor(sampleLogs.length / 2)];
+  const sampleLog = sampleLogs[Math.floor(sampleLogs.length / 2)]!;
   const relatedLogs = await searchManager.findRelatedLogs(sampleLog, 5);
   
   console.log(`Finding logs related to: ${sampleLog.message}`);
@@ -244,9 +244,9 @@ async function generateSampleLogs(logger: any): Promise<LogEntry[]> {
 
   // Generate diverse logs
   for (let i = 0; i < 100; i++) {
-    const service = services[Math.floor(Math.random() * services.length)];
-    const traceId = traceIds[Math.floor(Math.random() * traceIds.length)];
-    const userId = userIds[Math.floor(Math.random() * userIds.length)];
+    const service = services[Math.floor(Math.random() * services.length)]!;
+    const traceId = traceIds[Math.floor(Math.random() * traceIds.length)]!;
+    const userId = userIds[Math.floor(Math.random() * userIds.length)]!;
     const timestamp = new Date(Date.now() - Math.random() * 3600000).toISOString();
 
     if (i % 10 === 0) {

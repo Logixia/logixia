@@ -1,9 +1,9 @@
 /**
- * Express integration example for Logitron library
+ * Express integration example for logixia
  */
 
 import express from 'express';
-import { createLogger, traceMiddleware, getCurrentTraceId } from '../src';
+import { createLogger, generateTraceId, getCurrentTraceId, runWithTraceId } from '../src';
 
 // Create Express app
 const app = express();
@@ -20,7 +20,7 @@ const logger = createLogger({
     json: false
   },
   levelOptions: {
-    level: 2, // INFO level
+    level: 'info',
     levels: {
       error: 0,
       warn: 1,
@@ -49,14 +49,13 @@ const logger = createLogger({
   }
 });
 
-// Add trace middleware
-app.use(traceMiddleware({
-  enabled: true,
-  extractor: {
-    header: ['x-trace-id', 'x-request-id'],
-    query: ['traceId']
-  }
-}));
+// Trace middleware: reuse the caller's trace ID or generate one for this request
+app.use((req, res, next) => {
+  const incoming = req.get('x-trace-id') ?? req.get('x-request-id');
+  const traceId = incoming ?? generateTraceId();
+  res.setHeader('X-Trace-Id', traceId);
+  runWithTraceId(traceId, () => next());
+});
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -74,7 +73,7 @@ app.use((req, res, next) => {
 // Routes
 app.get('/', async (req, res) => {
   await logger.info('Processing home route');
-  res.json({ message: 'Hello from Logitron Express example!', traceId: getCurrentTraceId() });
+  res.json({ message: 'Hello from the logixia Express example!', traceId: getCurrentTraceId() });
 });
 
 app.get('/users/:id', async (req, res) => {

@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "paths": {
+      "logixia": ["./src/index.ts"],
+      "logixia/middleware": ["./src/middleware.ts"],
+      "logixia/correlation": ["./src/correlation.ts"],
+      "logixia/browser": ["./src/browser.ts"],
+      "logixia/transports": ["./src/transports.ts"],
+      "logixia/search": ["./src/search.ts"],
+      "logixia/nest": ["./src/nest.ts"]
+    }
+  },
+  "include": ["examples/**/*.ts"],
+  "exclude": ["node_modules", "dist", "examples/nestjs-app", "examples/cloudflare-worker"]
+}
