@@ -2,6 +2,7 @@ import type { GoogleAnalyticsTransportConfig, TransportLogEntry } from '../types
 import { internalError, internalLog } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
 import { AnalyticsTransport } from './analytics.transport';
+import { protectSecrets, scrubError } from './secret-config';
 
 /**
  * Sends log entries as Google Analytics 4 Measurement Protocol events.
@@ -19,6 +20,7 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
   constructor(config: GoogleAnalyticsTransportConfig) {
     super('google-analytics', config);
     this.gaConfig = config;
+    protectSecrets(this, ['gaConfig']);
   }
 
   protected async initialize(): Promise<void> {
@@ -175,6 +177,7 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
         internalLog(`GA4 Debug Response: ${JSON.stringify(result)}`);
       }
     } catch (error) {
+      scrubError(error, [this.gaConfig.apiSecret]);
       throw new Error(`Failed to send data to Google Analytics: ${(error as Error).message}`, {
         cause: error,
       });

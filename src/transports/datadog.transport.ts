@@ -6,6 +6,7 @@ import { internalError } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
 import type { AnalyticsMetric } from './analytics.transport';
 import { AnalyticsTransport, PartialBatchError } from './analytics.transport';
+import { protectSecrets, scrubError } from './secret-config';
 
 const gzipAsync = promisify(gzip);
 
@@ -103,6 +104,7 @@ export class DataDogTransport extends AnalyticsTransport {
     this.baseUrl = `https://api.${site}`;
     this.logsUrl = `https://http-intake.logs.${site}`;
     this.metricsUrl = `https://api.${site}`;
+    protectSecrets(this, ['datadogConfig']);
   }
 
   protected async initialize(): Promise<void> {
@@ -303,6 +305,7 @@ export class DataDogTransport extends AnalyticsTransport {
         throw new Error(`DataDog Logs API error: ${response.status} ${response.statusText}`);
       }
     } catch (error) {
+      scrubError(error, [this.datadogConfig.apiKey]);
       throw new Error(`Failed to send logs to DataDog: ${(error as Error).message}`, {
         cause: error,
       });
@@ -326,6 +329,7 @@ export class DataDogTransport extends AnalyticsTransport {
         throw new Error(`DataDog Metrics API error: ${response.status} ${response.statusText}`);
       }
     } catch (error) {
+      scrubError(error, [this.datadogConfig.apiKey]);
       throw new Error(`Failed to send metrics to DataDog: ${(error as Error).message}`, {
         cause: error,
       });
@@ -388,6 +392,7 @@ export class DataDogTransport extends AnalyticsTransport {
         throw new Error(`DataDog Events API error: ${response.status} ${response.statusText}`);
       }
     } catch (error) {
+      scrubError(error, [this.datadogConfig.apiKey]);
       throw new Error(`Failed to send event to DataDog: ${(error as Error).message}`, {
         cause: error,
       });

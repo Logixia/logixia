@@ -7,6 +7,7 @@ import type {
 import { internalError, internalWarn } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
 import { BufferCap } from './buffer-cap';
+import { protectSecrets, scrubError, urlSecrets } from './secret-config';
 
 /**
  * Validates that a SQL identifier (table/index name) contains only safe characters.
@@ -167,6 +168,12 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       validateSqlIdentifier(config.table, 'table');
     }
     this.setupFlushTimer();
+    protectSecrets(this, ['config', 'connection']);
+  }
+
+  private secretValues(): (string | undefined)[] {
+    const { connectionString, password } = this.config;
+    return [connectionString, password, ...(connectionString ? urlSecrets(connectionString) : [])];
   }
 
   async write(entry: TransportLogEntry): Promise<void> {
@@ -354,6 +361,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       this.isConnected = true;
     } catch (error) {
       this.isConnected = false;
+      scrubError(error, this.secretValues());
       throw new Error(`Database connection failed: ${error}`, { cause: error });
     }
   }

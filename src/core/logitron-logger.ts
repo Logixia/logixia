@@ -31,6 +31,7 @@ const _fastStringifyEntry = buildFastStringify({
 import { LogixiaContext } from '../context/async-context';
 import type { LogixiaPlugin } from '../plugin';
 import { globalPluginRegistry, PluginRegistry } from '../plugin';
+import { protectSecrets } from '../transports/secret-config';
 import { TransportManager } from '../transports/transport.manager';
 import type {
   ContextData,
@@ -276,6 +277,7 @@ export class LogixiaLogger<
     };
 
     this.context = context ?? '';
+    protectSecrets(this, ['config']);
 
     if (parent) {
       this.transportManager = parent.transportManager;

@@ -36,6 +36,7 @@ import { Worker } from 'node:worker_threads';
 
 import type { ITransport, TransportLogEntry } from '../types/transport.types';
 import { internalError, internalWarn } from '../utils/internal-log';
+import { protectSecrets } from './secret-config';
 
 export interface WorkerTransportConfig {
   /**
@@ -94,6 +95,7 @@ export class WorkerTransport implements ITransport {
     this.bufferSize = config.bufferSize ?? 1000;
     this.maxRestarts = config.maxRestarts ?? 3;
     this.level = config.level;
+    protectSecrets(this, ['config']);
     this.startWorker();
   }
 

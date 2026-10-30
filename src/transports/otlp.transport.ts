@@ -34,6 +34,7 @@ import {
   DEFAULT_REQUEST_TIMEOUT_MS,
   HttpError,
 } from './batch-buffer';
+import { protectSecrets, scrubError, urlSecrets } from './secret-config';
 
 export interface OtlpLogTransportConfig {
   /** OTLP/HTTP logs endpoint, e.g. `http://localhost:4318/v1/logs`. */
@@ -156,6 +157,8 @@ export class OtlpLogTransport implements IAsyncTransport {
     };
     this.resourceAttrs = toAttributes(resource);
 
+    protectSecrets(this, ['headers', 'url']);
+
     this.flushTimer = setInterval(() => {
       this.flush().catch(() => {});
     }, this.flushIntervalMs);
@@ -237,6 +240,7 @@ export class OtlpLogTransport implements IAsyncTransport {
         throw new HttpError(res.status, '', 'OTLP export');
       }
     } catch (err) {
+      scrubError(err, [...Object.values(this.headers), ...urlSecrets(this.url)]);
       if (controller.signal.aborted) {
         throw new Error(`OTLP export timed out after ${this.requestTimeoutMs}ms`, { cause: err });
       }

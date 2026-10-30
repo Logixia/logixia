@@ -38,6 +38,7 @@ import {
   DEFAULT_REQUEST_TIMEOUT_MS,
   httpRequest,
 } from './batch-buffer';
+import { protectSecrets, scrubbing, scrubError, scrubSecrets, urlSecrets } from './secret-config';
 
 /**
  * Azure AD tenant IDs are either a GUID or a verified domain (e.g. `contoso.onmicrosoft.com`).
@@ -129,6 +130,7 @@ export class AzureMonitorTransport implements IAsyncTransport {
       this.flush().catch(() => {});
     }, this.flushInterval);
     if (this.flushTimer.unref) this.flushTimer.unref();
+    protectSecrets(this, ['clientSecret', 'accessToken']);
   }
 
   write(entry: TransportLogEntry): void {
@@ -207,7 +209,10 @@ export class AzureMonitorTransport implements IAsyncTransport {
       this.tokenExpiry = Date.now() + (parsed.expires_in ?? 3600) * 1000 - 60_000;
       return this.accessToken;
     } catch (err) {
-      internalError('AzureMonitorTransport token request failed', err);
+      internalError(
+        'AzureMonitorTransport token request failed',
+        scrubError(err, [this.clientSecret])
+      );
       return null;
     }
   }
@@ -228,7 +233,10 @@ export class AzureMonitorTransport implements IAsyncTransport {
         this.endpoint.endsWith('/') ? this.endpoint : `${this.endpoint}/`
       );
     } catch (error) {
-      internalError(`AzureMonitorTransport: invalid endpoint "${this.endpoint}"`, error);
+      internalError(
+        `AzureMonitorTransport: invalid endpoint "${scrubSecrets(this.endpoint, urlSecrets(this.endpoint))}"`,
+        scrubError(error, urlSecrets(this.endpoint))
+      );
       return;
     }
     if (reqUrl.protocol !== 'https:') {
@@ -242,6 +250,6 @@ export class AzureMonitorTransport implements IAsyncTransport {
       body,
       timeoutMs: this.requestTimeoutMs,
       label: 'Azure Monitor API',
-    });
+    }).catch(scrubbing(() => [this.clientSecret, this.accessToken ?? undefined, token]));
   }
 }

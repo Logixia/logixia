@@ -44,6 +44,7 @@ import {
   isPermanentHttpError,
 } from './batch-buffer';
 import { mergeCoreFields } from './entry-fields';
+import { protectSecrets, scrubbing, urlSecrets } from './secret-config';
 
 export interface CloudWatchTransportConfig {
   /** AWS region, e.g. `'us-east-1'`. Falls back to `AWS_REGION` env var. */
@@ -175,6 +176,7 @@ export class CloudWatchTransport implements IAsyncTransport {
       this.flush().catch(() => {});
     }, this.flushInterval);
     if (this.flushTimer.unref) this.flushTimer.unref();
+    protectSecrets(this, ['credentials', 'endpoint']);
   }
 
   write(entry: TransportLogEntry): void {
@@ -289,6 +291,13 @@ export class CloudWatchTransport implements IAsyncTransport {
       body,
       timeoutMs: this.requestTimeoutMs,
       label: `CloudWatch ${action}`,
-    });
+    }).catch(
+      scrubbing(() => [
+        ...this.credentials.secretValues(),
+        headers['authorization'],
+        headers['x-amz-security-token'],
+        ...urlSecrets(this.endpoint),
+      ])
+    );
   }
 }

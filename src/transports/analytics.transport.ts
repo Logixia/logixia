@@ -7,6 +7,7 @@ import type {
 import { internalError } from '../utils/internal-log';
 import { BufferCap } from './buffer-cap';
 import { mergeCoreFields } from './entry-fields';
+import { protectSecrets } from './secret-config';
 
 /**
  * Thrown by sendBatch() when part of a batch was already delivered. drain()
@@ -55,6 +56,7 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
       enableEventTracking: true,
       ...config,
     };
+    protectSecrets(this, ['config']);
     this.level = config.level;
     this.batchSize = this.config.batchSize || 50;
     this.flushInterval = this.config.flushInterval || 10000;
