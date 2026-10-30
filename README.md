@@ -1686,23 +1686,26 @@ interface TransportLogEntry {
 Query your in-memory log history without shipping to Elasticsearch, Datadog, or any external service. Useful in development and lightweight production setups:
 
 ```typescript
-import { SearchManager } from 'logixia';
+import { SearchManager } from 'logixia/search';
 
-const search = new SearchManager({ maxEntries: 10_000 });
+const search = new SearchManager({ maxIndexSize: 10_000 });
 
 // Index a batch of entries (from a file, database query, or any source)
-await search.index(logEntries);
+await search.indexLogs(logEntries); // or: await search.indexLog(entry)
 
-// Search by text query, level, and time range
-const results = await search.search({
-  query: 'payment failed',
-  level: 'error',
-  from: new Date('2025-01-01'),
-  to: new Date(),
-  limit: 50,
-});
-// → sorted by relevance, full metadata included
+// Search by text, with filters and options
+const results = await search.search(
+  'payment failed',
+  { levels: ['error'], timeRange: { start: new Date('2025-01-01'), end: new Date() } },
+  { limit: 50 }
+);
+// → sorted by relevance, each result is { log, score, ... }
+
+const nl = await search.naturalLanguageSearch('payment errors'); // plain-English query
+const trace = await search.correlateByTraceId('req-001'); // every log of one request
 ```
+
+The same code runs as [`examples/search-readme.ts`](examples/search-readme.ts).
 
 ---
 
