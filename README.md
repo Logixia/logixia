@@ -673,7 +673,7 @@ const logger = createLogger({
     analytics: {
       datadog: {
         apiKey: process.env.DD_API_KEY!,
-        site: 'datadoghq.com', // or 'datadoghq.eu', 'us3.datadoghq.com'
+        site: 'datadoghq.com', // or 'datadoghq.eu', 'us3.datadoghq.com', 'us5.datadoghq.com', 'ap1.datadoghq.com', 'ddog-gov.com'
         service: 'api',
         env: 'production',
         enableLogs: true,

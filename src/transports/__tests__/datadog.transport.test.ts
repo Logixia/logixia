@@ -1,57 +1,470 @@
-/**
- * Guards issue #35: the legacy 'logitron' name must not leak into the payloads
- * DataDog receives. The default service, logger name, metric tags and
- * source_type_name are all user-visible data, so a regression here silently
- * mislabels every application's log stream.
- *
- * The payload builder is exercised directly on a prototype instance: the
- * transport's own constructor kicks off an async initialize() that needs a live
- * provider, which is not what this unit test is about.
- */
-import type { TransportLogEntry } from '../../types/transport.types';
+import { gunzipSync } from 'node:zlib';
+
+import type { DataDogTransportConfig, TransportLogEntry } from '../../types/transport.types';
 import { DataDogTransport } from '../datadog.transport';
 
-function makeEntry(): TransportLogEntry {
+type Log = Record<string, any>;
+
+const fetchMock = jest.fn();
+
+function makeEntry(overrides: Partial<TransportLogEntry> = {}): TransportLogEntry {
   return {
     timestamp: new Date('2026-01-01T00:00:00.000Z'),
     level: 'info',
     message: 'hello from the test suite',
+    ...overrides,
   };
 }
 
-interface DataDogLogPayload {
-  logs: Array<{ service: string; logger: { name: string } }>;
+function makeTransport(config: Partial<DataDogTransportConfig> = {}): DataDogTransport {
+  return new DataDogTransport({ apiKey: 'secret-key', batchSize: 1, ...config });
 }
 
-interface DataDogInternals {
-  config: Record<string, unknown>;
-  datadogConfig: { apiKey: string; service?: string; env?: string; version?: string };
-  sendLogBatch: (entries: TransportLogEntry[]) => Promise<void>;
-  makeLogsRequest: (endpoint: string, payload: unknown) => Promise<void>;
+function callBody(index = 0): any {
+  const body = fetchMock.mock.calls[index][1].body;
+  return JSON.parse(typeof body === 'string' ? body : gunzipSync(body).toString());
 }
 
-function makeTransport(): { transport: DataDogInternals; sent: unknown[] } {
-  const sent: unknown[] = [];
-  const transport = Object.create(DataDogTransport.prototype) as unknown as DataDogInternals;
-  transport.config = {};
-  transport.datadogConfig = { apiKey: 'test-key', env: 'production' };
-  transport.makeLogsRequest = (_endpoint, payload) => {
-    sent.push(payload);
-    return Promise.resolve();
-  };
-  return { transport, sent };
+function callUrl(index = 0): string {
+  return fetchMock.mock.calls[index][0] as string;
 }
 
-describe('DataDogTransport — outgoing payload branding', () => {
-  it('labels the log payload with the logixia service and logger, not logitron', async () => {
-    const { transport, sent } = makeTransport();
+beforeEach(() => {
+  fetchMock.mockReset();
+  fetchMock.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' });
+  global.fetch = fetchMock as unknown as typeof fetch;
+});
 
-    await transport.sendLogBatch([makeEntry()]);
+describe('DataDogTransport logs intake', () => {
+  it('posts a top-level array to /api/v2/logs with the API key in a header only', async () => {
+    await makeTransport().write(makeEntry());
 
-    expect(sent).toHaveLength(1);
-    const payload = sent[0] as DataDogLogPayload;
-    expect(payload.logs[0]?.service).toBe('logixia');
-    expect(payload.logs[0]?.logger.name).toBe('logixia');
-    expect(JSON.stringify(payload)).not.toContain('logitron');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://http-intake.logs.datadoghq.com/api/v2/logs');
+    expect(url).not.toContain('secret-key');
+    expect(init.method).toBe('POST');
+    expect(init.headers['DD-API-KEY']).toBe('secret-key');
+    expect(init.headers['Content-Type']).toBe('application/json');
+    expect(Array.isArray(callBody())).toBe(true);
+  });
+
+  it.each([
+    'datadoghq.com',
+    'datadoghq.eu',
+    'us3.datadoghq.com',
+    'us5.datadoghq.com',
+    'ap1.datadoghq.com',
+    'ddog-gov.com',
+  ] as const)('routes site %s to its own intake host', async (site) => {
+    await makeTransport({ site }).write(makeEntry());
+    expect(callUrl()).toBe(`https://http-intake.logs.${site}/api/v2/logs`);
+  });
+
+  it('changes the metrics host with the site too', async () => {
+    await makeTransport({ site: 'datadoghq.eu', enableLogs: false, enableMetrics: true }).write(
+      makeEntry()
+    );
+    expect(callUrl()).toBe('https://api.datadoghq.eu/api/v1/series');
+  });
+
+  it('builds the Datadog log object', async () => {
+    await makeTransport({ service: 'api', env: 'staging', version: '1.2.3' }).write(
+      makeEntry({ context: 'Auth', data: { userId: 7 } })
+    );
+
+    const [log] = callBody() as Log[];
+    expect(log).toMatchObject({
+      ddsource: 'nodejs',
+      ddtags: 'env:staging,service:api,version:1.2.3',
+      service: 'api',
+      status: 'info',
+      message: 'hello from the test suite',
+      env: 'staging',
+      version: '1.2.3',
+      timestamp: '2026-01-01T00:00:00.000Z',
+      context: 'Auth',
+      userId: 7,
+    });
+    expect(typeof log['hostname']).toBe('string');
+  });
+
+  it('defaults service and env and omits the version tag', async () => {
+    await makeTransport().write(makeEntry());
+    const [log] = callBody() as Log[];
+    expect(log['service']).toBe('logixia');
+    expect(log['ddtags']).toBe('env:production,service:logixia');
+    expect(JSON.stringify(log)).not.toContain('logitron');
+  });
+
+  it.each([
+    ['error', 'error'],
+    ['warn', 'warn'],
+    ['warning', 'warn'],
+    ['info', 'info'],
+    ['verbose', 'debug'],
+    ['fatal', 'critical'],
+    ['WARN', 'warn'],
+    ['custom-level', 'info'],
+  ])('maps level %s to status %s', async (level, status) => {
+    await makeTransport().write(makeEntry({ level }));
+    expect((callBody() as Log[])[0]?.['status']).toBe(status);
+  });
+
+  it('skips debug and trace entries', async () => {
+    const transport = makeTransport();
+    await transport.write(makeEntry({ level: 'debug' }));
+    await transport.write(makeEntry({ level: 'trace' }));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps core fields authoritative over payload keys', async () => {
+    await makeTransport({ service: 'api' }).write(
+      makeEntry({
+        data: { service: 'evil', status: 'ok', ddtags: 'x:y', ddsource: 'z', hostname: 'h' },
+      })
+    );
+    const [log] = callBody() as Log[];
+    expect(log['service']).toBe('api');
+    expect(log['status']).toBe('info');
+    expect(log['ddsource']).toBe('nodejs');
+    expect(log['ddtags']).toBe('env:production,service:api');
+    expect(log['hostname']).not.toBe('h');
+    expect(log['data_service']).toBe('evil');
+    expect(log['data_status']).toBe('ok');
+  });
+
+  it('applies custom properties', async () => {
+    await makeTransport({ customProperties: { team: 'core' } }).write(makeEntry());
+    expect((callBody() as Log[])[0]?.['team']).toBe('core');
+  });
+
+  describe('trace correlation', () => {
+    it('sends the low 64 bits of a W3C trace id as a decimal dd.trace_id', async () => {
+      await makeTransport().write(
+        makeEntry({
+          traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
+          data: { spanId: '00f067aa0ba902b7' },
+        })
+      );
+      const [log] = callBody() as Log[];
+      expect(log['dd.trace_id']).toBe(BigInt('0xa3ce929d0e0e4736').toString());
+      expect(log['dd.span_id']).toBe(BigInt('0x00f067aa0ba902b7').toString());
+    });
+
+    it('omits dd.span_id when there is no active span', async () => {
+      await makeTransport().write(makeEntry({ traceId: '1234abcd1234abcd' }));
+      const [log] = callBody() as Log[];
+      expect(log['dd.trace_id']).toBe(BigInt('0x1234abcd1234abcd').toString());
+      expect(log).not.toHaveProperty('dd.span_id');
+    });
+
+    it('omits both ids without a trace id and never invents a span id', async () => {
+      await makeTransport().write(makeEntry());
+      const [log] = callBody() as Log[];
+      expect(log).not.toHaveProperty('dd.trace_id');
+      expect(log).not.toHaveProperty('dd.span_id');
+    });
+
+    it('passes a non-hex trace id through unchanged', async () => {
+      await makeTransport().write(makeEntry({ traceId: 'req-123' }));
+      expect((callBody() as Log[])[0]?.['dd.trace_id']).toBe('req-123');
+    });
+
+    it('does not let a payload override dd.trace_id', async () => {
+      await makeTransport().write(
+        makeEntry({ traceId: '1234abcd1234abcd', data: { 'dd.trace_id': 'forged' } })
+      );
+      const [log] = callBody() as Log[];
+      expect(log['dd.trace_id']).toBe(BigInt('0x1234abcd1234abcd').toString());
+      expect(log['data_dd.trace_id']).toBe('forged');
+    });
+
+    it('converts logixia default dashed UUID trace ids', async () => {
+      await makeTransport().write(makeEntry({ traceId: '4bf92f35-77b3-4da6-a3ce-929d0e0e4736' }));
+      expect((callBody() as Log[])[0]?.['dd.trace_id']).toBe(
+        BigInt('0xa3ce929d0e0e4736').toString()
+      );
+    });
+
+    it('passes decimal ids through and does not re-parse them as hex', async () => {
+      await makeTransport().write(
+        makeEntry({ traceId: '1234567890123456789', data: { spanId: '9876543210' } })
+      );
+      const [log] = callBody() as Log[];
+      expect(log['dd.trace_id']).toBe('1234567890123456789');
+      expect(log['dd.span_id']).toBe('9876543210');
+    });
+
+    it('reads 16 all-digit ids as decimal and 32 all-digit ids as hex', async () => {
+      await makeTransport().write(
+        makeEntry({ traceId: '1234567890123456', data: { spanId: '1234567890123456' } })
+      );
+      let [log] = callBody() as Log[];
+      expect(log['dd.trace_id']).toBe('1234567890123456');
+      expect(log['dd.span_id']).toBe('1234567890123456');
+
+      fetchMock.mockClear();
+      await makeTransport().write(makeEntry({ traceId: '00000000000000001234567890123456' }));
+      [log] = callBody() as Log[];
+      expect(log['dd.trace_id']).toBe(BigInt('0x1234567890123456').toString());
+    });
+
+    it('drops a span id that is not a valid id', async () => {
+      await makeTransport().write(
+        makeEntry({ traceId: '1234abcd1234abcd', data: { spanId: 'not-an-id' } })
+      );
+      expect((callBody() as Log[])[0]).not.toHaveProperty('dd.span_id');
+    });
+
+    it('posts a traced entry once when logs and traces are both on', async () => {
+      await makeTransport({ enableTraces: true }).write(makeEntry({ traceId: 'abcdef12' }));
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('batch limits', () => {
+    it('sends a small batch as one request', async () => {
+      const transport = makeTransport() as any;
+      await transport.sendBatch([makeEntry(), makeEntry({ level: 'error' })]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(callBody()).toHaveLength(2);
+    });
+
+    it('splits more than 1000 entries into several requests', async () => {
+      const transport = makeTransport() as any;
+      await transport.sendBatch(Array.from({ length: 2500 }, () => makeEntry()));
+      expect(fetchMock.mock.calls.map((_, i) => callBody(i).length)).toEqual([1000, 1000, 500]);
+    });
+
+    it('splits a batch that would pass 5MB', async () => {
+      const transport = makeTransport() as any;
+      const big = 'x'.repeat(900_000);
+      await transport.sendBatch(Array.from({ length: 8 }, () => makeEntry({ message: big })));
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+      for (let i = 0; i < fetchMock.mock.calls.length; i += 1) {
+        expect(Buffer.byteLength(fetchMock.mock.calls[i][1].body)).toBeLessThanOrEqual(5_000_000);
+      }
+      const total = fetchMock.mock.calls.reduce((n, _c, i) => n + callBody(i).length, 0);
+      expect(total).toBe(8);
+    });
+
+    it('truncates a single log over 1MB', async () => {
+      const transport = makeTransport() as any;
+      await transport.sendBatch([makeEntry({ message: 'y'.repeat(1_500_000) })]);
+      const [log] = callBody() as Log[];
+      expect(log['truncated']).toBe(true);
+      expect(log['message'].length).toBeLessThan(1_000_000);
+      expect(Buffer.byteLength(fetchMock.mock.calls[0][1].body)).toBeLessThan(1_000_000);
+      expect(log['service']).toBe('logixia');
+    });
+
+    it('keeps correlation and identity fields on a truncated log', async () => {
+      const transport = makeTransport({ env: 'prod', version: '2.0.0' }) as any;
+      await transport.sendBatch([
+        makeEntry({
+          level: 'error',
+          context: 'Db',
+          traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
+          message: 'y'.repeat(1_500_000),
+          data: { spanId: '00f067aa0ba902b7', big: 'z'.repeat(10) },
+        }),
+      ]);
+      const [log] = callBody() as Log[];
+      expect(log).toMatchObject({
+        truncated: true,
+        env: 'prod',
+        version: '2.0.0',
+        level: 'error',
+        context: 'Db',
+        'dd.trace_id': BigInt('0xa3ce929d0e0e4736').toString(),
+        'dd.span_id': BigInt('0x00f067aa0ba902b7').toString(),
+      });
+      expect(log).not.toHaveProperty('big');
+    });
+
+    it('flushes buffered entries through the batch path', async () => {
+      const transport = makeTransport({ batchSize: 100, flushInterval: 60_000 });
+      await transport.write(makeEntry());
+      await transport.write(makeEntry());
+      expect(fetchMock).not.toHaveBeenCalled();
+      await transport.close();
+      expect(callBody()).toHaveLength(2);
+    });
+  });
+
+  it('gzips the body when compress is on', async () => {
+    await makeTransport({ compress: true }).write(makeEntry());
+    const init = fetchMock.mock.calls[0][1];
+    expect(init.headers['Content-Encoding']).toBe('gzip');
+    expect(Array.isArray(callBody())).toBe(true);
+  });
+
+  it('sends no Content-Encoding by default', async () => {
+    await makeTransport().write(makeEntry());
+    expect(fetchMock.mock.calls[0][1].headers).not.toHaveProperty('Content-Encoding');
+  });
+
+  it('sends no logs request when enableLogs is false', async () => {
+    await makeTransport({ enableLogs: false }).write(makeEntry());
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('never posts to the logs intake when logs are off, even for traced entries', async () => {
+    await makeTransport({ enableLogs: false, enableTraces: true }).write(
+      makeEntry({ traceId: '1234abcd1234abcd' })
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sanitizes ddtags values', async () => {
+    await makeTransport({ env: 'Staging,EU', service: 'my api', version: 'v'.repeat(300) }).write(
+      makeEntry()
+    );
+    const tags = ((callBody() as Log[])[0]?.['ddtags'] as string).split(',');
+    expect(tags).toHaveLength(3);
+    expect(tags[0]).toBe('env:staging_eu');
+    expect(tags[1]).toBe('service:my_api');
+    expect(tags[2]).toHaveLength(200);
+  });
+
+  it('keeps host and source reserved so payload keys cannot claim them', async () => {
+    await makeTransport().write(makeEntry({ data: { host: 'h', source: 's' } }));
+    const [log] = callBody() as Log[];
+    expect(log['data_host']).toBe('h');
+    expect(log['data_source']).toBe('s');
+  });
+});
+
+describe('DataDogTransport errors', () => {
+  it('rejects sendBatch with the status on a non-2xx response', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden' });
+    const transport = makeTransport() as any;
+    await expect(transport.sendBatch([makeEntry()])).rejects.toThrow(/403/);
+  });
+
+  it('wraps network failures without leaking the API key', async () => {
+    fetchMock.mockRejectedValue(new Error('socket hang up'));
+    const transport = makeTransport() as any;
+    const error = await transport.sendBatch([makeEntry()]).catch((e: Error) => e);
+    expect(error.message).toContain('Failed to send logs to DataDog');
+    expect(error.message).not.toContain('secret-key');
+  });
+
+  it('keeps entries for the next flush when the request fails', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 500, statusText: 'Server Error' });
+    const transport = makeTransport({ batchSize: 100, flushInterval: 60_000 });
+    await transport.write(makeEntry());
+    await transport.flush();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await transport.flush();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(callBody(1)).toHaveLength(1);
+  });
+
+  it('requeues only the unsent chunks when a later chunk fails', async () => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK' })
+      .mockResolvedValueOnce({ ok: false, status: 503, statusText: 'Unavailable' });
+    const transport = makeTransport({ batchSize: 5000, flushInterval: 60_000 });
+    for (let i = 0; i < 2500; i += 1) {
+      transport.addToBatch(makeEntry({ message: `m${i}` }));
+    }
+    await transport.flush();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    fetchMock.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' });
+    await transport.flush();
+    const retried = fetchMock.mock.calls.slice(2).flatMap((_c, i) => callBody(i + 2));
+    expect(retried).toHaveLength(1500);
+    expect(retried[0].message).toBe('m1000');
+  });
+
+  it('does not requeue delivered logs when only the metrics request fails', async () => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK' })
+      .mockResolvedValueOnce({ ok: false, status: 500, statusText: 'Server Error' });
+    const transport = makeTransport({
+      batchSize: 100,
+      flushInterval: 60_000,
+      enableMetrics: true,
+    });
+    await transport.write(makeEntry());
+    await transport.flush();
+    await transport.flush();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails writes when the API key is missing', async () => {
+    const transport = new DataDogTransport({ apiKey: '', batchSize: 1 });
+    await expect(transport.write(makeEntry())).rejects.toThrow('API key is required');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('DataDogTransport metrics and events', () => {
+  it('posts a count metric to /api/v1/series', async () => {
+    await makeTransport({ enableLogs: false, enableMetrics: true, service: 'api' }).write(
+      makeEntry({ level: 'error', context: 'Db', appName: 'web' })
+    );
+    expect(callUrl()).toBe('https://api.datadoghq.com/api/v1/series');
+    expect(fetchMock.mock.calls[0][1].headers['DD-API-KEY']).toBe('secret-key');
+    const [series] = callBody().series;
+    expect(series).toMatchObject({
+      metric: 'logitron.logs.error',
+      type: 'count',
+      points: [[1767225600, 1]],
+    });
+    expect(series.tags).toEqual(
+      expect.arrayContaining([
+        'level:error',
+        'service:api',
+        'env:production',
+        'context:db',
+        'app:web',
+      ])
+    );
+  });
+
+  it('sends logs and metrics together when both are enabled', async () => {
+    await makeTransport({ enableMetrics: true }).write(makeEntry());
+    expect(fetchMock.mock.calls.map((c) => c[0]).sort()).toEqual([
+      'https://api.datadoghq.com/api/v1/series',
+      'https://http-intake.logs.datadoghq.com/api/v2/logs',
+    ]);
+  });
+
+  it('sends custom gauge metrics', async () => {
+    await makeTransport().sendCustomMetric({
+      name: 'queue.depth',
+      value: 4,
+      tags: { q: 'a' },
+      timestamp: new Date('2026-01-01T00:00:00.000Z'),
+    });
+    expect(callUrl()).toBe('https://api.datadoghq.com/api/v1/series');
+    expect(callBody().series[0]).toMatchObject({
+      metric: 'queue.depth',
+      type: 'gauge',
+      points: [[1767225600, 4]],
+      tags: ['q:a'],
+    });
+  });
+
+  it('posts events to /api/v1/events', async () => {
+    await makeTransport({ service: 'api' }).sendEvent('Deploy', 'done', ['team:core']);
+    expect(callUrl()).toBe('https://api.datadoghq.com/api/v1/events');
+    expect(callBody()).toMatchObject({
+      title: 'Deploy',
+      text: 'done',
+      source_type_name: 'logixia',
+      tags: ['service:api', 'env:production', 'team:core'],
+    });
+  });
+
+  it('rejects events and metrics on non-2xx responses', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 429, statusText: 'Too Many' });
+    const transport = makeTransport();
+    await expect(transport.sendEvent('t', 'x')).rejects.toThrow(/429/);
+    await expect(transport.sendCustomMetric({ name: 'm', value: 1 })).rejects.toThrow(/429/);
   });
 });
