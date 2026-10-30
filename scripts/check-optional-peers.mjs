@@ -63,7 +63,13 @@ try {
 
   const bare = newProject('bare');
   run(npm, [...installFlags, '--omit=peer', '--legacy-peer-deps', tarball], bare);
-  for (const peer of ['@nestjs/common', 'reflect-metadata', 'express', 'rxjs']) {
+  for (const peer of [
+    '@nestjs/common',
+    '@opentelemetry/api',
+    'reflect-metadata',
+    'express',
+    'rxjs',
+  ]) {
     if (fs.existsSync(path.join(bare, 'node_modules', peer)))
       fail(`bare install unexpectedly contains ${peer}`);
   }

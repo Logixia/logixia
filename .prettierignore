@@ -10,12 +10,12 @@ node_modules/
 examples/
 benchmarks/
 
-# Docs
-docs/
 
 # Generated files
 **/*.d.ts
 CHANGELOG.md
 
-# Vendored third-party bundles
-docs/vendor/
+
+# Documentation website (VitePress)
+website/.vitepress/dist
+website/.vitepress/cache

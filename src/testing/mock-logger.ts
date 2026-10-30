@@ -14,7 +14,7 @@
  * ```
  */
 
-import type { IBaseLogger, LogEntry } from '../types';
+import type { LogEntry, LogixiaLoggerInstance, NamespaceLevels } from '../types';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,8 +33,8 @@ export type LogMatcher =
   | Partial<Record<'message' | 'level' | string, unknown>>;
 
 export interface MockLoggerInstance {
-  /** The logger itself — pass this where an IBaseLogger is expected. */
-  readonly logger: IBaseLogger;
+  /** The logger itself — pass this where an IBaseLogger or ILogger is expected. */
+  readonly logger: LogixiaLoggerInstance;
   /** Every call recorded across all levels, in insertion order. */
   readonly calls: MockLogCall[];
   /**
@@ -63,6 +63,11 @@ export interface MockLoggerInstance {
   expectNoLog(level: string, matcher?: LogMatcher): void;
   /** Clear all recorded calls. Call between tests. */
   reset(): void;
+  /**
+   * Make `logger.healthCheck()` report healthy or unhealthy, to exercise code that
+   * reacts to a failing logger. Shared with child loggers.
+   */
+  setHealth(healthy: boolean, details?: Record<string, unknown>): void;
   /**
    * Silence — when true, the mock suppresses all console output from the
    * logger. Default: true.
@@ -113,14 +118,31 @@ function formatCalls(calls: MockLogCall[]): string {
 /**
  * Create a mock logger for use in tests.
  *
- * The returned object implements `IBaseLogger` and additionally exposes `.calls`,
+ * The returned object implements `ILogger` and additionally exposes `.calls`,
  * `.getCalls()`, `.getLastCall()`, `.expectLog()`, `.expectNoLog()`, and `.reset()`.
  *
  * @param options.silent  Suppress console output (default: true)
  * @param options.context Optional context label written into every `entry.context`
+ * @param options.healthy Initial `healthCheck()` result (default: true); change later with `setHealth()`
  */
 export function createMockLogger(
-  options: { silent?: boolean; context?: string } = {}
+  options: { silent?: boolean; context?: string; healthy?: boolean } = {}
+): MockLoggerInstance {
+  return buildMockLogger(options, {
+    namespaceLevels: {},
+    health: { healthy: options.healthy ?? true, details: {} },
+  });
+}
+
+/** State a mock logger shares with its children, like the real logger. */
+interface SharedMockState {
+  namespaceLevels: NamespaceLevels;
+  health: { healthy: boolean; details: Record<string, unknown> };
+}
+
+function buildMockLogger(
+  options: { silent?: boolean; context?: string },
+  shared: SharedMockState
 ): MockLoggerInstance {
   const { silent = true, context } = options;
   const _calls: MockLogCall[] = [];
@@ -149,7 +171,7 @@ export function createMockLogger(
     });
   }
 
-  const logger: IBaseLogger = {
+  const logger: LogixiaLoggerInstance = {
     async error(messageOrError, data) {
       record('error', messageOrError as string | Error, data);
     },
@@ -187,6 +209,15 @@ export function createMockLogger(
     },
     getLevel() {
       return 'info';
+    },
+    setNamespaceLevels(levels) {
+      shared.namespaceLevels = { ...levels };
+    },
+    patchNamespaceLevels(levels) {
+      shared.namespaceLevels = { ...shared.namespaceLevels, ...levels };
+    },
+    getNamespaceLevels() {
+      return { ...shared.namespaceLevels };
     },
     setContext(_ctx) {
       /* no-op */
@@ -231,7 +262,13 @@ export function createMockLogger(
     },
 
     child(ctx, _data) {
-      return createMockLogger({ silent, context: ctx }).logger;
+      return buildMockLogger({ silent, context: ctx }, shared).logger;
+    },
+    async flush() {
+      /* no-op */
+    },
+    async healthCheck() {
+      return { healthy: shared.health.healthy, details: { ...shared.health.details } };
     },
     async close() {
       /* no-op */
@@ -293,6 +330,10 @@ export function createMockLogger(
 
     reset(): void {
       _calls.length = 0;
+    },
+
+    setHealth(healthy: boolean, details: Record<string, unknown> = {}): void {
+      shared.health = { healthy, details };
     },
 
     silent,

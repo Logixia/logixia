@@ -1,0 +1,18 @@
+# Logixia
+
+> Logixia is a TypeScript-first logging library for Node.js, NestJS and edge runtimes. It combines structured logging, async-context request trace IDs, built-in redaction, OpenTelemetry correlation and multi-destination export (console, rotating files, databases, cloud log services, OTLP, webhooks) in one package with three runtime dependencies. MIT licensed.
+
+Install: `npm install logixia`
+
+## Documentation
+
+- [Home](https://logixia.github.io/logixia/): overview and quick start
+- [Getting started](https://logixia.github.io/logixia/guide/getting-started): install and first logger
+- [Guide](https://logixia.github.io/logixia/guide/): full documentation
+- [Articles](https://logixia.github.io/logixia/articles/): practical guides and recipes
+
+## Source
+
+- [GitHub repository](https://github.com/Logixia/logixia)
+- [npm package](https://www.npmjs.com/package/logixia)
+- [Changelog](https://github.com/Logixia/logixia/blob/main/CHANGELOG.md)

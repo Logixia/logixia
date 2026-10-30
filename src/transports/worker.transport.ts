@@ -20,12 +20,14 @@
  * const logger = createLogger({
  *   transports: {
  *     // Run file transport inside a worker thread — zero event-loop impact
- *     worker: new WorkerTransport({
- *       transportType: 'file',
- *       transportConfig: { filename: 'app.log', dirname: './logs' },
- *       bufferSize: 500,
- *       maxRestarts: 3,
- *     }),
+ *     custom: [
+ *       new WorkerTransport({
+ *         transportType: 'file',
+ *         transportConfig: { filename: 'app.log', dirname: './logs' },
+ *         bufferSize: 500,
+ *         maxRestarts: 3,
+ *       }),
+ *     ],
  *   },
  * });
  * ```

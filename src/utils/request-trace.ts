@@ -3,6 +3,7 @@
  * context helpers. Internal: not re-exported from the package entry points.
  */
 
+import type { HttpRequestShape } from '../types/http-shapes';
 import {
   DEFAULT_TRACE_HEADERS,
   extractTraceId,
@@ -13,10 +14,7 @@ import {
 export type TraceHeaderOption = string | readonly string[];
 
 /** Minimal structural request shape; Express and Fastify requests satisfy it. */
-export interface ContextRequestLike {
-  headers?: Record<string, string | string[] | undefined>;
-  id?: unknown;
-}
+export type ContextRequestLike = HttpRequestShape;
 
 /** Fastify's default `genReqId` output (`req-` + base36 counter), unique only per process. */
 const FASTIFY_COUNTER_ID = /^req-[\da-z]+$/;
