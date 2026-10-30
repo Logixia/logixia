@@ -121,6 +121,20 @@ describe('Log level validation (issue #29)', () => {
     expect(output()).toContain('warn-visible');
   });
 
+  it('a runtime setLevel() survives cache rebuilds and outranks ENV and namespace levels', async () => {
+    process.env['LOGIXIA_LEVEL'] = 'error';
+    const logger = new LogixiaLogger({ ...BASE_CONFIG, levelOptions: { level: 'info' } });
+
+    logger.setLevel('debug');
+    logger.enableField('level');
+    logger.setNamespaceLevels({ '*': 'error' });
+    logger.patchNamespaceLevels({ db: 'error' });
+    await logger.debug('debug-visible');
+
+    expect(logger.getLevel()).toBe('debug');
+    expect(output()).toContain('debug-visible');
+  });
+
   it("setLevel('WARN') normalizes to warn", async () => {
     const logger = new LogixiaLogger({ ...BASE_CONFIG, levelOptions: { level: 'debug' } });
 

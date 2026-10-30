@@ -202,6 +202,8 @@ export class LogixiaLogger<
   private _levelValues: Map<string, number> = new Map();
   /** Numeric threshold for the currently active log level. */
   private _minLevelValue = 2;
+  /** Level set via setLevel(); outranks every other level source until the process ends. */
+  private _runtimeLevel: string | undefined;
   /** `source=value` pairs already reported as unknown levels — warn once per logger. */
   private readonly _warnedInvalidLevels = new Set<string>();
   /** Pre-built ANSI color codes to avoid recreating the object in colorize(). */
@@ -525,7 +527,8 @@ export class LogixiaLogger<
 
   /**
    * Log at an arbitrary level name, including custom levels. Levels below the
-   * active threshold are dropped.
+   * active threshold are dropped, as are level names that are not registered
+   * in `levelOptions.levels` (and are not built-in).
    */
   async logLevel(level: string, message: string, data?: Record<string, unknown>): Promise<void> {
     await this.log(level, message, data);
@@ -584,8 +587,10 @@ export class LogixiaLogger<
   // ── Level & context management ───────────────────────────────────────────────
 
   /**
-   * Change the minimum log level at runtime. Unknown level names are ignored
-   * with a warning and the current level is kept.
+   * Change the minimum log level at runtime. The override outranks
+   * `LOGIXIA_LEVEL`, `LOGIXIA_LEVEL_<NS>` and `namespaceLevels`, and survives
+   * later changes to fields or namespace levels. Unknown level names are
+   * ignored with a warning and the current level is kept.
    *
    * @example
    * ```ts
@@ -604,13 +609,17 @@ export class LogixiaLogger<
     }
     this.config.levelOptions = this.config.levelOptions ?? {};
     this.config.levelOptions.level = canonical;
-    // Refresh the cached numeric threshold so shouldLog() stays accurate
-    this._minLevelValue = this._levelValues.get(canonical) ?? this._minLevelValue;
-    // Rebuild level string cache in case colours are keyed per-level
+    // Remember the override so later cache rebuilds (enableField, setNamespaceLevels, ...) keep it
+    this._runtimeLevel = canonical;
+    // Rebuild the threshold and the level string cache
     this._buildPerfCaches();
   }
 
-  /** Return the currently configured minimum log level (`info` if none was set). */
+  /**
+   * Return the configured minimum log level, not the per-namespace effective
+   * one. Without `setLevel()` it is `LOGIXIA_LEVEL`, else `levelOptions.level`,
+   * else a `NODE_ENV` default (`debug` in development, `warn` in test), else `info`.
+   */
   getLevel(): LogLevelString {
     return (this.config.levelOptions?.level as LogLevelString) ?? LogLevel.INFO;
   }
@@ -844,11 +853,15 @@ export class LogixiaLogger<
   /**
    * Warn about timers that were never ended, then flush and close all transports,
    * stop the sampler and run plugin shutdown hooks. On a child logger only the
-   * timer warnings run; the shared transports stay open. Call once on shutdown.
+   * timer warnings run; the shared transports stay open.
+   *
+   * To flush on SIGTERM/SIGINT, set the `gracefulShutdown` config option rather
+   * than writing your own signal handler; do not combine it with a manual
+   * handler that calls `process.exit`, which can cut the flush short.
    *
    * @example
    * ```ts
-   * process.on('SIGTERM', async () => { await logger.close(); process.exit(0); });
+   * await logger.close(); // e.g. at the end of a script or a test
    * ```
    */
   async close(): Promise<void> {
@@ -983,12 +996,15 @@ export class LogixiaLogger<
    * Feature 3: Resolve the effective log level for this logger instance.
    *
    * Priority:
+   *  0. A level set at runtime with `setLevel()` (explicit programmatic call, wins over all below)
    *  1. ENV `LOGIXIA_LEVEL_<NS_UPPER>` (e.g. LOGIXIA_LEVEL_DB for ns "db" or "db.queries")
    *  2. Matching `namespaceLevels` config entry (longer pattern = more specific, wins)
    *  3. Global `LOGIXIA_LEVEL` ENV override
    *  4. `levelOptions.level` (resolved via Feature 5 in constructor)
    */
   private resolveEffectiveLevel(): LogLevelString {
+    if (this._runtimeLevel) return this._runtimeLevel as LogLevelString;
+
     const ns = this.context;
 
     if (ns) {
@@ -1137,7 +1153,7 @@ export class LogixiaLogger<
  * ```ts
  * const logger = createLogger({
  *   appName: 'api',
- *   levelOptions: { level: 'info', levels: { audit: 35 } },
+ *   levelOptions: { level: 'info', levels: { error: 0, warn: 1, info: 2, audit: 2 } },
  * });
  * await logger.audit('user exported data', { userId: 'u1' });
  * ```
