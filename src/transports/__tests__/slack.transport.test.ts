@@ -1,6 +1,7 @@
 /* eslint-disable sonarjs/no-clear-text-protocols -- negative tests for http URLs */
 import type { TransportLogEntry } from '../../types/transport.types';
 import { escapeSlack, SlackTransport } from '../slack.transport';
+import { TransportManager } from '../transport.manager';
 
 const URL_OK = 'https://hooks.slack.com/services/T000/B000/SECRETTOKEN123';
 
@@ -102,10 +103,9 @@ describe('SlackTransport', () => {
   });
 
   it('filters by level (default error) and by custom filter', async () => {
-    const t = new SlackTransport({ webhookUrl: URL_OK, filter: (e) => e.message !== 'skip' });
+    const t = new SlackTransport({ webhookUrl: URL_OK });
     t.write(entry({ level: 'info' }));
     t.write(entry({ level: 'warn' }));
-    t.write(entry({ message: 'skip' }));
     t.write(entry({ level: 'fatal', message: 'dead' }));
     await t.flush();
     expect(body().text).toContain('dead');
@@ -281,5 +281,124 @@ describe('SlackTransport', () => {
     t.write(entry({ message: 'late' }));
     await jest.advanceTimersByTimeAsync(120_000);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  describe('review hardening', () => {
+    it('delivers good entries when one entry cannot be rendered', async () => {
+      const t = new SlackTransport({
+        webhookUrl: URL_OK,
+        formatter: (e) => {
+          if (e.message === 'poison') return { text: 'poison', blocks: [{ n: BigInt(1) }] };
+          return { text: e.message };
+        },
+      });
+      t.write(entry({ message: 'good1' }));
+      t.write(entry({ message: 'poison' }));
+      t.write(entry({ message: 'good2' }));
+      await expect(t.flush()).resolves.toBeUndefined();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const raw = JSON.stringify(body());
+      expect(raw).toContain('good1');
+      expect(raw).toContain('good2');
+      expect(logged()).toContain('cannot be rendered');
+      fetchMock.mockClear();
+      t.write(entry({ message: 'good3' }));
+      await t.flush();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('survives an invalid timestamp', async () => {
+      const t = new SlackTransport({ webhookUrl: URL_OK });
+      t.write(entry({ timestamp: new Date('nope'), message: 'late' }));
+      await t.flush();
+      expect(JSON.stringify(body())).toContain('late');
+      expect(JSON.stringify(body())).not.toContain('Invalid');
+    });
+
+    it('drops entries once, without retrying, when global fetch is missing', async () => {
+      (globalThis as { fetch: unknown }).fetch = undefined;
+      const t = new SlackTransport({ webhookUrl: URL_OK });
+      t.write(entry());
+      await expect(t.flush()).resolves.toBeUndefined();
+      t.write(entry());
+      await expect(t.flush()).resolves.toBeUndefined();
+      await jest.advanceTimersByTimeAsync(60_000);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(logged().match(/global fetch is unavailable/g)).toHaveLength(1);
+    });
+
+    it('level fatal sends fatal only', async () => {
+      const t = new SlackTransport({ webhookUrl: URL_OK, level: 'fatal' });
+      t.write(entry({ level: 'error', message: 'plain-error' }));
+      t.write(entry({ level: 'fatal', message: 'dead' }));
+      await t.flush();
+      const raw = JSON.stringify(body());
+      expect(raw).toContain('dead');
+      expect(raw).not.toContain('plain-error');
+    });
+
+    it('does not run the user filter itself (the TransportManager runs it once)', async () => {
+      const filter = jest.fn(() => true);
+      const t = new SlackTransport({ webhookUrl: URL_OK, filter });
+      const manager = new TransportManager({ custom: [t] });
+      await manager.write({
+        timestamp: new Date(),
+        level: 'error',
+        message: 'x',
+        appName: 'a',
+      } as never);
+      expect(filter).toHaveBeenCalledTimes(1);
+      await t.flush();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports overflow as over the per-message limit, not as a full buffer', async () => {
+      const t = new SlackTransport({ webhookUrl: URL_OK });
+      for (let i = 0; i < 25; i += 1) t.write(entry({ message: `m${i}` }));
+      await t.flush();
+      expect(logged()).toContain('15 entries over the per-message limit (10)');
+      expect(logged()).not.toContain('buffer full');
+      expect(JSON.stringify(body())).toContain('15 more entries');
+    });
+
+    it('close() cancels a pending Retry-After wait and still makes a final send', async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: { get: () => '25' },
+        json: async () => ({ retry_after: 25 }),
+      });
+      const t = new SlackTransport({ webhookUrl: URL_OK });
+      t.write(entry());
+      const first = t.flush().catch((e: Error) => e);
+      await jest.advanceTimersByTimeAsync(100);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const closing = t.close();
+      await jest.advanceTimersByTimeAsync(10);
+      await closing;
+      expect(((await first) as Error).message).toContain('cancelled');
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('cancels response bodies for success, errors and 429', async () => {
+      const cancel = jest.fn(async () => {});
+      fetchMock
+        .mockResolvedValueOnce({ ok: true, status: 200, body: { cancel } })
+        .mockResolvedValueOnce({ ok: false, status: 500, body: { cancel } })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          headers: { get: () => '0' },
+          body: { cancel },
+        });
+      const t = new SlackTransport({ webhookUrl: URL_OK, maxRetries: 0 });
+      t.write(entry());
+      await t.flush();
+      t.write(entry());
+      await t.flush().catch(() => {});
+      await jest.advanceTimersByTimeAsync(5000);
+      expect(cancel.mock.calls.length).toBeGreaterThanOrEqual(3);
+      await t.close();
+    });
   });
 });

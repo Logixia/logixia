@@ -25,6 +25,7 @@ import {
   parseWebhookUrl,
   resolveMinLevel,
   retryAfterHeaderMs,
+  safeIso,
   singleLine,
   truncateText,
   WebhookQueue,
@@ -39,6 +40,7 @@ export const DISCORD_FIELDS_MAX = 25;
 export const DISCORD_EMBED_TOTAL_MAX = 6000;
 export const DISCORD_CONTENT_MAX = 2000;
 const FIELD_VALUE_CAP = 64;
+const DISCORD_FOOTER_MAX = 2048;
 const FENCE_OVERHEAD = '```json\n\n```'.length;
 const MIN_USEFUL_BODY = 20;
 
@@ -99,12 +101,38 @@ export function escapeDiscord(text: string): string {
   return defuseText(text.replace(/[\\*_~`|>#[\]()]/g, '\\$&'));
 }
 
+function textLength(value: unknown, key: string): number {
+  const text = (value as Record<string, unknown> | undefined)?.[key];
+  return typeof text === 'string' ? text.length : 0;
+}
+
+/** Counts every text field Discord counts toward the 6000-character limit. */
 function embedChars(embed: DiscordEmbed): number {
   return (
     (embed.title?.length ?? 0) +
     (embed.description?.length ?? 0) +
-    (embed.fields ?? []).reduce((n, f) => n + f.name.length + f.value.length, 0)
+    (embed.fields ?? []).reduce((n, f) => n + f.name.length + f.value.length, 0) +
+    textLength(embed['footer'], 'text') +
+    textLength(embed['author'], 'name')
   );
+}
+
+/** Shrinks one embed to `limit` chars: description first, then fields, footer/author, title. */
+function shrinkToFit(embed: DiscordEmbed, limit: number): void {
+  const excess = () => embedChars(embed) - limit;
+  if (excess() > 0 && embed.description) {
+    const keep = embed.description.length - excess();
+    if (keep > 0) embed.description = truncateText(embed.description, keep);
+    else delete embed.description;
+  }
+  while (excess() > 0 && embed.fields?.length) embed.fields.pop();
+  if (excess() > 0) {
+    delete embed['footer'];
+    delete embed['author'];
+  }
+  if (excess() > 0 && embed.title) {
+    embed.title = truncateText(embed.title, Math.max(1, embed.title.length - excess()));
+  }
 }
 
 function codeBlock(json: string, max: number): string {
@@ -127,6 +155,14 @@ function clampCustomEmbed(embed: DiscordEmbed): DiscordEmbed {
       value: truncateText(String(f.value), DISCORD_FIELD_VALUE_MAX),
     }));
   }
+  const footer = out['footer'] as { text?: unknown } | undefined;
+  if (footer && typeof footer.text === 'string') {
+    out['footer'] = { ...footer, text: truncateText(footer.text, DISCORD_FOOTER_MAX) };
+  }
+  const author = out['author'] as { name?: unknown } | undefined;
+  if (author && typeof author.name === 'string') {
+    out['author'] = { ...author, name: truncateText(author.name, DISCORD_TITLE_MAX) };
+  }
   return out;
 }
 
@@ -140,7 +176,7 @@ export class DiscordTransport implements IAsyncTransport {
   public readonly level: string;
   public filter?: (entry: TransportLogEntry) => boolean;
 
-  private readonly queue!: WebhookQueue;
+  private readonly queue!: WebhookQueue<EmbedDraft>;
   private readonly username: string | undefined;
   private readonly avatarUrl: string | undefined;
   private readonly formatter: ((entry: TransportLogEntry) => DiscordEmbed) | undefined;
@@ -162,7 +198,7 @@ export class DiscordTransport implements IAsyncTransport {
     this.username = config.username;
     this.avatarUrl = config.avatarUrl;
     this.formatter = config.formatter;
-    const queue = new WebhookQueue({
+    const queue = new WebhookQueue<EmbedDraft>({
       label: 'DiscordTransport',
       url,
       minIntervalMs: config.minIntervalMs,
@@ -170,7 +206,8 @@ export class DiscordTransport implements IAsyncTransport {
       maxQueueSize: config.maxBufferSize,
       maxRetries: config.maxRetries,
       requestTimeoutMs: config.requestTimeoutMs ?? DEFAULT_WEBHOOK_TIMEOUT_MS,
-      build: (entries, overflow) => this.buildPayload(entries, overflow),
+      render: (entry) => this.draftFor(entry),
+      assemble: (drafts, overflow) => this.buildPayload(drafts, overflow),
       retryAfterMs: readRetryAfter,
     });
     // non-enumerable so util.inspect / spreads of the transport never reach the secret URL
@@ -179,7 +216,7 @@ export class DiscordTransport implements IAsyncTransport {
 
   write(entry: TransportLogEntry): void {
     if (!meetsLevel(entry.level, this.level)) return;
-    if (this.filter && !this.filter(entry)) return;
+    // `filter` is applied by the TransportManager; it is not run again here
     this.queue.push(entry);
   }
 
@@ -196,8 +233,7 @@ export class DiscordTransport implements IAsyncTransport {
     return { name: this.name, level: this.level };
   }
 
-  private buildPayload(entries: TransportLogEntry[], overflow: number): Record<string, unknown> {
-    const drafts = entries.map((e) => this.draftFor(e));
+  private buildPayload(drafts: EmbedDraft[], overflow: number): Record<string, unknown> {
     const kept = this.fitToBudget(drafts);
     const dropped = overflow + (drafts.length - kept.length);
 
@@ -221,6 +257,8 @@ export class DiscordTransport implements IAsyncTransport {
     const kept = [...drafts];
     const base = () => kept.reduce((n, d) => n + embedChars(d.embed), 0);
     while (kept.length > 1 && base() > DISCORD_EMBED_TOTAL_MAX) kept.pop();
+    const only = kept[0];
+    if (only && base() > DISCORD_EMBED_TOTAL_MAX) shrinkToFit(only.embed, DISCORD_EMBED_TOTAL_MAX);
     const withData = kept.filter((d) => d.json !== undefined);
     if (withData.length === 0) return kept;
     const share = Math.floor((DISCORD_EMBED_TOTAL_MAX - base()) / withData.length);
@@ -245,24 +283,27 @@ export class DiscordTransport implements IAsyncTransport {
 
 function defaultDraft(entry: TransportLogEntry): EmbedDraft {
   const title = `[${singleLine(entry.level).toUpperCase()}] ${escapeDiscord(singleLine(entry.message))}`;
-  const fields: DiscordEmbedField[] = [
+  const candidates: Array<[string, string | undefined]> = [
     ['appName', entry.appName],
     ['environment', entry.environment],
     ['context', entry.context],
     ['traceId', entry.traceId],
-  ]
-    .filter((pair): pair is [string, string] => typeof pair[1] === 'string' && pair[1] !== '')
+  ];
+  const fields: DiscordEmbedField[] = candidates
+    .map(([name, value]) => [name, typeof value === 'string' ? singleLine(value) : ''] as const)
+    .filter(([, value]) => value !== '')
     .map(([name, value]) => ({
       name,
-      value: truncateText(escapeDiscord(singleLine(value)), FIELD_VALUE_CAP),
+      value: truncateText(escapeDiscord(value), FIELD_VALUE_CAP),
       inline: true,
     }));
   const embed: DiscordEmbed = {
     title: truncateText(title, DISCORD_TITLE_MAX),
     color: DISCORD_LEVEL_COLORS[entry.level.toLowerCase()] ?? DEFAULT_COLOR,
-    timestamp: entry.timestamp.toISOString(),
     fields,
   };
+  const timestamp = safeIso(entry.timestamp);
+  if (timestamp) embed.timestamp = timestamp;
   const json =
     entry.data && Object.keys(entry.data).length > 0 ? stringifyForLog(entry.data) : undefined;
   return { embed, json };

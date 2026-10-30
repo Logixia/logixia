@@ -22,6 +22,7 @@ import {
   meetsLevel,
   parseWebhookUrl,
   resolveMinLevel,
+  safeIso,
   singleLine,
   truncateText,
   WebhookQueue,
@@ -84,7 +85,7 @@ export class SlackTransport implements IAsyncTransport {
   public readonly level: string;
   public filter?: (entry: TransportLogEntry) => boolean;
 
-  private readonly queue!: WebhookQueue;
+  private readonly queue!: WebhookQueue<SlackMessage>;
   private readonly username: string | undefined;
   private readonly iconEmoji: string | undefined;
   private readonly formatter: ((entry: TransportLogEntry) => SlackMessage) | undefined;
@@ -102,7 +103,7 @@ export class SlackTransport implements IAsyncTransport {
     this.username = config.username;
     this.iconEmoji = config.iconEmoji;
     this.formatter = config.formatter;
-    const queue = new WebhookQueue({
+    const queue = new WebhookQueue<SlackMessage>({
       label: 'SlackTransport',
       url,
       minIntervalMs: config.minIntervalMs,
@@ -110,7 +111,8 @@ export class SlackTransport implements IAsyncTransport {
       maxQueueSize: config.maxBufferSize,
       maxRetries: config.maxRetries,
       requestTimeoutMs: config.requestTimeoutMs ?? DEFAULT_WEBHOOK_TIMEOUT_MS,
-      build: (entries, overflow) => this.buildPayload(entries, overflow),
+      render: (entry) => this.messageFor(entry),
+      assemble: (messages, overflow) => this.buildPayload(messages, overflow),
     });
     // non-enumerable so util.inspect / spreads of the transport never reach the secret URL
     Object.defineProperty(this, 'queue', { value: queue, enumerable: false });
@@ -118,7 +120,7 @@ export class SlackTransport implements IAsyncTransport {
 
   write(entry: TransportLogEntry): void {
     if (!meetsLevel(entry.level, this.level)) return;
-    if (this.filter && !this.filter(entry)) return;
+    // `filter` is applied by the TransportManager; it is not run again here
     this.queue.push(entry);
   }
 
@@ -135,8 +137,7 @@ export class SlackTransport implements IAsyncTransport {
     return { name: this.name, level: this.level };
   }
 
-  private buildPayload(entries: TransportLogEntry[], overflow: number): Record<string, unknown> {
-    const messages = entries.map((e) => this.messageFor(e));
+  private buildPayload(messages: SlackMessage[], overflow: number): Record<string, unknown> {
     const blocks = messages.flatMap((m) => m.blocks ?? []);
     const plural = overflow === 1 ? 'y' : 'ies';
     const counter = overflow > 0 ? `… and ${overflow} more entr${plural} not shown` : '';
@@ -185,14 +186,15 @@ function defaultMessage(entry: TransportLogEntry): SlackMessage {
     ['env', entry.environment],
     ['context', entry.context],
     ['trace', entry.traceId],
+    ['time', safeIso(entry.timestamp)],
   ]
-    .filter((pair): pair is [string, string] => typeof pair[1] === 'string' && pair[1] !== '')
+    .map(([label, value]) => [label, typeof value === 'string' ? singleLine(value) : ''] as const)
+    .filter(([, value]) => value !== '')
     .map(([label, value]) => ({
       type: 'mrkdwn',
-      text: `*${label}:* ${truncateText(escapeSlack(singleLine(value)), SLACK_FIELD_MAX)}`,
+      text: `*${label}:* ${truncateText(escapeSlack(value), SLACK_FIELD_MAX)}`,
     }));
-  context.push({ type: 'mrkdwn', text: `*time:* ${entry.timestamp.toISOString()}` });
-  blocks.push({ type: 'context', elements: context });
+  if (context.length > 0) blocks.push({ type: 'context', elements: context });
 
   if (entry.data && Object.keys(entry.data).length > 0) {
     const json = truncateText(escapeSlack(stringifyForLog(entry.data)), SLACK_DATA_MAX);
