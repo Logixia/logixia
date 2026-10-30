@@ -157,6 +157,7 @@
     "prepublishOnly": "npm run validate",
     "dev:basic-usage": "ts-node -P tsconfig.examples.json --transpile-only -r ./examples/register.js examples/basic-usage.ts",
     "dev:fastify": "ts-node -P tsconfig.examples.json --transpile-only -r ./examples/register.js examples/fastify-example.ts",
+    "dev:hono": "ts-node -P tsconfig.examples.json --transpile-only -r ./examples/register.js examples/hono-example.ts",
     "dev:express": "ts-node -P tsconfig.examples.json --transpile-only -r ./examples/register.js examples/express-example.ts",
     "dev:nestjs": "ts-node -P tsconfig.examples.json --transpile-only -r ./examples/register.js examples/nestjs-example.ts",
     "dev:nestjs-app": "ts-node --project examples/nestjs-app/tsconfig.json -r ./examples/nestjs-app/register.js examples/nestjs-app/src/main.ts",

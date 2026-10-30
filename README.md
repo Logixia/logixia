@@ -992,6 +992,19 @@ class OrderService {
 
 The default headers checked for an incoming trace ID (in priority order) are: `traceparent`, `x-trace-id`, `x-request-id`, `x-correlation-id`, `trace-id`.
 
+### Hono
+
+On Node, Hono needs nothing beyond `LogixiaContext.run()` — wrap `await next()` and every log line in the request carries the trace ID:
+
+```typescript
+app.use(async (c, next) => {
+  const traceId = c.req.header('x-trace-id') || generateTraceId();
+  await LogixiaContext.run({ traceId, method: c.req.method, path: c.req.path }, next);
+});
+```
+
+See [`examples/hono-example.ts`](./examples/hono-example.ts) (`npm run dev:hono`) for the full version.
+
 ### NestJS trace middleware
 
 The `TraceMiddleware` class integrates directly with NestJS's middleware system. `LogixiaLoggerModule.forRoot()` applies it automatically across all routes — no manual wiring needed:
