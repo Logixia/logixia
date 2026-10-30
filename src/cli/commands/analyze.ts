@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { Command } from 'commander';
 
-import { formatAsTable, safeParseLogs } from '../utils';
+import { formatAsTable, safeParseLogs, sanitizeForTerminal } from '../utils';
 
 function parseDurationToMs(input?: string) {
   if (!input) return;
@@ -82,7 +82,7 @@ export const analyzeCommand = new Command('analyze')
     const result = await analyzeFileContents(raw, opts);
 
     if (opts.format === 'json') {
-      console.log(JSON.stringify(result, null, 2));
+      console.log(sanitizeForTerminal(JSON.stringify(result, null, 2)));
       return;
     }
 

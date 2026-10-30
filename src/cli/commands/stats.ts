@@ -5,7 +5,7 @@ import path from 'node:path';
 import { Command } from 'commander';
 import pc from 'picocolors';
 
-import { safeParseLogs, sanitizeInline } from '../utils';
+import { safeParseLogs, sanitizeForTerminal, sanitizeInline } from '../utils';
 
 export async function generateStats(raw: string, opts: any = {}) {
   const entries = safeParseLogs(raw);
@@ -101,7 +101,7 @@ export const statsCommand = new Command('stats')
     const stats = await generateStats(raw, opts);
 
     if (opts.format === 'json') {
-      console.log(JSON.stringify(stats, null, 2));
+      console.log(sanitizeForTerminal(JSON.stringify(stats, null, 2)));
     } else {
       console.log(formatStatsOutput(stats, file));
     }

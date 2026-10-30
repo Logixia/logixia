@@ -224,8 +224,11 @@ export function createLevelControlHandler(
 
       // Express already-parsed body (req.body) vs raw stream.
       const maybeBody = (req as unknown as { body?: unknown }).body;
-      if (maybeBody !== undefined && typeof req.on !== 'function') {
-        const text = typeof maybeBody === 'string' ? maybeBody : JSON.stringify(maybeBody);
+      if (maybeBody !== undefined) {
+        let text: string;
+        if (typeof maybeBody === 'string') text = maybeBody;
+        else if (Buffer.isBuffer(maybeBody)) text = maybeBody.toString('utf8');
+        else text = JSON.stringify(maybeBody);
         if (Buffer.byteLength(text) > MAX_BODY_BYTES) {
           send(res, 413, { error: 'request body too large' });
           return;

@@ -359,8 +359,9 @@ export interface ChildFromRequestOptions {
   trustProxy?: boolean;
   /**
    * Context name passed as the first argument to `logger.child(context, data)`.
-   * When omitted, `child(fields)` is tried first and `child('request', fields)`
-   * is used for loggers that require a string context (such as `LogixiaLogger`).
+   * When omitted, logixia loggers (detected by their `getContext` /
+   * `getAvailableTransports` methods) get `child('request', fields)` and any other
+   * logger gets `child(fields)`.
    */
   childContext?: string;
 }
@@ -422,13 +423,18 @@ export function childFromRequest<TLogger extends { child(...args: never[]): TLog
   if (options.childContext !== undefined) {
     return child.call(logger, options.childContext, fields);
   }
-  try {
-    return child.call(logger, fields);
-  } catch (error) {
-    // LogixiaLogger.child(context: string, data?) rejects an object as its first argument.
-    if (!(error instanceof TypeError)) throw error;
+  // logixia's ILogger.child(context: string, data?) takes a string namespace;
+  // pino/winston-style loggers take a bindings object.
+  if (usesStringContext(logger)) {
     return child.call(logger, 'request', fields);
   }
+  return child.call(logger, fields);
+}
+
+/** ILogger implementations (LogixiaLogger, LogixiaLoggerService, mock logger) expose these methods. */
+function usesStringContext(logger: object): boolean {
+  const l = logger as Record<string, unknown>;
+  return typeof l['getContext'] === 'function' || typeof l['getAvailableTransports'] === 'function';
 }
 
 function resolveClientIp(

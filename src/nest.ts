@@ -19,5 +19,7 @@ export {
 } from './core/logitron-logger.module';
 export type { LogixiaServiceWith, LogixiaServiceWithLevels } from './core/logitron-nestjs.service';
 export { LogixiaLoggerService } from './core/logitron-nestjs.service';
+export type { LogixiaExceptionFilterOptions } from './core/nestjs-extras';
+export { LOGIXIA_EXCEPTION_FILTER_OPTIONS, LogixiaExceptionFilter } from './core/nestjs-extras';
 export { TraceMiddleware } from './core/trace.middleware';
 export { WebSocketTraceInterceptor } from './core/websocket-trace.interceptor';

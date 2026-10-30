@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- CLI tools process raw JSON log data */
 
+export { csvField } from '../utils/csv.utils';
+
 /**
  * Render a single cell value. Uses a null/undefined check rather than `||` so
  * falsy-but-real values (0, false, '') still render — a `count=0` or
@@ -37,21 +39,6 @@ export function sanitizeInline(text: string): string {
 /** Escape regular-expression metacharacters so `text` matches literally. */
 export function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-const CSV_FORMULA_PREFIX = /^[=+\-@\t\r]/;
-
-/**
- * Render one CSV field. String values that a spreadsheet would treat as a
- * formula (leading `=`, `+`, `-`, `@`, tab or CR) are prefixed with `'`.
- * Fields containing a comma, quote, CR or LF are quoted.
- */
-export function csvField(value: unknown, alwaysQuote = false): string {
-  if (value === undefined || value === null) return alwaysQuote ? '""' : '';
-  let str = typeof value === 'string' ? value : String(value);
-  if (typeof value === 'string' && CSV_FORMULA_PREFIX.test(str)) str = `'${str}`;
-  if (alwaysQuote || /[",\r\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
-  return str;
 }
 
 export function formatAsTable(rows: any[], columns: string[]) {

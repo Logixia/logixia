@@ -186,6 +186,15 @@ function buildLabelKey(config: MetricConfig, entry: LogEntry): string {
   return JSON.stringify(pairs);
 }
 
+/** Label key of the shared overflow series for a metric (all label values `__overflow__`). */
+function buildOverflowKey(config: MetricConfig): string {
+  const names = config.labels ?? [];
+  if (names.length === 0) return '{}';
+  return JSON.stringify(
+    Object.fromEntries(names.map((n) => [sanitizePromName(n), OVERFLOW_LABEL_VALUE]))
+  );
+}
+
 function renderLabels(labelKey: string): string {
   if (labelKey === '{}') return '';
   const obj = JSON.parse(labelKey) as Record<string, string>;
@@ -232,6 +241,7 @@ export class MetricsPlugin implements LogixiaPlugin {
 
   private readonly map: MetricsMap;
   private readonly metricState = new Map<string, MetricState>();
+  private readonly overflowKeys = new Map<string, string>();
 
   private readonly maxLabelSets: number;
 
@@ -259,20 +269,21 @@ export class MetricsPlugin implements LogixiaPlugin {
       if (!state) continue;
 
       const rawLabelKey = buildLabelKey(config, entry);
+      const overflowKey = this.overflowKeys.get(rawName) ?? '{}';
 
       if (config.type === 'counter' && state.type === 'counter') {
         // Level filter
         if (config.levelFilter && entry.level !== config.levelFilter) continue;
         // Field/value filter
         if (config.field !== undefined && payload[config.field] !== config.value) continue;
-        const labelKey = this.capLabelKey(state.values, rawLabelKey);
+        const labelKey = this.capLabelKey(state.values, rawLabelKey, overflowKey);
         state.values.set(labelKey, (state.values.get(labelKey) ?? 0) + 1);
       } else if (config.type === 'histogram' && state.type === 'histogram') {
         const raw = payload[config.field];
         if (raw === undefined || raw === null) continue;
         const val = Number(raw);
         if (Number.isNaN(val)) continue;
-        const labelKey = this.capLabelKey(state.counts, rawLabelKey);
+        const labelKey = this.capLabelKey(state.counts, rawLabelKey, overflowKey);
 
         // Initialise per-label arrays on first observation
         if (!state.counts.has(labelKey)) {
@@ -297,7 +308,7 @@ export class MetricsPlugin implements LogixiaPlugin {
         if (raw === undefined || raw === null) continue;
         const val = Number(raw);
         if (Number.isNaN(val)) continue;
-        state.values.set(this.capLabelKey(state.values, rawLabelKey), val);
+        state.values.set(this.capLabelKey(state.values, rawLabelKey, overflowKey), val);
       }
     }
 
@@ -434,10 +445,9 @@ export class MetricsPlugin implements LogixiaPlugin {
    * Return `labelKey` when it is already tracked or there is room for it;
    * otherwise the shared overflow series key.
    */
-  private capLabelKey(series: Map<string, unknown>, labelKey: string): string {
+  private capLabelKey(series: Map<string, unknown>, labelKey: string, overflowKey: string): string {
     if (series.has(labelKey) || series.size < this.maxLabelSets) return labelKey;
-    const names = Object.keys(JSON.parse(labelKey) as Record<string, string>);
-    return JSON.stringify(Object.fromEntries(names.map((n) => [n, OVERFLOW_LABEL_VALUE])));
+    return overflowKey;
   }
 
   private initAllState(): void {
@@ -447,6 +457,7 @@ export class MetricsPlugin implements LogixiaPlugin {
   }
 
   private initSingleState(rawName: string, config: MetricConfig): void {
+    this.overflowKeys.set(rawName, buildOverflowKey(config));
     if (config.type === 'counter') {
       this.metricState.set(rawName, { type: 'counter', values: new Map() });
     } else if (config.type === 'histogram') {

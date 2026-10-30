@@ -199,19 +199,38 @@ describe('correlation helpers', () => {
       expect(child.child.mock.calls[0]![0].userAgent).toHaveLength(512);
     });
 
-    it('falls back to child(context, data) for loggers that require a string context', () => {
-      const fake = {
-        child: jest.fn((ns: unknown, data?: unknown) => {
-          if (typeof ns !== 'string') throw new TypeError('ns.split is not a function');
-          return { ns, data } as never;
+    it('passes a bindings object to pino-like loggers and does not swallow their errors', () => {
+      const pinoLike = { child: jest.fn((b: unknown) => ({ child: jest.fn(), b }) as never) };
+      childFromRequest({ headers: {}, method: 'GET' }, pinoLike as never);
+      expect(pinoLike.child.mock.calls[0]![0]).toMatchObject({ method: 'GET' });
+
+      const broken = {
+        child: jest.fn(() => {
+          throw new TypeError('pino internal');
         }),
       };
-      const result = childFromRequest({ headers: {}, method: 'GET' }, fake as never) as never as {
-        ns: string;
-        data: Record<string, unknown>;
-      };
-      expect(result.ns).toBe('request');
-      expect(result.data.method).toBe('GET');
+      expect(() => childFromRequest({ headers: {} }, broken as never)).toThrow('pino internal');
+      expect(broken.child).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses child(context, data) for the mock logger', async () => {
+      const { createMockLogger } = await import('../testing/mock-logger');
+      const mock = createMockLogger().logger;
+      const spy = jest.spyOn(mock, 'child');
+      childFromRequest({ headers: {}, method: 'GET' }, mock as never);
+      expect(spy.mock.calls[0]![0]).toBe('request');
+      expect(spy.mock.calls[0]![1]).toMatchObject({ method: 'GET' });
+    });
+
+    it('uses child(context, data) for LogixiaLoggerService', async () => {
+      const { LogixiaLoggerService } = await import('../core/logitron-nestjs.service');
+      const svc = new LogixiaLoggerService({
+        appName: 'a',
+        format: { json: false, colorize: false },
+      } as never);
+      const spy = jest.spyOn(svc, 'child');
+      expect(() => childFromRequest({ headers: {}, method: 'GET' }, svc as never)).not.toThrow();
+      expect(spy.mock.calls[0]![0]).toBe('request');
     });
 
     it('works with a real LogixiaLogger', async () => {

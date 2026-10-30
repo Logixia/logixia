@@ -155,6 +155,7 @@ export function createExpressMiddleware(
     errorLevel = 'error',
     slowRequestThresholdMs = 1000,
   } = options;
+  const traceHeaderName = traceIdHeader.toLowerCase();
 
   return function logixiaHttpMiddleware(
     req: IncomingRequest,
@@ -166,7 +167,7 @@ export function createExpressMiddleware(
       return;
     }
 
-    const traceId = sanitizeIncomingId(req.headers?.[traceIdHeader]) ?? shortId();
+    const traceId = sanitizeIncomingId(req.headers?.[traceHeaderName]) ?? shortId();
     const startMs = Date.now();
     const baseFields = buildBaseFields(req, traceId, options);
 
@@ -242,6 +243,7 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
     errorLevel = 'error',
     slowRequestThresholdMs = 1000,
   } = options;
+  const traceHeaderName = traceIdHeader.toLowerCase();
 
   function logixiaFastifyPlugin(fastify: FastifyInstance, _opts: unknown, done: () => void): void {
     fastify.addHook('onRequest', (request: unknown, _reply: unknown, hookDone: () => void) => {
@@ -251,7 +253,7 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
         return;
       }
 
-      const traceId = sanitizeIncomingId(req.headers?.[traceIdHeader]) ?? shortId();
+      const traceId = sanitizeIncomingId(req.headers?.[traceHeaderName]) ?? shortId();
       req._logixiaStart = Date.now();
       req._logixiaId = traceId;
 

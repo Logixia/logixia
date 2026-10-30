@@ -43,7 +43,7 @@ export async function searchLogs(raw: string, opts: any = {}) {
 
 function formatSearchResults(results: any[], format: string, _context: number): string {
   if (format === 'json') {
-    return JSON.stringify(results, null, 2);
+    return sanitizeForTerminal(JSON.stringify(results, null, 2));
   }
 
   if (format === 'table') {

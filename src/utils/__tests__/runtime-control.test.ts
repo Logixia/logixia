@@ -1,3 +1,5 @@
+import type { AddressInfo } from 'node:net';
+
 /**
  * Tests for dynamic runtime log-level reconfiguration (R3 + R4).
  *
@@ -5,7 +7,6 @@
  * signal cycler, and the HTTP admin handler (GET reads, POST sets, bad input
  * rejected).
  */
-
 import { LogixiaLogger } from '../../core/logitron-logger';
 import type { LogLevelString, NamespaceLevels } from '../../types';
 import {
@@ -264,5 +265,54 @@ describe('createLevelControlHandler', () => {
       res
     );
     expect(res.statusCode).toBe(413);
+  });
+
+  it('uses a pre-parsed req.body even when req.on exists (body-parser consumed the stream)', () => {
+    const logger = makeLogger();
+    const handler = createLevelControlHandler(logger);
+    const res = fakeRes();
+    handler(
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: { level: 'debug' },
+        on: () => {
+          /* stream already consumed: never emits */
+        },
+      },
+      res
+    );
+    expect(res.statusCode).toBe(200);
+    expect(logger.getLevel()).toBe('debug');
+  });
+
+  it('works behind a body-parsing middleware on a real http server', async () => {
+    const http = await import('node:http');
+    const logger = makeLogger();
+    const handler = createLevelControlHandler(logger);
+    const server = http.createServer((req, res) => {
+      let raw = '';
+      req.on('data', (c) => (raw += c));
+      req.on('end', () => {
+        (req as unknown as { body: unknown }).body = JSON.parse(raw);
+        handler(req, res);
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, r));
+    const { port } = server.address() as AddressInfo;
+    const status = await new Promise<number>((resolve, reject) => {
+      const rq = http.request(
+        { port, method: 'POST', headers: { 'content-type': 'application/json' } },
+        (rs) => {
+          rs.resume();
+          resolve(rs.statusCode ?? 0);
+        }
+      );
+      rq.on('error', reject);
+      rq.end('{"level":"warn"}');
+    });
+    server.close();
+    expect(status).toBe(200);
+    expect(logger.getLevel()).toBe('warn');
   });
 });
