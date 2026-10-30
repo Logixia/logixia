@@ -14,17 +14,20 @@
  *
  * @example
  * ```ts
- * import { CloudWatchTransport } from 'logixia';
+ * import { createLogger } from 'logixia';
+ * import { CloudWatchTransport } from 'logixia/cloudwatch';
  *
  * const logger = createLogger({
  *   transports: {
- *     cloudwatch: new CloudWatchTransport({
- *       region: 'us-east-1',
- *       logGroupName: '/myapp/production',
- *       logStreamName: `api-${process.env.HOSTNAME}`,
- *       batchSize: 100,
- *       flushIntervalMs: 5000,
- *     }),
+ *     custom: [
+ *       new CloudWatchTransport({
+ *         region: 'us-east-1',
+ *         logGroupName: '/myapp/production',
+ *         logStreamName: `api-${process.env.HOSTNAME}`,
+ *         batchSize: 100,
+ *         flushIntervalMs: 5000,
+ *       }),
+ *     ],
  *   },
  * });
  * ```

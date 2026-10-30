@@ -140,6 +140,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
   public readonly name = 'database';
   public readonly batchSize: number;
   public readonly flushInterval: number;
+  public readonly level?: string | undefined;
   public readonly filter?: (entry: TransportLogEntry) => boolean;
 
   private batch: TransportLogEntry[] = [];
@@ -163,6 +164,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
     this.batchSize = config.batchSize || 100;
     this.flushInterval = config.flushInterval || 5000; // 5 seconds
     this.cap = new BufferCap('DatabaseTransport', config.maxBufferSize, this.batchSize);
+    this.level = config.level;
     if (config.filter) this.filter = config.filter;
     // Validate table name early so misconfiguration fails at construction, not at first write
     if (config.table) {

@@ -4,6 +4,7 @@ import type { ITransport, TransportLogEntry } from '../types/transport.types';
 import { ConsoleTransport } from './console.transport';
 import { DatabaseTransport } from './database.transport';
 import { FileTransport } from './file.transport';
+import { buildLevelValues, meetsTransportLevel } from './level-filter';
 
 type WorkerMessage =
   { type: 'write'; entry: TransportLogEntry } | { type: 'flush' } | { type: 'shutdown' };
@@ -11,12 +12,14 @@ type WorkerMessage =
 interface WorkerInit {
   transportType: 'file' | 'database' | 'console';
   transportConfig: Record<string, unknown>;
+  levels?: Record<string, number>;
 }
 
 const port = parentPort;
 if (!port) throw new Error('worker-entry must run inside a worker thread');
 
-const { transportType, transportConfig } = workerData as WorkerInit;
+const { transportType, transportConfig, levels } = workerData as WorkerInit;
+const levelValues = buildLevelValues(levels);
 
 type WrappedTransport = ITransport & { flush?(): Promise<void>; close?(): Promise<void> };
 
@@ -48,6 +51,7 @@ const flushTransport = async (): Promise<void> => {
 
 async function handle(msg: WorkerMessage): Promise<void> {
   if (msg.type === 'write') {
+    if (!meetsTransportLevel(transport.level, msg.entry.level, levelValues)) return;
     try {
       await transport.write(msg.entry);
     } catch (err) {

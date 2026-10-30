@@ -4,24 +4,28 @@
  * Maps logixia log entries to the GCP Logging REST API format:
  *   - Maps `level` → `severity` (INFO, WARNING, ERROR, CRITICAL…)
  *   - Injects `logging.googleapis.com/trace` for Cloud Trace correlation
- *   - Injects `logging.googleapis.com/spanId` and `traceSampled`
- *   - Adds `logging.googleapis.com/sourceLocation` when available
+ *   - Sets `traceSampled: true` whenever a trace id is present
+ *     (`logging.googleapis.com/spanId` and `sourceLocation` are not populated)
  *   - Supports structured `jsonPayload` and plain `textPayload`
  *
- * Auth: uses Application Default Credentials (ADC) — the `GOOGLE_APPLICATION_CREDENTIALS`
- * env var pointing to a service-account key file, or the metadata server on GCE/GKE.
+ * Auth: the metadata server on GCE/GKE/Cloud Run, or a service-account key passed
+ * as `credentials`. The `GOOGLE_APPLICATION_CREDENTIALS` key-file variable is not
+ * read; full ADC is not supported.
  *
  * @example
  * ```ts
- * import { GCPTransport } from 'logixia';
+ * import { createLogger } from 'logixia';
+ * import { GCPTransport } from 'logixia/gcp';
  *
  * const logger = createLogger({
  *   transports: {
- *     gcp: new GCPTransport({
- *       projectId: process.env.GOOGLE_CLOUD_PROJECT,
- *       logName: 'projects/my-project/logs/api',
- *       resource: { type: 'gce_instance', labels: { instance_id: '123' } },
- *     }),
+ *     custom: [
+ *       new GCPTransport({
+ *         projectId: process.env.GOOGLE_CLOUD_PROJECT,
+ *         logName: 'projects/my-project/logs/api',
+ *         resource: { type: 'gce_instance', labels: { instance_id: '123' } },
+ *       }),
+ *     ],
  *   },
  * });
  * ```
@@ -57,8 +61,8 @@ export interface GCPTransportConfig {
   /** Monitored resource descriptor. Defaults to `global`. */
   resource?: GCPMonitoredResource;
   /**
-   * Service account key JSON (parsed). If omitted, ADC is used
-   * (GOOGLE_APPLICATION_CREDENTIALS env var or metadata server).
+   * Service account key JSON (parsed). If omitted, only the metadata server
+   * (GCE/GKE/Cloud Run) is tried; the key-file env var is not read.
    */
   credentials?: {
     client_email: string;

@@ -79,9 +79,11 @@ type OtelApi = {
       ctx: unknown
     ): { traceId: string; spanId: string; traceFlags: number } | undefined;
     isSpanContextValid(sc: { traceId: string; spanId: string; traceFlags: number }): boolean;
-    TraceFlags: { SAMPLED: number };
   };
 };
+
+/** W3C trace-flags bit 0: the span is sampled (`TraceFlags.SAMPLED` in the OTel API). */
+const TRACE_FLAG_SAMPLED = 1;
 
 let _otelApi: OtelApi | null | undefined; // undefined = not yet resolved; null = not available
 
@@ -122,8 +124,7 @@ export function getActiveOtelContext(opts: OtelBridgeOptions = {}): OtelSpanCont
     const sc = api.trace.getSpanContext(ctx);
     if (!sc || !api.trace.isSpanContextValid(sc)) return undefined;
 
-    const isSampled =
-      (sc.traceFlags & api.trace.TraceFlags.SAMPLED) === api.trace.TraceFlags.SAMPLED;
+    const isSampled = (sc.traceFlags & TRACE_FLAG_SAMPLED) === TRACE_FLAG_SAMPLED;
 
     if (opts.sampledOnly && !isSampled) return undefined;
 
@@ -204,6 +205,20 @@ export function _isOtelBridgeEnabled(): boolean {
 export function _getOtelPayloadIfEnabled(): Record<string, unknown> {
   if (!_bridgeOptions) return {};
   return getOtelMetaFields(_bridgeOptions);
+}
+
+/**
+ * @internal
+ * Payload field names the active bridge writes the trace and span ids to, or
+ * `undefined` when the bridge is not initialised.
+ */
+export function _getOtelBridgeFieldNames():
+  { traceIdField: string; spanIdField: string } | undefined {
+  if (!_bridgeOptions) return undefined;
+  return {
+    traceIdField: _bridgeOptions.traceIdField ?? 'traceId',
+    spanIdField: _bridgeOptions.spanIdField ?? 'spanId',
+  };
 }
 
 /**

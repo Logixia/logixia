@@ -3,11 +3,18 @@
 // `dist/*.d.ts`, under strict + exactOptionalPropertyTypes with real framework types.
 import express from 'express';
 import Fastify from 'fastify';
-import type { ILoggerDefault } from 'logixia';
+import type {
+  ILoggerDefault,
+  LogixiaPlugin,
+  ITransport as RootTransport,
+  TransportLogEntry as RootEntry,
+} from 'logixia';
 import {
   createExpressContextMiddleware,
   createFastifyContextHook,
   createLogger,
+  createTypedLogger,
+  defineLogSchema,
   wideEventMiddleware,
 } from 'logixia';
 import {
@@ -17,6 +24,16 @@ import {
 } from 'logixia/correlation';
 import { createExpressMiddleware, createFastifyPlugin } from 'logixia/middleware';
 import { createMockLogger } from 'logixia/testing';
+import type {
+  ConsoleTransportConfig,
+  FileTransportConfig,
+  IAsyncTransport,
+  IBatchTransport,
+  ITransport,
+  OtlpLogTransportConfig,
+  TransportConfig,
+  TransportLogEntry,
+} from 'logixia/transports';
 
 const logger = createLogger({ appName: 'consumer', environment: 'development' });
 
@@ -106,4 +123,61 @@ const handWritten: ILoggerDefault = {
 const mock = createMockLogger();
 const asDefault: ILoggerDefault = mock.logger;
 
-export { asDefault, flushed, handWritten, level, namespaces };
+// Plugins: inline literals type-check (no excess-property error) and the callbacks are typed.
+logger.use({ name: 'inline', onLog: (entry) => entry });
+const plugin: LogixiaPlugin = { name: 'p', onShutdown: () => undefined };
+logger.use(plugin);
+
+// TypeScript interfaces (no index signature) work as typed-log field shapes.
+interface OrderFields {
+  orderId: string;
+  amount?: number;
+}
+const orderSchema = defineLogSchema<OrderFields>({
+  orderId: { type: 'string', required: true },
+  amount: { type: 'number' },
+});
+const orderLogger = createTypedLogger<OrderFields>(logger, orderSchema);
+void orderLogger.info('created', { orderId: 'o1' });
+// @ts-expect-error unknown field is rejected
+void orderLogger.info('created', { orderIdd: 'o1' });
+
+// Custom transports are implementable against the public transport types.
+class MemoryTransport implements ITransport, IAsyncTransport, IBatchTransport {
+  readonly name = 'memory';
+  readonly entries: TransportLogEntry[] = [];
+  write(entry: TransportLogEntry): void {
+    this.entries.push(entry);
+  }
+  addToBatch(entry: TransportLogEntry): void {
+    this.entries.push(entry);
+  }
+  async flush(): Promise<void> {}
+}
+const consoleConfig: ConsoleTransportConfig = { level: 'warn', format: 'json' };
+const fileConfig: FileTransportConfig = { filename: 'app.log' };
+const otlpConfig: OtlpLogTransportConfig = { url: 'http://localhost:4318/v1/logs' };
+const transportConfig: TransportConfig = {
+  console: consoleConfig,
+  file: fileConfig,
+  custom: [new MemoryTransport()],
+};
+const withTransports = createLogger({ appName: 'consumer', transports: transportConfig });
+const rootEntry: RootEntry = {
+  timestamp: new Date(),
+  level: 'info',
+  message: 'x',
+};
+const rootTransport: RootTransport = new MemoryTransport();
+
+export {
+  asDefault,
+  flushed,
+  handWritten,
+  level,
+  namespaces,
+  otlpConfig,
+  rootEntry,
+  rootTransport,
+  withTransports,
+};

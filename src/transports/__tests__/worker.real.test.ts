@@ -55,4 +55,21 @@ describeBuilt('WorkerTransport with a real worker', () => {
     for (let i = 0; i < total; i++) expect(written).toContain(`message-${i}`);
     expect(written.indexOf('message-0')).toBeLessThan(written.indexOf('message-49'));
   });
+
+  it('applies the wrapped transport level inside the worker', async () => {
+    const transport = new BuiltWorkerTransport({
+      transportType: 'file',
+      transportConfig: { filename: 'lvl.log', dirname: dir, level: 'error' },
+    });
+    transport.write({ ...entry('keep-me'), level: 'error' });
+    transport.write(entry('drop-me'));
+    await transport.close();
+
+    const written = fs
+      .readdirSync(dir)
+      .map((name) => fs.readFileSync(path.join(dir, name), 'utf8'))
+      .join('');
+    expect(written).toContain('keep-me');
+    expect(written).not.toContain('drop-me');
+  });
 });

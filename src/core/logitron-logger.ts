@@ -302,7 +302,10 @@ export class LogixiaLogger<
           typeof transportsWithColors.console === 'object' ? transportsWithColors.console : {};
         transportsWithColors.console = { ...consoleBase, levelColors: userColors };
       }
-      this.transportManager = new TransportManager(transportsWithColors);
+      this.transportManager = new TransportManager(
+        transportsWithColors,
+        this.config.levelOptions?.levels as Record<string, number> | undefined
+      );
     }
 
     // ── Feature 8: Log sampling ───────────────────────────────────────────────
@@ -936,9 +939,14 @@ export class LogixiaLogger<
     // the `{}` allocation + Object.keys on every log in the common (bridge-off) case.
     const otelFields = _isOtelBridgeEnabled() ? _getOtelPayloadIfEnabled() : undefined;
     const hasOtel = otelFields !== undefined && Object.keys(otelFields).length > 0;
+    // The entry's top-level traceId is authoritative; an ALS traceId equal to it is
+    // dropped from the payload so transports and plugins do not see it twice.
+    const traceId = this.config.traceId ? (activeTraceId ?? this.fallbackTraceId) : undefined;
     let mergedData: typeof data;
     if (hasAls) {
-      mergedData = { ...alsContext, ...(hasOtel ? otelFields : {}), ...data };
+      const als: Record<string, unknown> = { ...alsContext };
+      if (traceId !== undefined && als['traceId'] === traceId) delete als['traceId'];
+      mergedData = { ...als, ...(hasOtel ? otelFields : {}), ...data };
     } else if (hasOtel) {
       mergedData = { ...otelFields, ...data };
     } else {
@@ -967,7 +975,6 @@ export class LogixiaLogger<
 
     // Use a monomorphic LogEntry shape — always the same fields, some may be undefined.
     // Consistent shape lets V8 inline-cache property accesses across calls.
-    const traceId = this.config.traceId ? (activeTraceId ?? this.fallbackTraceId) : undefined;
     // Pattern-based redaction also applies to the message string — a secret
     // interpolated into the message (e.g. `Auth: Bearer ${token}`) would
     // otherwise bypass redaction entirely and leak in plaintext. Path rules

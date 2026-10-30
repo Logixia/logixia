@@ -9,7 +9,7 @@ import { protectSecrets } from './secret-config';
  * Sends log entries as Mixpanel events via the Track and Engage HTTP APIs.
  *
  * @example
- * transports: { mixpanel: { token: process.env.MIXPANEL_TOKEN } }
+ * analytics: { mixpanel: { token: process.env.MIXPANEL_TOKEN } }
  */
 export class MixpanelTransport extends AnalyticsTransport {
   private mixpanelConfig: MixpanelTransportConfig;

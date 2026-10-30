@@ -5,7 +5,7 @@
  * import { LogixiaLoggerModule, LogixiaLoggerService } from 'logixia/nest';
  *
  * @Module({
- *   imports: [LogixiaLoggerModule.forRoot({ level: 'info' })],
+ *   imports: [LogixiaLoggerModule.forRoot({ levelOptions: { level: 'info' } })],
  * })
  * export class AppModule {}
  */

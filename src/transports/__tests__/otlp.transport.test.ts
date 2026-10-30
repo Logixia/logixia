@@ -11,6 +11,7 @@
 // dev/test (e.g. http://localhost:4318/v1/logs); these are test URLs, not prod.
 /* eslint-disable sonarjs/no-clear-text-protocols */
 import type { TransportLogEntry } from '../../types/transport.types';
+import { disableOtelBridge, initOtelBridge } from '../../utils/otel';
 import { OtlpLogTransport, toOtelSeverity } from '../otlp.transport';
 
 function entry(i: number, over: Partial<TransportLogEntry> = {}): TransportLogEntry {
@@ -156,5 +157,129 @@ describe('OtlpLogTransport', () => {
     t.write(entry(1, { data: { nested: { a: 1 }, big: BigInt(9) } }));
     await expect(t.flush()).resolves.toBeUndefined();
     await t.close();
+  });
+
+  describe('trace and span correlation', () => {
+    type Rec = Record<string, unknown> & { attributes: Array<{ key: string; value: unknown }> };
+
+    async function record(over: Partial<TransportLogEntry>): Promise<Rec> {
+      const t = new OtlpLogTransport({
+        url: 'http://c/v1/logs',
+        batchSize: 1000,
+        flushIntervalMs: 999_999,
+      });
+      t.write(entry(1, over));
+      await t.flush();
+      await t.close();
+      const body = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+      return body.resourceLogs[0].scopeLogs[0].logRecords[0] as Rec;
+    }
+    const keys = (r: Rec) => r.attributes.map((a) => a.key);
+
+    it('omits an undefined traceId instead of emitting an empty attribute', async () => {
+      const rec = await record({ data: { traceId: undefined, orderId: 'o1' } });
+      expect(keys(rec)).not.toContain('traceId');
+      expect(keys(rec)).not.toContain('trace_id');
+      expect(rec['traceId']).toBeUndefined();
+      expect(keys(rec)).toContain('orderId');
+    });
+
+    it('puts valid hex span and trace ids into the native record fields', async () => {
+      const rec = await record({
+        data: { traceId: '0af7651916cd43dd8448eb211c80319c', spanId: 'b7ad6b7169203331' },
+      });
+      expect(rec['traceId']).toBe('0af7651916cd43dd8448eb211c80319c');
+      expect(rec['spanId']).toBe('b7ad6b7169203331');
+      expect(keys(rec)).not.toContain('traceId');
+      expect(keys(rec)).not.toContain('spanId');
+    });
+
+    it('does not repeat an entry traceId that the payload also carries', async () => {
+      const id = '0af7651916cd43dd8448eb211c80319c';
+      const rec = await record({ traceId: id, data: { traceId: id } });
+      expect(rec['traceId']).toBe(id);
+      expect(keys(rec)).not.toContain('traceId');
+    });
+
+    it('keeps non-hex span ids as attributes', async () => {
+      const rec = await record({ data: { spanId: 'span-1' } });
+      expect(rec['spanId']).toBeUndefined();
+      expect(keys(rec)).toContain('spanId');
+    });
+
+    it('keeps a non-hex entry traceId as a trace_id attribute', async () => {
+      const rec = await record({ traceId: 'req-1' });
+      expect(rec['traceId']).toBeUndefined();
+      expect(keys(rec)).toContain('trace_id');
+    });
+
+    describe('entry traceId together with a bridge payload', () => {
+      const otelTrace = '0af7651916cd43dd8448eb211c80319c';
+      const otelSpan = 'b7ad6b7169203331';
+
+      afterEach(() => disableOtelBridge());
+
+      it('uses the OTel pair for both native fields and keeps a UUID entry id as an attribute', async () => {
+        const uuid = '123e4567-e89b-12d3-a456-426614174000';
+        const rec = await record({
+          traceId: uuid,
+          data: { traceId: otelTrace, spanId: otelSpan },
+        });
+        expect(rec['traceId']).toBe(otelTrace);
+        expect(rec['spanId']).toBe(otelSpan);
+        const trace = rec.attributes.find((a) => a.key === 'trace_id');
+        expect(trace?.value).toEqual({ stringValue: uuid });
+        expect(keys(rec)).not.toContain('spanId');
+      });
+
+      it('keeps a non-hex entry id as an attribute next to the OTel pair', async () => {
+        const rec = await record({
+          traceId: 'req-1',
+          data: { traceId: otelTrace, spanId: otelSpan },
+        });
+        expect(rec['traceId']).toBe(otelTrace);
+        expect(rec['spanId']).toBe(otelSpan);
+        expect(rec.attributes.find((a) => a.key === 'trace_id')?.value).toEqual({
+          stringValue: 'req-1',
+        });
+      });
+
+      it('uses a UUID entry id alone (no span) when the payload has no valid pair', async () => {
+        const rec = await record({
+          traceId: '123e4567-e89b-12d3-a456-426614174000',
+          data: { spanId: otelSpan },
+        });
+        expect(rec['traceId']).toBe('123e4567e89b12d3a456426614174000');
+        expect(rec['spanId']).toBeUndefined();
+        expect(keys(rec)).toContain('spanId');
+      });
+
+      it('never emits a spanId without a valid traceId', async () => {
+        const rec = await record({ traceId: 'req-1', data: { spanId: otelSpan } });
+        expect(rec['traceId']).toBeUndefined();
+        expect(rec['spanId']).toBeUndefined();
+        expect(keys(rec)).toEqual(expect.arrayContaining(['spanId', 'trace_id']));
+      });
+
+      it('reads the bridge custom field names', async () => {
+        initOtelBridge({ traceIdField: 'otel_trace', spanIdField: 'otel_span' });
+        const rec = await record({
+          traceId: 'req-1',
+          data: { otel_trace: otelTrace, otel_span: otelSpan },
+        });
+        expect(rec['traceId']).toBe(otelTrace);
+        expect(rec['spanId']).toBe(otelSpan);
+        expect(keys(rec)).not.toContain('otel_trace');
+        expect(keys(rec)).not.toContain('otel_span');
+      });
+
+      it('falls back to trace_id/span_id when the bridge is not initialised', async () => {
+        const rec = await record({ data: { trace_id: otelTrace, span_id: otelSpan } });
+        expect(rec['traceId']).toBe(otelTrace);
+        expect(rec['spanId']).toBe(otelSpan);
+        expect(keys(rec)).not.toContain('trace_id');
+        expect(keys(rec)).not.toContain('span_id');
+      });
+    });
   });
 });

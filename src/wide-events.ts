@@ -35,6 +35,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import type { HttpRequestShape, HttpResponseShape } from './types/http-shapes';
+import { buildNameSet, DEFAULT_REDACT_QUERY_PARAMS, redactUrlQuery } from './utils/sensitive-names';
 import { getCurrentTraceId } from './utils/trace.utils';
 
 /** The accumulating event fields for the current scope. */
@@ -162,6 +163,12 @@ type MwRes = HttpResponseShape;
 export interface WideEventMiddlewareOptions extends WideEventOptions {
   /** Derive extra initial fields from the request. */
   enrich?: (req: MwReq) => WideEventFields;
+  /**
+   * Additional query-string parameter names whose values are redacted from the
+   * logged `url`. Merged with the defaults (token, access_token, refresh_token,
+   * code, password, secret, api_key, apikey, key, signature, sig, auth).
+   */
+  redactQueryParams?: string[];
   /** Skip wide-event emission for a request (e.g. health checks). */
   skip?: (req: MwReq) => boolean;
 }
@@ -177,15 +184,17 @@ export function wideEventMiddleware(
   logger: WideEventLogger,
   options: WideEventMiddlewareOptions = {}
 ): (req: MwReq, res: MwRes, next: () => void) => void {
+  const redactParams = buildNameSet(DEFAULT_REDACT_QUERY_PARAMS, options.redactQueryParams);
   return function logixiaWideEventMiddleware(req: MwReq, res: MwRes, next: () => void): void {
     if (options.skip?.(req)) {
       next();
       return;
     }
 
+    const rawUrl = req.originalUrl ?? req.url;
     const base: WideEventFields = {
       method: req.method,
-      url: req.originalUrl ?? req.url,
+      url: rawUrl === undefined ? undefined : redactUrlQuery(rawUrl, redactParams),
       ip: req.ip ?? req.socket?.remoteAddress,
       ...(options.enrich ? options.enrich(req) : {}),
     };

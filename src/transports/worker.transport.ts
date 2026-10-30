@@ -60,6 +60,11 @@ export interface WorkerTransportConfig {
    */
   maxRestarts?: number;
   /**
+   * Custom level severities (`levelOptions.levels`) the wrapped transport's own
+   * `level` is compared against inside the worker. Built-in levels need no entry.
+   */
+  levels?: Record<string, number>;
+  /**
    * Log level filter — only entries at or above this level are forwarded.
    * Useful for routing only errors to an expensive transport in a worker.
    */
@@ -107,6 +112,7 @@ export class WorkerTransport implements ITransport {
         workerData: {
           transportType: this.config.transportType,
           transportConfig: this.config.transportConfig,
+          levels: this.config.levels,
         },
       });
 

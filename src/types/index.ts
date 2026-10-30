@@ -2,6 +2,7 @@
  * Core type definitions for Logixia Logger
  */
 
+import type { LogixiaPlugin } from '../plugin';
 import type { HttpRequest, HttpResponse } from './http.types';
 import type { TransportConfig } from './transport.types';
 
@@ -333,9 +334,8 @@ export interface IBaseLogger {
   close(): Promise<void>;
 
   // Plugin API (Feature 20)
-  // Typed as unknown to avoid a circular import between types/index.ts and plugin.ts.
-  // The concrete LogixiaLogger class constrains this to LogixiaPlugin.
-  use(plugin: { name: string }): this;
+  // Type-only import of LogixiaPlugin: plugin.ts imports types back, but only as types.
+  use(plugin: LogixiaPlugin): this;
   unuse(pluginName: string): this;
 }
 

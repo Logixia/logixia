@@ -18,6 +18,7 @@ import { mergeCoreFields } from './entry-fields';
  */
 export class ConsoleTransport implements ITransport {
   public readonly name = 'console';
+  public readonly level?: string | undefined;
   public readonly filter?: (entry: TransportLogEntry) => boolean;
 
   // Pre-built ANSI color map — avoids object recreation inside formatEntry()
@@ -49,6 +50,7 @@ export class ConsoleTransport implements ITransport {
   }
 
   constructor(private config: ConsoleTransportConfig = {}) {
+    this.level = config.level;
     if (config.filter) this.filter = config.filter;
   }
 
