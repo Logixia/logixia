@@ -56,13 +56,14 @@ export default defineConfig({
   description: SITE_DESCRIPTION,
   base: BASE,
   cleanUrls: true,
+  appearance: 'dark',
   srcExclude: ['README.md'],
   lastUpdated: true,
   sitemap: { hostname: SITE },
 
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: `${BASE}favicon.svg` }],
-    ['meta', { name: 'theme-color', content: '#4f46e5' }],
+    ['meta', { name: 'theme-color', content: '#0b0b0f' }],
     ['meta', { name: 'author', content: 'Logixia contributors' }],
   ],
 

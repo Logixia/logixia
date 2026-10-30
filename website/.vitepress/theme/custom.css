@@ -1,11 +1,54 @@
+/*
+ * logixia brand theme. Tokens come from the logixia brand board:
+ * mark chevron #A855F7, lines #C084FC, ok-line #4ADE80, type Geist 700 (-0.04em),
+ * ground #050505 / #0E0E12, surface #18181B, line #27272A, muted #71717A.
+ */
 :root {
-  /* logixia brand: purple chevron, green accent (see .github/assets/logixia-banner.png) */
+  --lx-violet: #a855f7;
+  --lx-lilac: #c084fc;
+  --lx-green: #4ade80;
+  --lx-deep-violet: #7c3aed;
+
+  --vp-font-family-base:
+    'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --vp-font-family-mono:
+    'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Light mode: darker violet so links and buttons meet WCAG AA on white */
   --vp-c-brand-1: #7e22ce;
   --vp-c-brand-2: #9333ea;
   --vp-c-brand-3: #9333ea;
-  --vp-c-brand-soft: rgba(147, 51, 234, 0.14);
+  --vp-c-brand-soft: rgba(147, 51, 234, 0.12);
+
+  --vp-c-bg: #ffffff;
+  --vp-c-bg-alt: #fafafa;
+  --vp-c-bg-soft: #f4f4f5;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-divider: #e4e4e7;
+  --vp-c-border: #e4e4e7;
+  --vp-c-gutter: #f4f4f5;
+  --vp-c-text-1: #0a0a0a;
+  --vp-c-text-2: #52525b;
+  --vp-c-text-3: #71717a;
+
+  --vp-c-tip-1: #15803d;
+  --vp-c-tip-2: #16a34a;
+  --vp-c-tip-3: #16a34a;
+  --vp-c-tip-soft: rgba(22, 163, 74, 0.1);
+
   --vp-home-hero-name-color: transparent;
-  --vp-home-hero-name-background: linear-gradient(120deg, #9333ea 30%, #16a34a);
+  --vp-home-hero-name-background: linear-gradient(120deg, #9333ea 25%, #16a34a);
+  --vp-home-hero-image-background-image: radial-gradient(
+    closest-side,
+    rgba(168, 85, 247, 0.28),
+    rgba(168, 85, 247, 0)
+  );
+  --vp-home-hero-image-filter: blur(48px);
+
+  --lx-card-bg: #ffffff;
+  --lx-card-border: #e4e4e7;
+  --lx-icon-bg: rgba(168, 85, 247, 0.1);
+  --lx-icon-border: rgba(168, 85, 247, 0.25);
 }
 
 .dark {
@@ -13,11 +56,119 @@
   --vp-c-brand-2: #a855f7;
   --vp-c-brand-3: #9333ea;
   --vp-c-brand-soft: rgba(168, 85, 247, 0.16);
-  --vp-home-hero-name-background: linear-gradient(120deg, #c084fc 30%, #4ade80);
+
+  --vp-c-bg: #0b0b0f;
+  --vp-c-bg-alt: #0e0e12;
+  --vp-c-bg-soft: #18181b;
+  --vp-c-bg-elv: #121216;
+  --vp-c-divider: #27272a;
+  --vp-c-border: #27272a;
+  --vp-c-gutter: #050505;
+  --vp-c-text-1: #fafafa;
+  --vp-c-text-2: #a1a1aa;
+  --vp-c-text-3: #71717a;
+  --vp-c-default-soft: #18181b;
+
+  --vp-c-tip-1: #4ade80;
+  --vp-c-tip-2: #22c55e;
+  --vp-c-tip-3: #16a34a;
+  --vp-c-tip-soft: rgba(74, 222, 128, 0.12);
+
+  --vp-code-block-bg: #0e0e12;
+  --vp-code-copy-code-bg: #18181b;
+  --vp-local-search-bg: #0e0e12;
+
+  --vp-home-hero-name-background: linear-gradient(120deg, #c084fc 25%, #4ade80);
+  --vp-home-hero-image-background-image: radial-gradient(
+    closest-side,
+    rgba(168, 85, 247, 0.4),
+    rgba(168, 85, 247, 0)
+  );
+
+  --lx-card-bg: #0e0e12;
+  --lx-card-border: #27272a;
+  --lx-icon-bg: rgba(168, 85, 247, 0.12);
+  --lx-icon-border: rgba(168, 85, 247, 0.28);
+}
+
+/* ── Typography ─────────────────────────────────────────────────────────── */
+
+.VPHero .name,
+.VPHero .text,
+.vp-doc h1,
+.VPNavBarTitle .title {
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.vp-doc h2,
+.vp-doc h3 {
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.VPNavBarTitle .title {
+  font-size: 18px;
+}
+
+.VPNavBarTitle .logo {
+  height: 22px;
+}
+
+/* Mono labels, like the brand board's eyebrow text */
+.lx-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 6px 14px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 999px;
+  font-family: var(--vp-font-family-mono);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-2);
+  background: var(--vp-c-bg-alt);
+}
+
+.lx-eyebrow::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lx-green);
+  box-shadow: 0 0 10px rgba(74, 222, 128, 0.6);
+}
+
+/* ── Home page ──────────────────────────────────────────────────────────── */
+
+.dark .VPHome {
+  background:
+    radial-gradient(900px 520px at 75% -120px, rgba(168, 85, 247, 0.14), transparent 70%),
+    radial-gradient(700px 420px at 100% 900px, rgba(74, 222, 128, 0.05), transparent 70%);
 }
 
 .VPHero .tagline {
   max-width: 640px;
+}
+
+.VPFeature {
+  background: var(--lx-card-bg) !important;
+  border: 1px solid var(--lx-card-border) !important;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.VPFeature:hover {
+  border-color: var(--lx-violet) !important;
+  transform: translateY(-2px);
+}
+
+.VPFeature .icon {
+  background: var(--lx-icon-bg) !important;
+  border: 1px solid var(--lx-icon-border);
 }
 
 .VPHome .vp-doc {
@@ -33,10 +184,13 @@
 
 .home-cta {
   margin: 56px 0 24px;
-  padding: 32px 24px;
+  padding: 36px 24px;
+  border: 1px solid var(--lx-card-border);
   border-radius: 16px;
   text-align: center;
-  background: var(--vp-c-brand-soft);
+  background:
+    radial-gradient(600px 220px at 50% 0, rgba(168, 85, 247, 0.16), transparent 70%),
+    var(--lx-card-bg);
 }
 
 .home-cta p {
@@ -74,9 +228,32 @@
   background-color: var(--vp-button-alt-hover-bg);
 }
 
+/* ── Docs pages ─────────────────────────────────────────────────────────── */
+
+.vp-doc a {
+  text-underline-offset: 3px;
+}
+
+.vp-doc :not(pre) > code {
+  border: 1px solid var(--vp-c-divider);
+}
+
+.vp-doc div[class*='language-'] {
+  border: 1px solid var(--vp-c-divider);
+}
+
+.dark .VPSidebar,
+.dark .VPNavScreen {
+  background-color: var(--vp-c-bg-alt);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     scroll-behavior: auto !important;
     transition: none !important;
+  }
+
+  .VPFeature:hover {
+    transform: none;
   }
 }

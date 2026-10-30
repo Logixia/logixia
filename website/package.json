@@ -14,5 +14,9 @@
   "devDependencies": {
     "gray-matter": "^4.0.3",
     "vitepress": "^1.6.4"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/geist-mono": "5.3.0"
   }
 }

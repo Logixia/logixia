@@ -20,40 +20,76 @@ hero:
       link: https://github.com/Logixia/logixia
 
 features:
-  - icon: 🧵
+  - icon:
+      src: /icons/waypoints.svg
+      width: 24
+      height: 24
     title: Request trace IDs across async calls
     details: Express, Fastify and NestJS helpers scope a trace ID to each request, read W3C traceparent and x-trace-id, and attach it to every log line without passing it around.
-  - icon: 🛡️
+  - icon:
+      src: /icons/shield-check.svg
+      width: 24
+      height: 24
     title: Redaction built in
     details: Mask fields by path (with * and ** wildcards), by regex pattern, or with autoDetect for common secrets and PII. Error objects and cause chains are walked too.
-  - icon: 📤
+  - icon:
+      src: /icons/send.svg
+      width: 24
+      height: 24
     title: Many destinations, one call
     details: Console, rotating files, Postgres, MySQL, MongoDB, SQLite, CloudWatch, GCP, Azure Monitor, Datadog, OTLP, Mixpanel, Segment, Google Analytics, Slack and Discord webhooks, plus a worker-thread transport.
-  - icon: 🔭
+  - icon:
+      src: /icons/telescope.svg
+      width: 24
+      height: 24
     title: OpenTelemetry correlation
     details: Stamp log entries with the active trace and span, and export logs over OTLP with the OtlpLogTransport. No glue code between your logger and your collector.
-  - icon: 🎚️
+  - icon:
+      src: /icons/sliders-horizontal.svg
+      width: 24
+      height: 24
     title: Sampling and runtime levels
     details: Sample or rate-limit noisy logs, set levels per namespace (LOGIXIA_LEVEL_DB=debug), and change them at runtime through a signal or a tiny HTTP handler.
-  - icon: 📈
+  - icon:
+      src: /icons/chart-line.svg
+      width: 24
+      height: 24
     title: Prometheus metrics
     details: A metrics plugin turns log events into counters and histograms in the Prometheus text exposition format.
-  - icon: 🚦
+  - icon:
+      src: /icons/power.svg
+      width: 24
+      height: 24
     title: Graceful shutdown
     details: flushOnExit drains buffered entries on SIGTERM and SIGINT, and leaves process exit to your own handlers when you have them.
-  - icon: 🌐
+  - icon:
+      src: /icons/globe.svg
+      width: 24
+      height: 24
     title: Browser and edge build
     details: logixia/browser has no Node globals and runs in browsers, Cloudflare Workers and other edge runtimes, with a batching remote transport.
-  - icon: 🔎
+  - icon:
+      src: /icons/terminal.svg
+      width: 24
+      height: 24
     title: CLI and log search
     details: The logixia command can tail, query, analyze and export logs, and the logixia/search API lets you search them from code.
-  - icon: 🧩
+  - icon:
+      src: /icons/braces.svg
+      width: 24
+      height: 24
     title: Typed logger schemas
     details: defineLogSchema and createTypedLogger give you compile-time checked log events and fields.
-  - icon: 🔐
+  - icon:
+      src: /icons/package-check.svg
+      width: 24
+      height: 24
     title: Supply-chain conscious
     details: Published with npm provenance, no install scripts, and three runtime dependencies.
-  - icon: 🏗️
+  - icon:
+      src: /icons/boxes.svg
+      width: 24
+      height: 24
     title: NestJS first-class
     details: LogixiaLoggerModule.forRoot, an injectable service, an exception filter and a @LogMethod decorator, imported from logixia/nest.
 ---
