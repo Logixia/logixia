@@ -207,7 +207,7 @@ await logger.info('Payment processed', { orderId: 'ord_123' });
 // the active span's traceId and spanId are added to the entry
 ```
 
-`initOtelBridge()` uses `@opentelemetry/api` when it is installed and does nothing when it is not. To export logs rather than only correlate them, add `OtlpLogTransport` (see Transports above). Ready-made OTLP configs for Grafana, Axiom, Better Stack and a local Collector are in [docs/otlp-recipes.md](./docs/otlp-recipes.md).
+`initOtelBridge()` uses `@opentelemetry/api` when it is installed and does nothing when it is not. To export logs rather than only correlate them, add `OtlpLogTransport` (see Transports above). Ready-made OTLP configs for Grafana, Axiom, Better Stack and a local Collector are in the [OTLP transport guide](https://logixia.github.io/logixia/guide/transports/otlp).
 
 → [OpenTelemetry](https://logixia.github.io/logixia/guide/opentelemetry) · [OTLP transport](https://logixia.github.io/logixia/guide/transports/otlp)
 
