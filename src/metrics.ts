@@ -153,6 +153,22 @@ const DEFAULT_BUCKETS: readonly number[] = [
   1, 5, 10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000,
 ];
 
+const MAX_LABEL_VALUE_LENGTH = 256;
+const DEFAULT_MAX_LABEL_SETS = 1000;
+/** Label value used for the series that absorbs label sets beyond the cardinality cap. */
+export const OVERFLOW_LABEL_VALUE = '__overflow__';
+
+export interface MetricsPluginOptions {
+  /**
+   * Maximum number of distinct label sets tracked per metric. Once reached, new
+   * label sets are folded into a single series whose label values are all
+   * `__overflow__`, so payload-driven labels cannot grow memory or the scrape
+   * output without bound.
+   * @default 1000
+   */
+  maxLabelSets?: number;
+}
+
 // ── Label helpers ─────────────────────────────────────────────────────────────
 
 function buildLabelKey(config: MetricConfig, entry: LogEntry): string {
@@ -164,7 +180,8 @@ function buildLabelKey(config: MetricConfig, entry: LogEntry): string {
     const raw = name === 'level' ? entry.level : payload[name];
     // Sanitize the label NAME (the value is escaped at render time) so a label
     // like 'status code' can't emit unparseable Prometheus output.
-    pairs[sanitizePromName(name)] = raw !== undefined && raw !== null ? String(raw) : '';
+    pairs[sanitizePromName(name)] =
+      raw !== undefined && raw !== null ? String(raw).slice(0, MAX_LABEL_VALUE_LENGTH) : '';
   }
   return JSON.stringify(pairs);
 }
@@ -216,8 +233,15 @@ export class MetricsPlugin implements LogixiaPlugin {
   private readonly map: MetricsMap;
   private readonly metricState = new Map<string, MetricState>();
 
-  constructor(map: MetricsMap) {
+  private readonly maxLabelSets: number;
+
+  constructor(map: MetricsMap, options: MetricsPluginOptions = {}) {
     this.map = map;
+    const max = options.maxLabelSets;
+    this.maxLabelSets =
+      typeof max === 'number' && Number.isFinite(max) && max >= 1
+        ? Math.floor(max)
+        : DEFAULT_MAX_LABEL_SETS;
     this.initAllState();
   }
 
@@ -234,19 +258,21 @@ export class MetricsPlugin implements LogixiaPlugin {
       const state = this.metricState.get(rawName);
       if (!state) continue;
 
-      const labelKey = buildLabelKey(config, entry);
+      const rawLabelKey = buildLabelKey(config, entry);
 
       if (config.type === 'counter' && state.type === 'counter') {
         // Level filter
         if (config.levelFilter && entry.level !== config.levelFilter) continue;
         // Field/value filter
         if (config.field !== undefined && payload[config.field] !== config.value) continue;
+        const labelKey = this.capLabelKey(state.values, rawLabelKey);
         state.values.set(labelKey, (state.values.get(labelKey) ?? 0) + 1);
       } else if (config.type === 'histogram' && state.type === 'histogram') {
         const raw = payload[config.field];
         if (raw === undefined || raw === null) continue;
         const val = Number(raw);
         if (Number.isNaN(val)) continue;
+        const labelKey = this.capLabelKey(state.counts, rawLabelKey);
 
         // Initialise per-label arrays on first observation
         if (!state.counts.has(labelKey)) {
@@ -271,7 +297,7 @@ export class MetricsPlugin implements LogixiaPlugin {
         if (raw === undefined || raw === null) continue;
         const val = Number(raw);
         if (Number.isNaN(val)) continue;
-        state.values.set(labelKey, val);
+        state.values.set(this.capLabelKey(state.values, rawLabelKey), val);
       }
     }
 
@@ -404,6 +430,16 @@ export class MetricsPlugin implements LogixiaPlugin {
 
   // ── Private helpers ────────────────────────────────────────────────────────
 
+  /**
+   * Return `labelKey` when it is already tracked or there is room for it;
+   * otherwise the shared overflow series key.
+   */
+  private capLabelKey(series: Map<string, unknown>, labelKey: string): string {
+    if (series.has(labelKey) || series.size < this.maxLabelSets) return labelKey;
+    const names = Object.keys(JSON.parse(labelKey) as Record<string, string>);
+    return JSON.stringify(Object.fromEntries(names.map((n) => [n, OVERFLOW_LABEL_VALUE])));
+  }
+
   private initAllState(): void {
     for (const [rawName, config] of Object.entries(this.map)) {
       this.initSingleState(rawName, config);
@@ -456,7 +492,12 @@ export class MetricsPlugin implements LogixiaPlugin {
  * logger.use(metrics);
  * app.get('/metrics', metrics.expressHandler());
  * ```
+ *
+ * Pass `{ maxLabelSets }` to change the per-metric label cardinality cap (default 1000).
  */
-export function createMetricsPlugin(map: MetricsMap): MetricsPlugin {
-  return new MetricsPlugin(map);
+export function createMetricsPlugin(
+  map: MetricsMap,
+  options?: MetricsPluginOptions
+): MetricsPlugin {
+  return new MetricsPlugin(map, options);
 }
