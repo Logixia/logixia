@@ -169,6 +169,7 @@
     "dev:search-readme": "ts-node -P tsconfig.examples.json --transpile-only -r ./examples/register.js examples/search-readme.ts",
     "dev:intelligent-search": "ts-node -P tsconfig.examples.json --transpile-only -r ./examples/register.js examples/intelligent-search.ts",
     "benchmark": "npm run build && node benchmarks/run.mjs",
+    "check:browser": "node --experimental-vm-modules --no-warnings scripts/check-browser-entry.mjs",
     "check:exports": "node scripts/check-exports.mjs",
     "check:optional-peers": "node scripts/check-optional-peers.mjs",
     "size": "size-limit",

@@ -1541,6 +1541,8 @@ const logger = new BrowserLogger({
 });
 ```
 
+Delivery failures (network errors and non-OK HTTP statuses) are counted in `failedFlushes` / `lastError` and passed to the optional `onError` callback. A throttled (at most one per minute) console report containing only the error name, HTTP status and endpoint host is printed everywhere except real browser pages, where it is silent by default; set `silent: true` or `silent: false` to override. Entries written to the transport from inside `onError` or while a report is printed are dropped (counted in `dropped`) to avoid feedback loops.
+
 **Cloudflare Workers** — see [`examples/cloudflare-worker/`](./examples/cloudflare-worker/) for a Worker that logs JSON, tags each request with `child({ requestId })` and flushes a `BrowserRemoteTransport` with `ctx.waitUntil()`. Pass `flushIntervalMs: 0` to the transport: Workers don't allow timers at global scope.
 
 The following utilities from the main package are also re-exported from `logixia/browser` (safe for non-Node runtimes):

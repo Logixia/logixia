@@ -35,6 +35,7 @@
  */
 
 import { protectSecrets } from './transports/secret-config';
+import { internalError, internalLog } from './utils/internal-log';
 import { stringifyForLog } from './utils/safe-stringify';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -229,8 +230,39 @@ function byteLength(s: string): number {
   return new TextEncoder().encode(s).length;
 }
 
+const FAILURE_REPORT_INTERVAL_MS = 60_000;
+
+/**
+ * Error name/code, HTTP status and host only. The error message is never
+ * included: runtimes embed request URLs (absolute or relative) and header
+ * values in it.
+ */
+function describeFailure(error: unknown, url: string): string {
+  let host = 'relative endpoint';
+  try {
+    host = `host ${new URL(url).host}`;
+  } catch {
+    // relative URL
+  }
+  // Duck-typed: errors from another realm (iframe, vm context) fail instanceof.
+  const e = error as { name?: unknown; code?: unknown; status?: unknown } | null;
+  const parts: string[] = [];
+  if (e && typeof e.name === 'string') parts.push(e.name);
+  if (e && typeof e.code === 'string') parts.push(e.code);
+  if (e && typeof e.status === 'number') parts.push(`HTTP ${e.status}`);
+  parts.push(host);
+  return parts.join(' ');
+}
+
+/** True only in a real browser page, where console noise reaches end users. */
+function isBrowserPage(): boolean {
+  const g = globalThis as Record<string, unknown>;
+  return typeof g['window'] !== 'undefined' && typeof g['document'] !== 'undefined';
+}
+
 function isKeepaliveError(error: unknown): boolean {
-  return error instanceof Error && /keepalive/i.test(error.message);
+  const message = (error as { message?: unknown } | null)?.message;
+  return typeof message === 'string' && /keepalive/i.test(message);
 }
 
 /**
@@ -266,6 +298,12 @@ export class BrowserRemoteTransport implements IBrowserTransport {
   private lastFlushError: unknown;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private droppedEntries = 0;
+  private readonly silent: boolean;
+  private readonly onError: ((error: unknown) => void) | undefined;
+  private reporting = false;
+  private failureReported = false;
+  private lastReportAt: number | undefined;
+  private lastRecoveryAt: number | undefined;
 
   constructor(options: {
     /** Endpoint URL to POST batched log entries to. */
@@ -286,7 +324,23 @@ export class BrowserRemoteTransport implements IBrowserTransport {
      */
     maxBufferSize?: number;
     level?: BrowserLogLevel;
+    /**
+     * Suppress the console report of failed flushes (`onError` still fires).
+     * Defaults to `true` in real browser pages (so end users' consoles stay
+     * clean) and `false` elsewhere (edge runtimes, SSR, Node). Reports are
+     * throttled to one per minute and never include the URL or error text.
+     */
+    silent?: boolean;
+    /**
+     * Called on every failed flush (network error or non-OK HTTP status) with the
+     * raw error. Runs inside the transport's re-entrancy guard: entries written
+     * to this transport from inside the callback are dropped (and counted in
+     * `dropped`). Route failures somewhere else.
+     */
+    onError?: (error: unknown) => void;
   }) {
+    this.silent = options.silent ?? isBrowserPage();
+    this.onError = options.onError;
     this.url = validateRemoteUrl(options.url);
     this.headers = options.headers ?? {};
     this.batchSize = options.batchSize ?? 100;
@@ -306,17 +360,27 @@ export class BrowserRemoteTransport implements IBrowserTransport {
     return this.droppedEntries;
   }
 
-  /** Number of flush attempts that failed with a network error and were re-buffered. */
+  /** Number of flush attempts that failed (network error or non-OK HTTP status). */
   get failedFlushes(): number {
     return this.failedFlushCount;
   }
 
-  /** The most recent network error from a failed flush, if any. */
+  /**
+   * The most recent failure from a flush, if any: the raw fetch error (which on
+   * some runtimes embeds the request URL, so do not log it blindly) or an
+   * `Error` carrying only the HTTP status.
+   */
   get lastError(): unknown {
     return this.lastFlushError;
   }
 
   write(entry: BrowserLogEntry): void {
+    // A failure report that an app routes back into the logger must not be
+    // queued here, or a down endpoint would feed itself.
+    if (this.reporting) {
+      this.droppedEntries += 1;
+      return;
+    }
     this.batch.push(entry);
     // Enforce the buffer cap so a down endpoint cannot grow the buffer
     // without bound in the user's tab.
@@ -360,15 +424,18 @@ export class BrowserRemoteTransport implements IBrowserTransport {
         }
       }
       if (!res.ok) {
+        const failure = Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
         if (res.status >= 500 || res.status === 429) {
           // Transient server error / rate limit — retry on a later flush.
-          this.batch.unshift(...entries);
+          this.recordFailure(entries, failure);
         } else {
           // Permanent client error — retrying won't help, drop the batch.
           this.droppedEntries += entries.length;
+          this.recordFailure([], failure);
         }
         return;
       }
+      this.reportRecovery();
     }
   }
 
@@ -385,6 +452,46 @@ export class BrowserRemoteTransport implements IBrowserTransport {
     this.batch.unshift(...entries);
     this.failedFlushCount += 1;
     this.lastFlushError = error;
+    const now = Date.now();
+    const shouldReport =
+      this.lastReportAt === undefined || now - this.lastReportAt >= FAILURE_REPORT_INTERVAL_MS;
+    this.guarded(() => {
+      if (this.onError) {
+        try {
+          this.onError(error);
+        } catch {
+          // a throwing callback must not break flushing
+        }
+      }
+      if (shouldReport && !this.silent) {
+        this.lastReportAt = now;
+        this.failureReported = true;
+        internalError(`BrowserRemoteTransport flush failed (${describeFailure(error, this.url)})`);
+      }
+    });
+  }
+
+  private reportRecovery(): void {
+    if (!this.failureReported) return;
+    this.failureReported = false;
+    const now = Date.now();
+    if (
+      this.lastRecoveryAt !== undefined &&
+      now - this.lastRecoveryAt < FAILURE_REPORT_INTERVAL_MS
+    ) {
+      return;
+    }
+    this.lastRecoveryAt = now;
+    this.guarded(() => internalLog('BrowserRemoteTransport delivery recovered'));
+  }
+
+  private guarded(fn: () => void): void {
+    this.reporting = true;
+    try {
+      fn();
+    } finally {
+      this.reporting = false;
+    }
   }
 
   private scheduleFlush(): void {

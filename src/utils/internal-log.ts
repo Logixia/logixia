@@ -17,7 +17,23 @@
  * behavior was previously unreliable because the value was frozen at load.
  */
 function isSilent(): boolean {
-  return process.env.LOGIXIA_SILENT_INTERNAL === '1';
+  if (typeof process !== 'undefined' && process.env?.LOGIXIA_SILENT_INTERNAL === '1') return true;
+  const flag = (globalThis as Record<string, unknown>)['LOGIXIA_SILENT_INTERNAL'];
+  return flag === '1' || flag === 1 || flag === true;
+}
+
+type ConsoleMethod = 'log' | 'warn' | 'error';
+
+/**
+ * Write a line to stderr, falling back to the matching console method where
+ * `process` is unavailable (browsers, Cloudflare Workers, Deno without Node compat).
+ */
+function writeLine(method: ConsoleMethod, line: string): void {
+  if (typeof process !== 'undefined' && typeof process.stderr?.write === 'function') {
+    process.stderr.write(`${line}\n`);
+  } else if (typeof console !== 'undefined' && typeof console[method] === 'function') {
+    console[method](line);
+  }
 }
 
 /**
@@ -27,7 +43,7 @@ function isSilent(): boolean {
  */
 export function internalLog(message: string): void {
   if (!isSilent()) {
-    process.stderr.write(`[logixia] ${message}\n`);
+    writeLine('log', `[logixia] ${message}`);
   }
 }
 
@@ -37,7 +53,7 @@ export function internalLog(message: string): void {
  */
 export function internalWarn(message: string): void {
   if (!isSilent()) {
-    process.stderr.write(`[logixia:warn] ${message}\n`);
+    writeLine('warn', `[logixia:warn] ${message}`);
   }
 }
 
@@ -53,6 +69,6 @@ export function internalError(message: string, error?: unknown): void {
     } else if (error != null) {
       errStr = ` — ${String(error)}`;
     }
-    process.stderr.write(`[logixia:error] ${message}${errStr}\n`);
+    writeLine('error', `[logixia:error] ${message}${errStr}`);
   }
 }
