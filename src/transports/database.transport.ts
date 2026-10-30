@@ -180,7 +180,16 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
           throw error;
         }
         this.failedFlushes = 0;
-        await this.isolateFailures(entriesToFlush);
+        const { rejected, written } = await this.isolateFailures(entriesToFlush);
+        if (!written) {
+          // Nothing could be written, so the database looks unreachable rather
+          // than the entries being bad: keep them for the next flush.
+          this.batch.unshift(...entriesToFlush);
+          this.enforceBufferCap();
+          this.reportDropped(0);
+          throw error;
+        }
+        this.noteDropped(rejected);
         this.reportDropped(0);
       }
     }
@@ -207,22 +216,28 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
 
   /**
    * Called for a batch that already failed `maxRetries` times. Splits it in half
-   * until the entries the database refuses are alone, writes everything else and
-   * drops the refused ones.
+   * until the entries the database refuses are alone, and writes everything else.
+   * Reports how many entries were refused and whether any write succeeded; the
+   * refused ones are only poison rows if something else got through.
    */
-  private async isolateFailures(entries: TransportLogEntry[]): Promise<void> {
-    if (entries.length === 1) {
-      this.noteDropped(1);
-      return;
-    }
+  private async isolateFailures(
+    entries: TransportLogEntry[]
+  ): Promise<{ rejected: number; written: boolean }> {
+    if (entries.length === 1) return { rejected: 1, written: false };
     const mid = Math.ceil(entries.length / 2);
+    let rejected = 0;
+    let written = false;
     for (const half of [entries.slice(0, mid), entries.slice(mid)]) {
       try {
         await this.writeEntries(half);
+        written = true;
       } catch {
-        await this.isolateFailures(half);
+        const result = await this.isolateFailures(half);
+        rejected += result.rejected;
+        written ||= result.written;
       }
     }
+    return { rejected, written };
   }
 
   async isReady(): Promise<boolean> {

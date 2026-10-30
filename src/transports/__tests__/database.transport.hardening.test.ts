@@ -76,13 +76,34 @@ describe('DatabaseTransport poison batches', () => {
     expect([...written].sort()).toEqual(['db-line-0', 'db-line-1', 'db-line-3', 'db-line-4']);
   });
 
-  it('drops a single rejected entry after maxRetries', async () => {
+  it('keeps a lone failing entry buffered because nothing proves the database is up', async () => {
     const { transport, written } = makeSqlite({ maxRetries: 2 }, () => true);
     transport.addToBatch(makeEntry(0));
     await expect(transport.flush()).rejects.toThrow('poison row');
-    await transport.flush();
-    expect(transport.getBatchInfo().currentBatchLength).toBe(0);
+    await expect(transport.flush()).rejects.toThrow('poison row');
+    expect(transport.getBatchInfo().currentBatchLength).toBe(1);
     expect(written).toEqual([]);
+  });
+
+  it('keeps every entry during an outage, up to maxBufferSize, and recovers', async () => {
+    let down = true;
+    const { transport, written } = makeSqlite({ maxRetries: 2, maxBufferSize: 6 }, () => down);
+    for (let i = 0; i < 9; i += 1) transport.addToBatch(makeEntry(i));
+    for (let round = 0; round < 4; round += 1) {
+      await expect(transport.flush()).rejects.toThrow('poison row');
+    }
+    expect(transport.getBatchInfo().currentBatchLength).toBe(6);
+
+    down = false;
+    await transport.flush();
+    expect(written).toEqual([
+      'db-line-3',
+      'db-line-4',
+      'db-line-5',
+      'db-line-6',
+      'db-line-7',
+      'db-line-8',
+    ]);
   });
 
   it('does not grow the buffer while the database keeps failing', async () => {
