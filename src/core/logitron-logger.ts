@@ -36,11 +36,11 @@ import { TransportManager } from '../transports/transport.manager';
 import type {
   ContextData,
   GracefulShutdownConfig,
-  ILogger,
   ILoggerDefault,
   LogEntry,
   LoggerConfig,
   LoggerWithLevels,
+  LogixiaLoggerInstance,
   LogLevelString,
   NamespaceLevels,
   TimingEntry,
@@ -56,6 +56,7 @@ import { Sampler } from '../utils/sampling.utils';
 import { stripControlChars } from '../utils/sanitize.utils';
 import { deregisterFromShutdown, flushOnExit, registerForShutdown } from '../utils/shutdown.utils';
 import { TraceContext } from '../utils/trace.utils';
+import { assertNoReservedLevelNames } from './reserved-levels';
 
 // ── Hot-path timestamp cache ─────────────────────────────────────────────────
 // `new Date().toISOString()` is one of the most expensive things on the log hot
@@ -228,9 +229,17 @@ export class LogixiaLogger<
   private readonly _pluginRegistry: PluginRegistry;
   /** Set on loggers created by child(); they borrow the root's transports, sampler and plugins. */
   private readonly _parent: LogixiaLogger<TConfig> | undefined;
+  /** Namespace level map shared by a logger and all its children; `version` bumps on every change. */
+  private readonly _nsStore: { levels: NamespaceLevels; version: number };
+  /** Store version this logger's threshold was last computed against. */
+  private _nsSeenVersion = 0;
 
   constructor(config: TConfig, context?: string, parent?: LogixiaLogger<TConfig>) {
     this._parent = parent;
+    this._nsStore = parent
+      ? parent._nsStore
+      : { levels: { ...config.namespaceLevels }, version: 0 };
+    this._nsSeenVersion = this._nsStore.version;
     this._pluginRegistry = parent ? parent._pluginRegistry : new PluginRegistry();
 
     const defaultConfig: LoggerConfig = {
@@ -348,6 +357,7 @@ export class LogixiaLogger<
   }
 
   private createCustomLevelMethods(): void {
+    assertNoReservedLevelNames(this.config.levelOptions?.levels);
     if (this.config.levelOptions?.levels) {
       for (const levelName of Object.keys(this.config.levelOptions.levels)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -658,6 +668,10 @@ export class LogixiaLogger<
    * (flip a module's verbosity live to chase a bug without raising global
    * volume). The new map fully replaces the previous one.
    *
+   * The map is shared by a logger and all its `child()` loggers: calling this on
+   * a child changes the whole family, and existing children pick the change up on
+   * their next log call.
+   *
    * @example
    * ```ts
    * // Turn on debug for the DB layer only, live:
@@ -665,21 +679,28 @@ export class LogixiaLogger<
    * ```
    */
   setNamespaceLevels(levels: NamespaceLevels): void {
-    this.config.namespaceLevels = { ...levels };
-    // Re-resolve the effective level (which consults namespaceLevels) and rebuild
-    // the hot-path caches so the change takes effect on the very next log call.
-    this._buildPerfCaches();
+    this._nsStore.levels = { ...levels };
+    this._nsStore.version++;
+    // Re-resolve this logger's threshold now; children and the root do the same
+    // lazily on their next log call, when they see the bumped store version.
+    this._syncNamespaceLevels();
   }
 
   /** Merge entries into the existing per-namespace level map at runtime. */
   patchNamespaceLevels(levels: NamespaceLevels): void {
-    this.config.namespaceLevels = { ...this.config.namespaceLevels, ...levels };
-    this._buildPerfCaches();
+    this._nsStore.levels = { ...this._nsStore.levels, ...levels };
+    this._nsStore.version++;
+    this._syncNamespaceLevels();
   }
 
   /** Return a copy of the current per-namespace level map. */
   getNamespaceLevels(): NamespaceLevels {
-    return { ...this.config.namespaceLevels };
+    return { ...this._nsStore.levels };
+  }
+
+  private _syncNamespaceLevels(): void {
+    this._nsSeenVersion = this._nsStore.version;
+    this._minLevelValue = this._levelValues.get(this.resolveEffectiveLevel()) ?? 2;
   }
 
   /** Set the context label (e.g. a class or module name) attached to every subsequent entry. */
@@ -797,7 +818,7 @@ export class LogixiaLogger<
    * await req.info('started'); // entry includes requestId
    * ```
    */
-  child(context: string, data?: Record<string, unknown>): ILogger {
+  child(context: string, data?: Record<string, unknown>): LogixiaLoggerInstance {
     const childLogger = new LogixiaLogger(this.config, context, this);
     // Inherit the parent's bound fields plus any child-specific data. The
     // hot-path merge in log() is gated on _hasContextData, so it must be set
@@ -995,6 +1016,7 @@ export class LogixiaLogger<
    * The level map and threshold are pre-built in _buildPerfCaches().
    */
   private shouldLog(level: string): boolean {
+    if (this._nsSeenVersion !== this._nsStore.version) this._syncNamespaceLevels();
     const v = this._levelValues.get(level);
     return v !== undefined && v <= this._minLevelValue;
   }
@@ -1024,8 +1046,8 @@ export class LogixiaLogger<
       if (envNsLevel) return envNsLevel;
 
       // 2. namespaceLevels config
-      const namespaceLevels = this.config.namespaceLevels;
-      if (namespaceLevels) {
+      const namespaceLevels = this._nsStore.levels;
+      if (Object.keys(namespaceLevels).length > 0) {
         const sortedPatterns = Object.keys(namespaceLevels).sort((a, b) => b.length - a.length);
         for (const pattern of sortedPatterns) {
           if (matchesNamespacePattern(ns, pattern)) {
@@ -1169,6 +1191,7 @@ export function createLogger<T extends LoggerConfig<Record<string, number>>>(
   config: T,
   context?: string
 ): LoggerWithLevels<T> {
+  assertNoReservedLevelNames(config.levelOptions?.levels);
   const logger = new LogixiaLogger<T>(config, context);
   const mutableLogger = logger as unknown as Record<string, unknown>;
 

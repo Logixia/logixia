@@ -1,7 +1,7 @@
 // Typechecks the express-facing sources against @types/express@4, because
 // the repo devDependency is v5 while the peer range is ^4 || ^5.
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +11,10 @@ const tmp = mkdtempSync(path.join(tmpdir(), 'logixia-express4-'));
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 try {
+  // The consumer check resolves `logixia` through the exports map, so it needs a build.
+  if (!existsSync(path.join(root, 'dist/index.d.ts'))) {
+    execFileSync(npm, ['run', 'build'], { cwd: root, stdio: 'inherit' });
+  }
   writeFileSync(path.join(tmp, 'package.json'), '{"private":true}');
   execFileSync(
     npm,
@@ -60,7 +64,7 @@ try {
         typeRoots: [path.join(root, 'node_modules/@types')],
         paths: { express: [path.join(tmp, 'node_modules/@types/express')] },
       },
-      include: [path.join(root, 'tests/consumer/*.ts')],
+      include: [path.join(root, 'tests/consumer/*.ts'), path.join(root, 'tests/consumer/*.mts')],
     })
   );
   execFileSync(

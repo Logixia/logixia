@@ -151,7 +151,7 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "typecheck:examples": "tsc -p tsconfig.examples.json && tsc -p examples/cloudflare-worker/tsconfig.json",
-    "typecheck:consumer": "tsc -p tests/consumer/tsconfig.json",
+    "typecheck:consumer": "npm run build && tsc -p tests/consumer/tsconfig.json",
     "typecheck:express4": "node scripts/typecheck-express4.mjs",
     "check": "npm run typecheck && npm run lint:check",
     "ci": "npm run typecheck && npm run lint:check && npm run test:ci",
