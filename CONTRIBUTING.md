@@ -81,7 +81,7 @@ People _love_ thorough bug reports. I'm not even kidding.
 
 ### Prerequisites
 
-- Node.js >= 16.0.0 to use the library; building from source (tsdown, size-limit) requires Node.js >= 22.18
+- Node.js >= 16.0.0 to use the library at runtime. The development toolchain (build, lint, size-limit and the commit hooks) needs Node.js `^22.19.0 || ^24.11.0 || >=26` (see `.nvmrc`); lint and the pre-commit hook fail on older Node
 - npm or pnpm
 
 ### Setup
