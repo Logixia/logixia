@@ -28,6 +28,7 @@ import { internalError } from '../utils/internal-log';
 import { resolveRequestTraceId, resolveTraceHeaders } from '../utils/request-trace';
 import { stringifyForLog } from '../utils/safe-stringify';
 import {
+  buildNameSet,
   DEFAULT_REDACT_HEADERS,
   DEFAULT_REDACT_QUERY_PARAMS,
   redactUrlQuery as sanitizeUrl,
@@ -95,10 +96,6 @@ export type IncomingRequest = HttpRequestShape;
 export type OutgoingResponse = HttpResponseShape;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function buildNameSet(defaults: readonly string[], extra: readonly string[] | undefined) {
-  return new Set([...defaults, ...(extra ?? [])].map((n) => n.toLowerCase()));
-}
 
 function sanitizeHeaders(
   headers: Record<string, string | string[] | undefined> | undefined,

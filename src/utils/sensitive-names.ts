@@ -109,3 +109,11 @@ export function redactUrlQuery(url: string, redactParams: ReadonlySet<string>): 
     .join('&');
   return `${url.slice(0, q)}?${cleaned}${hash}`;
 }
+
+/** Lower-cased lookup set of the default names plus any extras. */
+export function buildNameSet(
+  defaults: readonly string[],
+  extra: readonly string[] | undefined
+): Set<string> {
+  return new Set([...defaults, ...(extra ?? [])].map((n) => n.toLowerCase()));
+}

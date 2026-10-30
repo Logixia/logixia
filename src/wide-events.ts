@@ -35,7 +35,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import type { HttpRequestShape, HttpResponseShape } from './types/http-shapes';
-import { DEFAULT_REDACT_QUERY_PARAMS, redactUrlQuery } from './utils/sensitive-names';
+import { buildNameSet, DEFAULT_REDACT_QUERY_PARAMS, redactUrlQuery } from './utils/sensitive-names';
 import { getCurrentTraceId } from './utils/trace.utils';
 
 /** The accumulating event fields for the current scope. */
@@ -184,11 +184,7 @@ export function wideEventMiddleware(
   logger: WideEventLogger,
   options: WideEventMiddlewareOptions = {}
 ): (req: MwReq, res: MwRes, next: () => void) => void {
-  const redactParams = new Set(
-    [...DEFAULT_REDACT_QUERY_PARAMS, ...(options.redactQueryParams ?? [])].map((n) =>
-      n.toLowerCase()
-    )
-  );
+  const redactParams = buildNameSet(DEFAULT_REDACT_QUERY_PARAMS, options.redactQueryParams);
   return function logixiaWideEventMiddleware(req: MwReq, res: MwRes, next: () => void): void {
     if (options.skip?.(req)) {
       next();
