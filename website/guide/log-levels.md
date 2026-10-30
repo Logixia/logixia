@@ -1,6 +1,6 @@
 ---
 title: Log levels
-description: Built-in and custom log levels in logixia, how the active level is chosen, changing levels at runtime, per-namespace levels and the LOGIXIA_LEVEL environment variable.
+description: Built-in and custom logixia log levels, how the active level is chosen, runtime changes, per-namespace levels and the LOGIXIA_LEVEL environment variable.
 order: 4
 ---
 

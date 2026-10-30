@@ -1,6 +1,6 @@
 ---
 title: Prometheus metrics from logs
-description: Turn structured log fields into Prometheus counters, histograms and gauges with the logixia metrics plugin, including the /metrics endpoint and label cardinality limits.
+description: Turn structured log fields into Prometheus counters, histograms and gauges with the logixia metrics plugin, including /metrics and label cardinality limits.
 order: 11
 ---
 

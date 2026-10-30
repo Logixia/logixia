@@ -1,6 +1,6 @@
 ---
 title: NestJS integration
-description: Use logixia in NestJS with LogixiaLoggerModule, LogixiaLoggerService, request trace IDs, the LogixiaExceptionFilter, the LogMethod decorator and Kafka or WebSocket interceptors.
+description: 'Use logixia in NestJS: LogixiaLoggerModule, LogixiaLoggerService, trace IDs, LogixiaExceptionFilter, LogMethod and Kafka or WebSocket interceptors.'
 order: 8
 ---
 

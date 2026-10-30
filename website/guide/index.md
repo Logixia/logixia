@@ -1,6 +1,6 @@
 ---
 title: Introduction
-description: logixia is an async-first TypeScript logger for Node.js with trace IDs, redaction, sampling, NestJS support and transports for files, databases and cloud services.
+description: logixia is an async-first TypeScript logger for Node.js with trace IDs, redaction, sampling, NestJS support and transports for files, databases and clouds.
 order: 1
 ---
 

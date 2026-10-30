@@ -1,6 +1,6 @@
 ---
 title: Redaction
-description: Keep passwords, tokens and personal data out of logs with logixia redact - dot-path rules, regex patterns, autoDetect presets, exclusions and fail-closed behaviour.
+description: 'Keep passwords, tokens and personal data out of logs with logixia redact: dot-path rules, regex patterns, autoDetect presets and fail-closed behaviour.'
 order: 9
 ---
 

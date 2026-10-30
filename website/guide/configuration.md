@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: Reference for every logixia LoggerConfig option with types and defaults, including levels, fields, redaction, sampling, tracing, graceful shutdown and transports.
+description: 'Reference for every logixia LoggerConfig option with types and defaults: levels, fields, redaction, sampling, tracing, graceful shutdown and transports.'
 order: 3
 ---
 

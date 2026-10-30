@@ -1,6 +1,6 @@
 ---
 title: Child loggers and context
-description: Use logixia child loggers and AsyncLocalStorage-based LogixiaContext to attach request IDs, user IDs and other fields to every log entry without passing them around.
+description: Attach request IDs and user IDs to every log entry with logixia child loggers and AsyncLocalStorage-based LogixiaContext, without passing fields around.
 order: 5
 ---
 

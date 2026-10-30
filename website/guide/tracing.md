@@ -1,6 +1,6 @@
 ---
 title: Tracing and correlation IDs
-description: Propagate trace IDs and correlation IDs through Node.js services with logixia - traceparent parsing, runWithTraceId, LogixiaContext, Express and Fastify helpers, fetch and Kafka.
+description: 'Propagate trace and correlation IDs through Node.js services with logixia: traceparent, runWithTraceId, LogixiaContext, Express, Fastify, fetch and Kafka.'
 order: 6
 ---
 

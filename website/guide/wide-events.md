@@ -1,6 +1,6 @@
 ---
 title: Wide events
-description: Emit one dense canonical log line per request or job with logixia wide events - accumulate fields anywhere in the call tree and log once, even when the handler throws.
+description: 'Emit one dense canonical log line per request or job with logixia wide events: accumulate fields anywhere and log once, even when the handler throws.'
 order: 13
 ---
 

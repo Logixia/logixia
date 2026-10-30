@@ -1,6 +1,6 @@
 ---
 title: HTTP request logging
-description: Log Express and Fastify requests with logixia/middleware - request start and finish entries, slow request warnings, header and query redaction, body capture and trace IDs.
+description: 'Log Express and Fastify requests with logixia/middleware: start and finish entries, slow request warnings, header and query redaction and trace IDs.'
 order: 7
 ---
 

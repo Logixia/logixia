@@ -1825,7 +1825,7 @@ const logger = createLogger({
 // trace↔log correlation. Buffers drain on close() — no loss on shutdown.
 ```
 
-Import it from `logixia` or `logixia/transports`. Ready-made configs (URL and auth headers) for Grafana Loki / Grafana Cloud, Axiom, Better Stack and a local OpenTelemetry Collector are in [docs/otlp-recipes.md](docs/otlp-recipes.md).
+Import it from `logixia` or `logixia/transports`. Ready-made configs (URL and auth headers) for Grafana Loki / Grafana Cloud, Axiom, Better Stack and a local OpenTelemetry Collector are in [OTLP transport guide](https://logixia.github.io/logixia/guide/transports/otlp).
 
 ---
 
