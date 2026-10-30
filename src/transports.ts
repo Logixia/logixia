@@ -11,6 +11,8 @@ export { CloudWatchTransport } from './transports/cloudwatch.transport';
 export { ConsoleTransport } from './transports/console.transport';
 export { DatabaseTransport } from './transports/database.transport';
 export { DataDogTransport } from './transports/datadog.transport';
+export type { DiscordEmbed, DiscordTransportConfig } from './transports/discord.transport';
+export { DiscordTransport } from './transports/discord.transport';
 export { FileTransport } from './transports/file.transport';
 export { GCPTransport } from './transports/gcp.transport';
 export { GoogleAnalyticsTransport } from './transports/google-analytics.transport';
