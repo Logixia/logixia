@@ -8,6 +8,10 @@ const UNSAFE_KEYS = new Set(['__proto__']);
  * prefix is repeated until the name is free of core keys and of every other
  * payload key, so the result does not depend on key order and a payload's own
  * `data_level` stays where it is.
+ *
+ * Exception: a payload `traceId` equal to the core `traceId` is a duplicate (the
+ * context middleware copies the trace id into the payload) and is dropped rather
+ * than emitted again as `data_traceId`. A different value is still kept.
  */
 export function mergeCoreFields(
   core: Record<string, unknown>,
@@ -20,6 +24,8 @@ export function mergeCoreFields(
   const payloadKeys = new Set(Object.keys(data));
   for (const key of payloadKeys) {
     if (UNSAFE_KEYS.has(key)) continue;
+    if (key === 'traceId' && core['traceId'] !== undefined && data[key] === core['traceId'])
+      continue;
     let target = key;
     if (reserved.has(target)) {
       do {
