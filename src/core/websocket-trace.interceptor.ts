@@ -10,8 +10,9 @@ import { extractTraceId, TraceContext } from '../utils/trace.utils';
 @Injectable()
 export class WebSocketTraceInterceptor implements NestInterceptor {
   private readonly ctx = TraceContext.instance;
+  private readonly config: TraceIdConfig;
 
-  constructor(private readonly config?: TraceIdConfig) {
+  constructor(config?: TraceIdConfig) {
     this.config = {
       enabled: true,
       contextKey: 'traceId',
@@ -27,7 +28,7 @@ export class WebSocketTraceInterceptor implements NestInterceptor {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NestJS interceptor interface requires Observable<any>
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     // Check if trace ID is enabled
-    if (!this.config?.enabled) {
+    if (!this.config.enabled) {
       return next.handle();
     }
 
