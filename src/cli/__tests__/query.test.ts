@@ -33,6 +33,15 @@ const entries = [
   { level: 'warn', message: 'last', timestamp: iso(0), duration: 101, service: 'worker' },
 ];
 
+function parseTable(output: string | null): Array<Record<string, string>> {
+  const [header, , ...body] = (output ?? '').split('\n');
+  const cols = header!.split('|').map((c) => c.trim());
+  return body.map((line) => {
+    const cells = line.split('|').map((c) => c.trim());
+    return Object.fromEntries(cols.map((c, i) => [c, cells[i]!]));
+  });
+}
+
 const msgs = (rows: Array<Record<string, unknown>>): unknown[] => rows.map((r) => r['message']);
 
 describe('executeQuery', () => {
@@ -115,39 +124,92 @@ describe('executeQuery', () => {
     expect(results.map((r) => r['duration'])).toEqual([5, 10]);
   });
 
-  it('COUNT BY level puts a table in aggregationOutput and no rows in results', () => {
+  describe('ORDER BY / LIMIT edge cases', () => {
+    const rows = [
+      { id: 'a', score: 2 },
+      { id: 'b', score: null },
+      { id: 'c', score: 3 },
+      { id: 'd' },
+      { id: 'e', score: 1 },
+    ];
+    const ids = (rs: Array<Record<string, unknown>>) => rs.map((r) => r['id']);
+
+    it('sorts null and missing values last under ASC', () => {
+      const { results } = executeQuery(rows, { sql: 'ORDER BY score ASC' });
+      expect(ids(results)).toEqual(['e', 'a', 'c', 'b', 'd']);
+    });
+
+    it('sorts null and missing values last under DESC', () => {
+      const { results } = executeQuery(rows, { sql: 'ORDER BY score DESC' });
+      expect(ids(results)).toEqual(['c', 'a', 'e', 'b', 'd']);
+    });
+
+    it('orders by a field that is not in the SELECT list', () => {
+      const { results } = executeQuery(entries, {
+        sql: 'SELECT message FROM logs ORDER BY duration DESC LIMIT 2',
+      });
+      expect(results).toEqual([{ message: 'timeout' }, { message: 'db down' }]);
+    });
+
+    it('LIMIT 0 returns no rows (SQL and opts)', () => {
+      expect(executeQuery(entries, { sql: 'SELECT * FROM logs LIMIT 0' }).results).toEqual([]);
+      expect(executeQuery(entries, { limit: 0 }).results).toEqual([]);
+    });
+
+    it('does not treat ORDER BY / LIMIT text inside a quoted WHERE literal as clauses', () => {
+      const lit = [
+        { id: 1, message: 'order by duration desc', duration: 1 },
+        { id: 2, message: 'limit 1', duration: 9 },
+        { id: 3, message: 'other', duration: 5 },
+      ];
+      const a = executeQuery(lit, { sql: "WHERE message != 'order by duration desc'" });
+      expect(a.results.map((r) => r['id'])).toEqual([2, 3]);
+      const b = executeQuery(lit, { sql: "WHERE message = 'limit 1'" });
+      expect(b.results.map((r) => r['id'])).toEqual([2]);
+      const c = executeQuery(lit, {
+        sql: "WHERE message != 'x limit 1' ORDER BY duration DESC LIMIT 2",
+      });
+      expect(c.results.map((r) => r['id'])).toEqual([2, 3]);
+    });
+  });
+
+  it('COUNT BY level returns exact counts per group, highest first, and no rows', () => {
     const { results, aggregationOutput } = executeQuery(entries, { sql: 'COUNT BY level' });
     expect(results).toEqual([]);
-    expect(aggregationOutput).toContain('level');
-    expect(aggregationOutput).toContain('count');
-    expect(aggregationOutput).toContain('info');
-    expect(aggregationOutput).toContain('error');
+    expect(parseTable(aggregationOutput)).toEqual([
+      { level: 'info', count: '4' },
+      { level: 'error', count: '3' },
+      { level: 'warn', count: '2' },
+      { level: 'debug', count: '1' },
+    ]);
   });
 
   it('GROUP BY level behaves like a count', () => {
     const { aggregationOutput } = executeQuery(entries, { sql: 'GROUP BY level' });
-    expect(aggregationOutput).toContain('warn');
-    expect(aggregationOutput).toContain('debug');
+    expect(parseTable(aggregationOutput)).toEqual([
+      { level: 'info', count: '4' },
+      { level: 'error', count: '3' },
+      { level: 'warn', count: '2' },
+      { level: 'debug', count: '1' },
+    ]);
   });
 
-  it('AVG(duration) BY service computes the mean per group', () => {
-    const { aggregationOutput } = executeQuery(entries, { sql: 'AVG(duration) BY service' });
-    expect(aggregationOutput).toContain('AVG(duration)');
-    // api: (10+500+120+5+200)/5 = 167 ; worker: (300+900+50+101)/4 = 337.75
-    expect(aggregationOutput).toContain('167');
-    expect(aggregationOutput).toContain('337.75');
-  });
-
-  it('SUM, MIN and MAX aggregations', () => {
-    expect(executeQuery(entries, { sql: 'SUM(duration) BY service' }).aggregationOutput).toContain(
-      '1351'
-    );
-    expect(executeQuery(entries, { sql: 'MIN(duration) BY service' }).aggregationOutput).toContain(
-      'MIN(duration)'
-    );
-    expect(executeQuery(entries, { sql: 'MAX(duration) BY service' }).aggregationOutput).toContain(
-      '900'
-    );
+  // api durations: 10, 500, 120, 5, 200 (one api row has none); worker: 300, 900, 50, 101
+  it.each([
+    ['AVG', { api: '167', worker: '337.75' }],
+    ['SUM', { api: '835', worker: '1351' }],
+    ['MIN', { api: '5', worker: '50' }],
+    ['MAX', { api: '500', worker: '900' }],
+  ])('%s(duration) BY service computes exact values per group', (fn, expected) => {
+    const { aggregationOutput } = executeQuery(entries, { sql: `${fn}(duration) BY service` });
+    const rows = parseTable(aggregationOutput);
+    expect(Object.keys(rows[0]!)).toEqual(['service', `${fn}(duration)`, 'count']);
+    const byService = Object.fromEntries(rows.map((r) => [r['service'], r[`${fn}(duration)`]]));
+    expect(byService).toEqual(expected);
+    expect(Object.fromEntries(rows.map((r) => [r['service'], r['count']]))).toEqual({
+      api: '6',
+      worker: '4',
+    });
   });
 
   it('applies time filters before aggregating', () => {
