@@ -60,4 +60,39 @@ describe('console JSON inside the context middleware', () => {
       outSpy.mockRestore();
     }
   });
+
+  it('does not put the ALS traceId in the payload plugins or transports receive', async () => {
+    const seen: Array<{ traceId?: string; payload?: Record<string, unknown> }> = [];
+    const logger = createLogger({
+      appName: 'dup',
+      traceId: true,
+      transports: {
+        custom: [
+          {
+            name: 'sink',
+            write(e) {
+              seen.push({
+                ...(e.traceId ? { traceId: e.traceId } : {}),
+                ...(e.data ? { payload: e.data } : {}),
+              });
+            },
+          },
+        ],
+      },
+    });
+    const outSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        createExpressContextMiddleware()({ headers: { 'x-trace-id': 'abc-123' } }, {}, () => {
+          logger.info('plugin check', { keep: 1 }).then(() => resolve(), reject);
+        });
+      });
+      await logger.close();
+    } finally {
+      outSpy.mockRestore();
+    }
+    expect(seen[0]?.traceId).toBe('abc-123');
+    expect(seen[0]?.payload).not.toHaveProperty('traceId');
+    expect(seen[0]?.payload).toMatchObject({ keep: 1 });
+  });
 });
