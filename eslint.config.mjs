@@ -67,9 +67,9 @@ export default [
     rules: {
       'unicorn/prefer-node-protocol': 'error',
       'unicorn/prefer-module': 'off', // Uses CommonJS
-      'unicorn/no-array-for-each': 'error',
+      'unicorn/no-for-each': 'error',
       'unicorn/prefer-number-properties': 'error',
-      'unicorn/no-instanceof-array': 'error',
+      'unicorn/no-instanceof-builtins': 'error',
       'unicorn/prefer-optional-catch-binding': 'error',
       'unicorn/no-useless-undefined': 'error',
       'unicorn/prefer-string-slice': 'error',
