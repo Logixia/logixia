@@ -152,6 +152,7 @@ export interface DataDogTransportConfig extends AnalyticsTransportConfig {
   env?: string;
   enableMetrics?: boolean;
   enableLogs?: boolean;
+  /** @deprecated No effect. Trace correlation is added to every log as `dd.trace_id`. */
   enableTraces?: boolean;
 }
 

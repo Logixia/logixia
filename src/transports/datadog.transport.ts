@@ -1,15 +1,37 @@
-import { gzipSync } from 'node:zlib';
+import { promisify } from 'node:util';
+import { gzip } from 'node:zlib';
 
 import type { DataDogTransportConfig, TransportLogEntry } from '../types/transport.types';
 import { internalError } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
 import type { AnalyticsMetric } from './analytics.transport';
-import { AnalyticsTransport } from './analytics.transport';
+import { AnalyticsTransport, PartialBatchError } from './analytics.transport';
+
+const gzipAsync = promisify(gzip);
 
 const MAX_LOGS_PER_REQUEST = 1000;
 const MAX_LOGS_PAYLOAD_BYTES = 5_000_000;
 const MAX_LOG_BYTES = 1_000_000;
 const MAX_TRUNCATED_MESSAGE_CHARS = 150_000;
+
+const TRUNCATED_LOG_KEYS = [
+  'ddsource',
+  'ddtags',
+  'hostname',
+  'service',
+  'status',
+  'timestamp',
+  'level',
+  'context',
+  'traceId',
+  'appName',
+  'environment',
+  'env',
+  'version',
+  'logger',
+  'dd.trace_id',
+  'dd.span_id',
+];
 
 const STATUS_MAP: Record<string, string> = {
   fatal: 'critical',
@@ -23,12 +45,39 @@ const STATUS_MAP: Record<string, string> = {
   verbose: 'debug',
 };
 
-/** Datadog correlates on the low 64 bits of an id, written as a decimal string. */
-function toDatadogId(id: unknown, wide: boolean): string | undefined {
+const MAX_UINT64 = (1n << 64n) - 1n;
+const DASHED_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const HEX = /^[0-9a-f]+$/i;
+const DIGITS = /^\d+$/;
+
+/**
+ * Datadog correlates on a decimal 64-bit id. Accepts:
+ * - a dashed UUID (logixia's default trace id): dashes stripped, then 32-hex;
+ * - 32 hex chars (W3C trace id) or 16 hex chars containing a-f: low 64 bits as decimal;
+ * - an all-digit string: already decimal (dd-trace's native format), passed through.
+ * An all-digit string is ambiguous when it is 16 or 32 long: 32 is read as hex (a
+ * decimal id has at most 20 digits), 16 is read as decimal.
+ * Anything else yields the raw string for trace ids (`passthrough`) and nothing for span ids.
+ */
+function toDatadogId(id: unknown, passthrough: boolean): string | undefined {
   if (typeof id !== 'string' || id === '') return undefined;
-  const hex = /^[0-9a-f]+$/i;
-  if (!hex.test(id) || (wide ? id.length > 32 : id.length > 16)) return wide ? id : undefined;
-  return BigInt(`0x${id.slice(-16)}`).toString();
+  const fallback = passthrough ? id : undefined;
+  const compact = DASHED_UUID.test(id) ? id.replaceAll('-', '') : id;
+  const isHexId = HEX.test(compact) && (compact.length === 32 || compact.length === 16);
+  if (DIGITS.test(compact) && compact.length !== 32) {
+    const value = BigInt(compact);
+    return value <= MAX_UINT64 ? value.toString() : fallback;
+  }
+  if (isHexId) return BigInt(`0x${compact.slice(-16)}`).toString();
+  return fallback;
+}
+
+/** Datadog tags: no commas or whitespace, lowercase, at most 200 chars. */
+function tag(key: string, value: string): string {
+  return `${key}:${value}`
+    .replaceAll(/[\s,]+/g, '_')
+    .toLowerCase()
+    .slice(0, 200);
 }
 
 /**
@@ -70,80 +119,59 @@ export class DataDogTransport extends AnalyticsTransport {
   }
 
   protected async sendEntry(entry: TransportLogEntry): Promise<void> {
-    const promises: Promise<void>[] = [];
-
-    // Send log if enabled
-    if (this.datadogConfig.enableLogs !== false) {
-      promises.push(this.sendLog(entry));
-    }
-
-    // Send metric if enabled
-    if (this.datadogConfig.enableMetrics) {
-      promises.push(this.sendMetric(entry));
-    }
-
-    // Trace correlation rides on the log's dd.trace_id, so a trace-only send is
-    // needed only when logs are off; otherwise the entry would be posted twice.
-    if (
-      this.datadogConfig.enableTraces &&
-      this.datadogConfig.enableLogs === false &&
-      entry.traceId
-    ) {
-      promises.push(this.sendTrace(entry));
-    }
-
-    await Promise.all(promises);
+    await this.sendBatch([entry]);
   }
 
+  /**
+   * Logs go first, chunk by chunk; metrics follow once every log chunk is out.
+   * A failure part-way throws PartialBatchError naming only the entries that were
+   * not delivered, so a retry never re-posts a chunk Datadog already accepted.
+   */
   protected async sendBatch(entries: TransportLogEntry[]): Promise<void> {
-    const promises: Promise<void>[] = [];
-
-    // Batch logs
     if (this.datadogConfig.enableLogs !== false) {
-      promises.push(this.sendLogBatch(entries));
+      await this.sendLogBatch(entries);
     }
 
-    // Batch metrics
     if (this.datadogConfig.enableMetrics) {
-      promises.push(this.sendMetricBatch(entries));
-    }
-
-    // Batch traces
-    if (this.datadogConfig.enableTraces && this.datadogConfig.enableLogs === false) {
-      const entriesWithTraces = entries.filter((e) => e.traceId);
-      if (entriesWithTraces.length > 0) {
-        promises.push(this.sendTraceBatch(entriesWithTraces));
+      try {
+        await this.sendMetricBatch(entries);
+      } catch (error) {
+        if (this.datadogConfig.enableLogs === false) throw error;
+        // Logs are already delivered; retrying would duplicate them.
+        throw new PartialBatchError((error as Error).message, [], { cause: error });
       }
     }
-
-    await Promise.all(promises);
   }
 
   protected async cleanup(): Promise<void> {
     // DataDog doesn't require explicit cleanup
   }
 
-  private async sendLog(entry: TransportLogEntry): Promise<void> {
-    await this.sendLogBatch([entry]);
-  }
-
   private async sendLogBatch(entries: TransportLogEntry[]): Promise<void> {
-    const logs = entries.map((entry) => this.fitLog(this.transformToDataDogLog(entry)));
+    const items = entries.map((entry) => ({ entry, json: this.serializeLog(entry) }));
 
     // API key is sent via DD-API-KEY header inside makeLogsRequest — never put it in the URL
     // so it cannot be leaked through error messages, access logs, or network traces.
-    for (const chunk of this.chunkLogs(logs)) {
-      await this.makeLogsRequest('/api/v2/logs', chunk);
+    const chunks = this.chunkLogs(items);
+    for (let i = 0; i < chunks.length; i += 1) {
+      const chunk = chunks[i]!;
+      try {
+        await this.makeLogsRequest('/api/v2/logs', `[${chunk.map((item) => item.json).join(',')}]`);
+      } catch (error) {
+        if (i === 0) throw error;
+        const unsent = chunks.slice(i).flatMap((c) => c.map((item) => item.entry));
+        throw new PartialBatchError((error as Error).message, unsent, { cause: error });
+      }
     }
   }
 
   /** Splits into requests of at most 1000 entries and about 5MB of JSON. */
-  private chunkLogs(logs: Record<string, unknown>[]): Record<string, unknown>[][] {
-    const chunks: Record<string, unknown>[][] = [];
-    let current: Record<string, unknown>[] = [];
+  private chunkLogs(items: { entry: TransportLogEntry; json: string }[]) {
+    const chunks: { entry: TransportLogEntry; json: string }[][] = [];
+    let current: { entry: TransportLogEntry; json: string }[] = [];
     let currentBytes = 2;
-    for (const log of logs) {
-      const bytes = Buffer.byteLength(stringifyForLog(log)) + 1;
+    for (const item of items) {
+      const bytes = Buffer.byteLength(item.json) + 1;
       if (
         current.length > 0 &&
         (current.length >= MAX_LOGS_PER_REQUEST || currentBytes + bytes > MAX_LOGS_PAYLOAD_BYTES)
@@ -152,27 +180,25 @@ export class DataDogTransport extends AnalyticsTransport {
         current = [];
         currentBytes = 2;
       }
-      current.push(log);
+      current.push(item);
       currentBytes += bytes;
     }
     if (current.length > 0) chunks.push(current);
     return chunks;
   }
 
-  /** A log over 1MB is cut down to its core fields and a truncated message. */
-  private fitLog(log: Record<string, unknown>): Record<string, unknown> {
-    if (Buffer.byteLength(stringifyForLog(log)) <= MAX_LOG_BYTES) return log;
-    const { message, ddsource, ddtags, hostname, service, status, timestamp } = log;
-    return {
-      ddsource,
-      ddtags,
-      hostname,
-      service,
-      status,
-      timestamp,
-      message: String(message).slice(0, MAX_TRUNCATED_MESSAGE_CHARS),
-      truncated: true,
-    };
+  /** Serializes once. A log over 1MB keeps its identity and correlation fields but loses its attributes and most of its message. */
+  private serializeLog(entry: TransportLogEntry): string {
+    const log = this.transformToDataDogLog(entry);
+    const json = stringifyForLog(log);
+    if (Buffer.byteLength(json) <= MAX_LOG_BYTES) return json;
+    const kept: Record<string, unknown> = {};
+    for (const key of TRUNCATED_LOG_KEYS) {
+      if (log[key] !== undefined) kept[key] = log[key];
+    }
+    kept['message'] = String(log['message']).slice(0, MAX_TRUNCATED_MESSAGE_CHARS);
+    kept['truncated'] = true;
+    return stringifyForLog(kept);
   }
 
   private async sendMetric(entry: TransportLogEntry): Promise<void> {
@@ -189,23 +215,16 @@ export class DataDogTransport extends AnalyticsTransport {
     await this.makeMetricsRequest('/api/v1/series', payload);
   }
 
-  private async sendTrace(entry: TransportLogEntry): Promise<void> {
-    // DataDog traces are typically sent via the trace agent
-    // For simplicity, we'll log this as a structured log with trace information
-    await this.sendLog(entry);
-  }
-
-  private async sendTraceBatch(entries: TransportLogEntry[]): Promise<void> {
-    // For batch traces, send as structured logs with trace information
-    await this.sendLogBatch(entries);
-  }
-
   private transformToDataDogLog(entry: TransportLogEntry): Record<string, unknown> {
     const transformed = this.transformEntry(entry);
     const service = this.datadogConfig.service || 'logixia';
     const env = this.datadogConfig.env || 'production';
     const version = this.datadogConfig.version;
-    const tags = [`env:${env}`, `service:${service}`, ...(version ? [`version:${version}`] : [])];
+    const tags = [
+      tag('env', env),
+      tag('service', service),
+      ...(version ? [tag('version', version)] : []),
+    ];
     const spanId = toDatadogId(entry.data?.['spanId'] ?? entry.data?.['span_id'], false);
     const traceId = toDatadogId(entry.traceId, true);
 
@@ -235,6 +254,7 @@ export class DataDogTransport extends AnalyticsTransport {
       'version',
       'env',
       'logger',
+      // Datadog reserved attributes (host is the hostname alias, source the ddsource alias).
       'host',
       'source',
       'dd.trace_id',
@@ -251,42 +271,12 @@ export class DataDogTransport extends AnalyticsTransport {
       type: 'count',
       host: this.getHostname(),
       tags: [
-        `level:${entry.level}`,
-        `service:${this.datadogConfig.service || 'logixia'}`,
-        `env:${this.datadogConfig.env || 'production'}`,
-        ...(entry.context ? [`context:${entry.context}`] : []),
-        ...(entry.appName ? [`app:${entry.appName}`] : []),
+        tag('level', entry.level),
+        tag('service', this.datadogConfig.service || 'logixia'),
+        tag('env', this.datadogConfig.env || 'production'),
+        ...(entry.context ? [tag('context', entry.context)] : []),
+        ...(entry.appName ? [tag('app', entry.appName)] : []),
       ],
-    };
-  }
-
-  private transformToDataDogTrace(entry: TransportLogEntry): Record<string, unknown> {
-    return {
-      trace_id: entry.traceId,
-      span_id: this.generateSpanId(),
-      parent_id: null,
-      name: 'log.entry',
-      service: this.datadogConfig.service || 'logixia',
-      resource: entry.message,
-      type: 'log',
-      start: entry.timestamp.getTime() * 1000000, // nanoseconds
-      duration: 1000000, // 1ms in nanoseconds
-      meta: {
-        'log.level': entry.level,
-        'log.message': entry.message,
-        ...(entry.context && { 'log.context': entry.context }),
-        ...(entry.data &&
-          Object.keys(entry.data).reduce(
-            (acc, key) => {
-              acc[`log.${key}`] = String(entry.data![key]);
-              return acc;
-            },
-            {} as Record<string, string>
-          )),
-      },
-      metrics: {
-        _sampling_priority_v1: 1,
-      },
     };
   }
 
@@ -294,11 +284,10 @@ export class DataDogTransport extends AnalyticsTransport {
     return STATUS_MAP[level.toLowerCase()] || 'info';
   }
 
-  private async makeLogsRequest(endpoint: string, data: unknown): Promise<void> {
+  private async makeLogsRequest(endpoint: string, json: string): Promise<void> {
     const url = `${this.logsUrl}${endpoint}`;
 
     try {
-      const json = stringifyForLog(data);
       const compress = this.datadogConfig.compress === true;
       const response = await fetch(url, {
         method: 'POST',
@@ -307,7 +296,7 @@ export class DataDogTransport extends AnalyticsTransport {
           'DD-API-KEY': this.datadogConfig.apiKey,
           ...(compress && { 'Content-Encoding': 'gzip' }),
         },
-        body: compress ? gzipSync(json) : json,
+        body: compress ? await gzipAsync(json) : json,
       });
 
       if (!response.ok) {
@@ -341,11 +330,6 @@ export class DataDogTransport extends AnalyticsTransport {
         cause: error,
       });
     }
-  }
-
-  private generateSpanId(): string {
-    // eslint-disable-next-line sonarjs/pseudo-random -- non-security span ID generation
-    return Math.floor(Math.random() * 0xffffffffffff).toString(16);
   }
 
   private getHostname(): string {

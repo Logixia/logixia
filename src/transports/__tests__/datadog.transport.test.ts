@@ -180,6 +180,43 @@ describe('DataDogTransport logs intake', () => {
       expect(log['data_dd.trace_id']).toBe('forged');
     });
 
+    it('converts logixia default dashed UUID trace ids', async () => {
+      await makeTransport().write(makeEntry({ traceId: '4bf92f35-77b3-4da6-a3ce-929d0e0e4736' }));
+      expect((callBody() as Log[])[0]?.['dd.trace_id']).toBe(
+        BigInt('0xa3ce929d0e0e4736').toString()
+      );
+    });
+
+    it('passes decimal ids through and does not re-parse them as hex', async () => {
+      await makeTransport().write(
+        makeEntry({ traceId: '1234567890123456789', data: { spanId: '9876543210' } })
+      );
+      const [log] = callBody() as Log[];
+      expect(log['dd.trace_id']).toBe('1234567890123456789');
+      expect(log['dd.span_id']).toBe('9876543210');
+    });
+
+    it('reads 16 all-digit ids as decimal and 32 all-digit ids as hex', async () => {
+      await makeTransport().write(
+        makeEntry({ traceId: '1234567890123456', data: { spanId: '1234567890123456' } })
+      );
+      let [log] = callBody() as Log[];
+      expect(log['dd.trace_id']).toBe('1234567890123456');
+      expect(log['dd.span_id']).toBe('1234567890123456');
+
+      fetchMock.mockClear();
+      await makeTransport().write(makeEntry({ traceId: '00000000000000001234567890123456' }));
+      [log] = callBody() as Log[];
+      expect(log['dd.trace_id']).toBe(BigInt('0x1234567890123456').toString());
+    });
+
+    it('drops a span id that is not a valid id', async () => {
+      await makeTransport().write(
+        makeEntry({ traceId: '1234abcd1234abcd', data: { spanId: 'not-an-id' } })
+      );
+      expect((callBody() as Log[])[0]).not.toHaveProperty('dd.span_id');
+    });
+
     it('posts a traced entry once when logs and traces are both on', async () => {
       await makeTransport({ enableTraces: true }).write(makeEntry({ traceId: 'abcdef12' }));
       expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -222,6 +259,30 @@ describe('DataDogTransport logs intake', () => {
       expect(log['service']).toBe('logixia');
     });
 
+    it('keeps correlation and identity fields on a truncated log', async () => {
+      const transport = makeTransport({ env: 'prod', version: '2.0.0' }) as any;
+      await transport.sendBatch([
+        makeEntry({
+          level: 'error',
+          context: 'Db',
+          traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
+          message: 'y'.repeat(1_500_000),
+          data: { spanId: '00f067aa0ba902b7', big: 'z'.repeat(10) },
+        }),
+      ]);
+      const [log] = callBody() as Log[];
+      expect(log).toMatchObject({
+        truncated: true,
+        env: 'prod',
+        version: '2.0.0',
+        level: 'error',
+        context: 'Db',
+        'dd.trace_id': BigInt('0xa3ce929d0e0e4736').toString(),
+        'dd.span_id': BigInt('0x00f067aa0ba902b7').toString(),
+      });
+      expect(log).not.toHaveProperty('big');
+    });
+
     it('flushes buffered entries through the batch path', async () => {
       const transport = makeTransport({ batchSize: 100, flushInterval: 60_000 });
       await transport.write(makeEntry());
@@ -247,6 +308,31 @@ describe('DataDogTransport logs intake', () => {
   it('sends no logs request when enableLogs is false', async () => {
     await makeTransport({ enableLogs: false }).write(makeEntry());
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('never posts to the logs intake when logs are off, even for traced entries', async () => {
+    await makeTransport({ enableLogs: false, enableTraces: true }).write(
+      makeEntry({ traceId: '1234abcd1234abcd' })
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sanitizes ddtags values', async () => {
+    await makeTransport({ env: 'Staging,EU', service: 'my api', version: 'v'.repeat(300) }).write(
+      makeEntry()
+    );
+    const tags = ((callBody() as Log[])[0]?.['ddtags'] as string).split(',');
+    expect(tags).toHaveLength(3);
+    expect(tags[0]).toBe('env:staging_eu');
+    expect(tags[1]).toBe('service:my_api');
+    expect(tags[2]).toHaveLength(200);
+  });
+
+  it('keeps host and source reserved so payload keys cannot claim them', async () => {
+    await makeTransport().write(makeEntry({ data: { host: 'h', source: 's' } }));
+    const [log] = callBody() as Log[];
+    expect(log['data_host']).toBe('h');
+    expect(log['data_source']).toBe('s');
   });
 });
 
@@ -276,6 +362,39 @@ describe('DataDogTransport errors', () => {
     expect(callBody(1)).toHaveLength(1);
   });
 
+  it('requeues only the unsent chunks when a later chunk fails', async () => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK' })
+      .mockResolvedValueOnce({ ok: false, status: 503, statusText: 'Unavailable' });
+    const transport = makeTransport({ batchSize: 5000, flushInterval: 60_000 });
+    for (let i = 0; i < 2500; i += 1) {
+      transport.addToBatch(makeEntry({ message: `m${i}` }));
+    }
+    await transport.flush();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    fetchMock.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' });
+    await transport.flush();
+    const retried = fetchMock.mock.calls.slice(2).flatMap((_c, i) => callBody(i + 2));
+    expect(retried).toHaveLength(1500);
+    expect(retried[0].message).toBe('m1000');
+  });
+
+  it('does not requeue delivered logs when only the metrics request fails', async () => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK' })
+      .mockResolvedValueOnce({ ok: false, status: 500, statusText: 'Server Error' });
+    const transport = makeTransport({
+      batchSize: 100,
+      flushInterval: 60_000,
+      enableMetrics: true,
+    });
+    await transport.write(makeEntry());
+    await transport.flush();
+    await transport.flush();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('fails writes when the API key is missing', async () => {
     const transport = new DataDogTransport({ apiKey: '', batchSize: 1 });
     await expect(transport.write(makeEntry())).rejects.toThrow('API key is required');
@@ -301,7 +420,7 @@ describe('DataDogTransport metrics and events', () => {
         'level:error',
         'service:api',
         'env:production',
-        'context:Db',
+        'context:db',
         'app:web',
       ])
     );

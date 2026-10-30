@@ -8,6 +8,21 @@ import { internalError } from '../utils/internal-log';
 import { BufferCap } from './buffer-cap';
 import { mergeCoreFields } from './entry-fields';
 
+/**
+ * Thrown by sendBatch() when part of a batch was already delivered. drain()
+ * requeues only `unsent`, so delivered entries are not sent twice.
+ */
+export class PartialBatchError extends Error {
+  constructor(
+    message: string,
+    public readonly unsent: TransportLogEntry[],
+    options?: ErrorOptions
+  ) {
+    super(message, options);
+    this.name = 'PartialBatchError';
+  }
+}
+
 export abstract class AnalyticsTransport implements ITransport, IBatchTransport {
   public readonly name: string;
   public readonly level?: string | undefined;
@@ -111,7 +126,7 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
       } catch (error) {
         internalError(`Analytics transport ${this.name} flush failed`, error);
         // Re-add failed entries to the front of the batch for retry, then stop.
-        this.batch.unshift(...entriesToSend);
+        this.batch.unshift(...(error instanceof PartialBatchError ? error.unsent : entriesToSend));
         this.cap.enforce(this.batch);
         return;
       }
