@@ -302,7 +302,10 @@ export class LogixiaLogger<
           typeof transportsWithColors.console === 'object' ? transportsWithColors.console : {};
         transportsWithColors.console = { ...consoleBase, levelColors: userColors };
       }
-      this.transportManager = new TransportManager(transportsWithColors);
+      this.transportManager = new TransportManager(
+        transportsWithColors,
+        this.config.levelOptions?.levels as Record<string, number> | undefined
+      );
     }
 
     // ── Feature 8: Log sampling ───────────────────────────────────────────────

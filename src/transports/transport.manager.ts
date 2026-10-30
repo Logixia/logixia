@@ -16,6 +16,8 @@ import { DatabaseTransport } from './database.transport';
 import { DataDogTransport } from './datadog.transport';
 import { FileTransport } from './file.transport';
 import { GoogleAnalyticsTransport } from './google-analytics.transport';
+import type { LevelValues } from './level-filter';
+import { buildLevelValues, meetsTransportLevel } from './level-filter';
 import { MixpanelTransport } from './mixpanel.transport';
 import { SegmentTransport } from './segment.transport';
 
@@ -31,8 +33,16 @@ export class TransportManager extends EventEmitter {
   private transportLevelPreferences: Map<string, string[]> = new Map(); // Store user preferences for transport levels
   private warnedPromptDeprecated = false;
 
-  constructor(config: TransportConfig = {}) {
+  private readonly levelValues: LevelValues;
+
+  /**
+   * @param config  Transport configuration.
+   * @param levels  The logger's `levelOptions.levels`; used with the built-in levels
+   *                to compare entries against each transport's `level`.
+   */
+  constructor(config: TransportConfig = {}, levels?: Record<string, number>) {
     super();
+    this.levelValues = buildLevelValues(levels);
     this.setupTransports(config);
   }
 
@@ -332,16 +342,7 @@ export class TransportManager extends EventEmitter {
       return allowedLevels.includes(level.toLowerCase());
     }
 
-    if (!transport.level) return true;
-
-    // Simple level comparison - you might want to implement proper level hierarchy
-    const levels = ['error', 'warn', 'info', 'debug', 'trace', 'verbose'];
-    const transportLevelIndex = levels.indexOf(transport.level.toLowerCase());
-    const entryLevelIndex = levels.indexOf(level.toLowerCase());
-
-    if (transportLevelIndex === -1 || entryLevelIndex === -1) return true;
-
-    return entryLevelIndex <= transportLevelIndex;
+    return meetsTransportLevel(transport.level, level, this.levelValues);
   }
 
   private getTransportType(transport: ITransport): TransportType {

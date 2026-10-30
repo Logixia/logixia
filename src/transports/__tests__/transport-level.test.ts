@@ -7,6 +7,7 @@
 import { createLogger } from '../../index';
 import { ConsoleTransport } from '../console.transport';
 import { DatabaseTransport } from '../database.transport';
+import { buildLevelValues, meetsTransportLevel } from '../level-filter';
 
 describe('per-transport level', () => {
   let out: string[];
@@ -68,5 +69,62 @@ describe('per-transport level', () => {
     await logger.debug('dbg-line');
     await logger.close();
     expect([...out, ...err].join('')).toContain('dbg-line');
+  });
+
+  it('filters with custom levels using the logger severity values', async () => {
+    const logger = createLogger({
+      appName: 'lvl',
+      levelOptions: {
+        level: 'debug',
+        levels: { error: 0, audit: 1, info: 2, debug: 3, chatty: 4 },
+      },
+      transports: { console: { level: 'audit', format: 'json' } },
+    });
+    await logger.logLevel('chatty', 'chatty-line');
+    await logger.info('info-line');
+    await logger.logLevel('audit', 'audit-line');
+    await logger.error('error-line');
+    await logger.close();
+
+    const all = [...out, ...err].join('');
+    expect(all).not.toContain('chatty-line');
+    expect(all).not.toContain('info-line');
+    expect(all).toContain('audit-line');
+    expect(all).toContain('error-line');
+  });
+
+  it('a built-in threshold still admits custom levels that are more severe', async () => {
+    const logger = createLogger({
+      appName: 'lvl',
+      levelOptions: {
+        level: 'debug',
+        levels: { error: 0, audit: 1, info: 2, debug: 3, chatty: 4 },
+      },
+      transports: { console: { level: 'info', format: 'json' } },
+    });
+    await logger.logLevel('chatty', 'chatty-line');
+    await logger.logLevel('audit', 'audit-line');
+    await logger.close();
+
+    const all = [...out, ...err].join('');
+    expect(all).not.toContain('chatty-line');
+    expect(all).toContain('audit-line');
+  });
+});
+
+describe('meetsTransportLevel', () => {
+  const values = buildLevelValues({ audit: 1, chatty: 9 });
+
+  it('compares on the logger scale and never filters without a threshold', () => {
+    expect(meetsTransportLevel(undefined, 'chatty', values)).toBe(true);
+    expect(meetsTransportLevel('warn', 'audit', values)).toBe(true);
+    expect(meetsTransportLevel('warn', 'info', values)).toBe(false);
+    expect(meetsTransportLevel('WARN', 'error', values)).toBe(true);
+    expect(meetsTransportLevel('audit', 'info', values)).toBe(false);
+  });
+
+  it('does not filter on an unknown threshold or entry level', () => {
+    expect(meetsTransportLevel('nope', 'info', values)).toBe(true);
+    expect(meetsTransportLevel('warn', 'nope', values)).toBe(true);
   });
 });
