@@ -1,9 +1,9 @@
 /**
  * Tests for the OpenTelemetry bridge.
  *
- * @opentelemetry/api is an optional dependency and is not installed in this
- * project, so these tests pin the graceful-degradation contract: every helper
- * must return undefined / {} (never throw) when the API is absent, and the
+ * These tests pin the graceful-degradation contract (see otel.real.test.ts for
+ * the real-API path): every helper must return undefined / {} (never throw)
+ * when there is no active span, and the
  * bridge state (init/disable) must behave correctly. The hot-path helper
  * _getOtelPayloadIfEnabled must never throw — it runs on every log call.
  */
