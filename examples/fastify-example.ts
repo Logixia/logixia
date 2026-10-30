@@ -7,11 +7,11 @@
  */
 import Fastify from 'fastify';
 import {
+  createFastifyContextHook,
   createLogger,
   DEFAULT_TRACE_HEADERS,
   extractTraceId,
   generateTraceId,
-  runWithTraceId,
 } from 'logixia';
 import { createFastifyPlugin } from 'logixia/middleware';
 
@@ -27,11 +27,9 @@ const app = Fastify({
   genReqId: (req) => extractTraceId(req, { header: DEFAULT_TRACE_HEADERS }) ?? generateTraceId(),
 });
 
-// Runs the rest of the request inside the trace context, so every logger call
-// in a handler carries request.id as its trace ID.
-app.addHook('onRequest', (request, _reply, done) => {
-  runWithTraceId(request.id, done);
-});
+// Runs the rest of the request inside a context carrying the trace ID, so every
+// logger call in a handler carries it as its top-level traceId.
+app.addHook('onRequest', createFastifyContextHook());
 
 // Logs "request started" / "request completed" with status and duration.
 // Authorization, Cookie and similar headers are redacted by default.
@@ -39,7 +37,6 @@ void app.register(
   createFastifyPlugin(logger, {
     redactHeaders: ['x-session'],
     redactQueryParams: ['session'],
-    extraFields: (req) => ({ traceId: (req as { id?: string }).id }),
   })
 );
 

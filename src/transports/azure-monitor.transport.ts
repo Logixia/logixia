@@ -38,6 +38,7 @@ import {
   DEFAULT_REQUEST_TIMEOUT_MS,
   httpRequest,
 } from './batch-buffer';
+import { protectSecrets, scrubError, scrubSecrets, urlSecrets } from './secret-config';
 
 /**
  * Azure AD tenant IDs are either a GUID or a verified domain (e.g. `contoso.onmicrosoft.com`).
@@ -108,6 +109,7 @@ export class AzureMonitorTransport implements IAsyncTransport {
   private readonly clientSecret: string | undefined;
 
   constructor(config: AzureMonitorTransportConfig) {
+    protectSecrets(this, ['clientSecret', 'accessToken']);
     this.endpoint = config.endpoint.replace(/\/$/, '');
     this.ruleId = config.ruleId;
     this.streamName = config.streamName;
@@ -123,6 +125,7 @@ export class AzureMonitorTransport implements IAsyncTransport {
       batchSize: this.batchSize,
       maxBufferSize: config.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE,
       send: (entries) => this.sendEntries(entries),
+      secrets: () => this.secretValues(),
     });
 
     this.flushTimer = setInterval(() => {
@@ -165,6 +168,10 @@ export class AzureMonitorTransport implements IAsyncTransport {
     };
   }
 
+  private secretValues(token?: string): (string | undefined)[] {
+    return [this.clientSecret, this.accessToken ?? undefined, token, ...urlSecrets(this.endpoint)];
+  }
+
   private async getAccessToken(): Promise<string | null> {
     if (this.accessToken && Date.now() < this.tokenExpiry) return this.accessToken;
 
@@ -200,6 +207,7 @@ export class AzureMonitorTransport implements IAsyncTransport {
         body,
         timeoutMs: this.requestTimeoutMs,
         label: 'Azure token request',
+        secrets: () => this.secretValues(),
       });
       const parsed = JSON.parse(res.body) as { access_token?: string; expires_in?: number };
       if (!parsed.access_token) return null;
@@ -228,7 +236,10 @@ export class AzureMonitorTransport implements IAsyncTransport {
         this.endpoint.endsWith('/') ? this.endpoint : `${this.endpoint}/`
       );
     } catch (error) {
-      internalError(`AzureMonitorTransport: invalid endpoint "${this.endpoint}"`, error);
+      internalError(
+        `AzureMonitorTransport: invalid endpoint "${scrubSecrets(this.endpoint, urlSecrets(this.endpoint))}"`,
+        scrubError(error, urlSecrets(this.endpoint))
+      );
       return;
     }
     if (reqUrl.protocol !== 'https:') {
@@ -242,6 +253,7 @@ export class AzureMonitorTransport implements IAsyncTransport {
       body,
       timeoutMs: this.requestTimeoutMs,
       label: 'Azure Monitor API',
+      secrets: () => this.secretValues(token),
     });
   }
 }

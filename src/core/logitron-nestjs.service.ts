@@ -109,6 +109,7 @@ export type LogixiaServiceWith<T extends string | Record<string, unknown>> =
       K in T extends string ? Exclude<T, _ServiceBuiltinLevels> : _ExtractCustomLevelNames<T>
     ]: (message: string, data?: Record<string, unknown>) => Promise<void>;
   };
+import { protectSecrets } from '../transports/secret-config';
 import { safeToString } from '../utils/coerce.utils';
 import { internalError } from '../utils/internal-log';
 import { getTraceContextKey, TraceContext } from '../utils/trace.utils';
@@ -162,6 +163,7 @@ export class LogixiaLoggerService implements LoggerService {
       },
     };
 
+    protectSecrets(this, ['_mergedConfig']);
     this._mergedConfig = { ...defaultConfig, ...config };
     this.logger = new LogixiaLogger(this._mergedConfig);
     this._createCustomLevelMethods();

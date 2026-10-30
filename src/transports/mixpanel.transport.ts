@@ -3,6 +3,7 @@ import { internalError } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
 import type { AnalyticsEvent, AnalyticsUser } from './analytics.transport';
 import { AnalyticsTransport } from './analytics.transport';
+import { protectSecrets } from './secret-config';
 
 /**
  * Sends log entries as Mixpanel events via the Track and Engage HTTP APIs.
@@ -17,6 +18,7 @@ export class MixpanelTransport extends AnalyticsTransport {
   constructor(config: MixpanelTransportConfig) {
     super('mixpanel', config);
     this.mixpanelConfig = config;
+    protectSecrets(this, ['mixpanelConfig']);
   }
 
   protected async initialize(): Promise<void> {

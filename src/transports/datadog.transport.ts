@@ -6,6 +6,7 @@ import { internalError } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
 import type { AnalyticsMetric } from './analytics.transport';
 import { AnalyticsTransport, PartialBatchError } from './analytics.transport';
+import { protectSecrets } from './secret-config';
 
 const gzipAsync = promisify(gzip);
 
@@ -103,6 +104,7 @@ export class DataDogTransport extends AnalyticsTransport {
     this.baseUrl = `https://api.${site}`;
     this.logsUrl = `https://http-intake.logs.${site}`;
     this.metricsUrl = `https://api.${site}`;
+    protectSecrets(this, ['datadogConfig']);
   }
 
   protected async initialize(): Promise<void> {

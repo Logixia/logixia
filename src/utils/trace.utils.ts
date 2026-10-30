@@ -195,10 +195,12 @@ export function runWithTraceId<T>(traceId: string, fn: () => T, data?: Record<st
 
 // ── Request extraction ────────────────────────────────────────────────────────
 
+type HeaderValue = string | string[] | undefined;
+
 /** Shape that extractTraceId accepts (Express-compatible) */
 interface RequestLike {
-  headers?: Record<string, string | string[] | undefined>;
-  query?: Record<string, string | string[] | undefined>;
+  headers?: Record<string, HeaderValue>;
+  query?: Record<string, HeaderValue>;
   body?: Record<string, string | undefined>;
   params?: Record<string, string | undefined>;
 }

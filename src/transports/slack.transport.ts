@@ -137,6 +137,11 @@ export class SlackTransport implements IAsyncTransport {
     return { name: this.name, level: this.level };
   }
 
+  /** `showHidden` would otherwise print the non-enumerable queue (and its URL). */
+  [Symbol.for('nodejs.util.inspect.custom')](): Record<string, unknown> {
+    return this.toJSON();
+  }
+
   private buildPayload(messages: SlackMessage[], overflow: number): Record<string, unknown> {
     const blocks = messages.flatMap((m) => m.blocks ?? []);
     const plural = overflow === 1 ? 'y' : 'ies';

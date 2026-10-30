@@ -25,14 +25,14 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { randomUUID } from 'node:crypto';
 
-import { sanitizeIncomingId } from '../utils/trace.utils';
-
-/** Generates an 8-character random ID using Node's crypto module. */
-function randomShortId(): string {
-  return randomUUID().slice(0, 8);
-}
+import {
+  type ContextRequestLike,
+  resolveRequestTraceId,
+  resolveTraceHeaders,
+  type TraceHeaderOption,
+} from '../utils/request-trace';
+import { TraceContext } from '../utils/trace.utils';
 
 export interface LogContext {
   traceId?: string;
@@ -61,7 +61,13 @@ export const LogixiaContext = {
    */
   run<T>(store: LogContext, callback: () => T): T {
     const parent = _storage.getStore() ?? {};
-    return _storage.run({ ...parent, ...store }, callback);
+    const scoped = (): T => _storage.run({ ...parent, ...store }, callback);
+    const traceId = store.traceId;
+    if (typeof traceId !== 'string' || traceId === '') return scoped();
+    // An explicit traceId also becomes the TraceContext ID, so getCurrentTraceId(),
+    // the logger, outbound propagation and the OTel bridge all see the same value.
+    const trace = TraceContext.instance;
+    return trace.storage.run({ ...trace.storage.getStore(), [trace.contextKey]: traceId }, scoped);
   },
 
   /**
@@ -98,35 +104,64 @@ export const LogixiaContext = {
   },
 };
 
+export type { ContextRequestLike };
+
+interface ContextHelperOptions<Req extends ContextRequestLike> {
+  /**
+   * Extract additional fields from the request. A `traceId` returned here is ignored:
+   * the resolved request trace ID always wins.
+   */
+  enrich?: (request: Req & Record<string, unknown>) => Partial<LogContext>;
+  /**
+   * Header name, or list of names tried in order, to read the trace ID from.
+   * Default: `DEFAULT_TRACE_HEADERS` (traceparent is parsed to its 32-hex trace id).
+   */
+  traceIdHeader?: TraceHeaderOption;
+  /**
+   * Echo the resolved trace ID on the response under this header name.
+   * Default: `false` (no response header is set).
+   */
+  responseHeader?: string | false;
+}
+
+function buildScope<Req extends ContextRequestLike>(
+  request: Req,
+  options: ContextHelperOptions<Req>,
+  headers: readonly string[]
+): LogContext {
+  const extra = options.enrich ? options.enrich(request as Req & Record<string, unknown>) : {};
+  return { ...extra, traceId: resolveRequestTraceId(request, headers) };
+}
+
 /**
  * Create an Express/Connect-compatible middleware that wraps each request in
  * a `LogixiaContext.run()` scope populated with common request fields.
  *
+ * Trace ID: the first present header of `traceIdHeader` (default
+ * `DEFAULT_TRACE_HEADERS`, `traceparent` parsed), else `request.id`, else a
+ * generated UUID. It is available via `getCurrentTraceId()` and is the logger's
+ * top-level `traceId` inside the request. No response header is set unless
+ * `responseHeader` is given.
+ *
  * @example
  * ```ts
  * import { createExpressContextMiddleware } from 'logixia';
- * app.use(createExpressContextMiddleware());
+ * app.use(createExpressContextMiddleware({ responseHeader: 'x-trace-id' }));
  * ```
  */
-export function createExpressContextMiddleware(
-  options: {
-    /** Extract additional fields from the request. */
-    enrich?: (req: Record<string, unknown>) => Partial<LogContext>;
-    /** Header to read the traceId from. Default: 'x-trace-id'. */
-    traceIdHeader?: string;
-  } = {}
+export function createExpressContextMiddleware<Req extends ContextRequestLike = ContextRequestLike>(
+  options: ContextHelperOptions<Req> = {}
 ) {
-  const { enrich, traceIdHeader = 'x-trace-id' } = options;
+  const headers = resolveTraceHeaders(options.traceIdHeader);
 
   return function logixiaContextMiddleware(
-    req: Record<string, unknown>,
-    _res: unknown,
+    req: Req,
+    res: { setHeader?: (name: string, value: string) => unknown },
     next: () => void
   ): void {
-    const headers = (req['headers'] ?? {}) as Record<string, string | undefined>;
-    const traceId = sanitizeIncomingId(headers[traceIdHeader.toLowerCase()]) ?? randomShortId();
-    const base: LogContext = { traceId };
-    LogixiaContext.run({ ...base, ...(enrich ? enrich(req) : {}) }, next);
+    const scope = buildScope(req, options, headers);
+    if (options.responseHeader) res.setHeader?.(options.responseHeader, scope.traceId as string);
+    LogixiaContext.run(scope, next);
   };
 }
 
@@ -134,26 +169,22 @@ export function createExpressContextMiddleware(
  * Create a Fastify lifecycle hook that wraps each request in a context scope.
  *
  * Register with `fastify.addHook('onRequest', createFastifyContextHook())`.
+ * Resolves the trace ID exactly like {@link createExpressContextMiddleware} and
+ * shares it with `createFastifyPlugin()` from `logixia/middleware`. Fastify's
+ * default counter `request.id` (`req-1`, ...) is never used as a trace ID.
  */
-export function createFastifyContextHook(
-  options: {
-    enrich?: (request: Record<string, unknown>) => Partial<LogContext>;
-    traceIdHeader?: string;
-  } = {}
+export function createFastifyContextHook<Req extends ContextRequestLike = ContextRequestLike>(
+  options: ContextHelperOptions<Req> = {}
 ) {
-  const { enrich, traceIdHeader = 'x-trace-id' } = options;
+  const headers = resolveTraceHeaders(options.traceIdHeader);
 
   return function logixiaFastifyHook(
-    request: Record<string, unknown>,
-    _reply: unknown,
+    request: Req,
+    reply: { header?: (name: string, value: string) => unknown },
     done: () => void
   ): void {
-    const headers = (request['headers'] ?? {}) as Record<string, string | undefined>;
-    const traceId =
-      sanitizeIncomingId(headers[traceIdHeader.toLowerCase()]) ??
-      sanitizeIncomingId(request['id']) ??
-      randomShortId();
-    const base: LogContext = { traceId };
-    LogixiaContext.run({ ...base, ...(enrich ? enrich(request) : {}) }, done);
+    const scope = buildScope(request, options, headers);
+    if (options.responseHeader) reply.header?.(options.responseHeader, scope.traceId as string);
+    LogixiaContext.run(scope, done);
   };
 }

@@ -982,23 +982,33 @@ const incomingTraceId = extractTraceId(req, {
 ### Express / Fastify middleware
 
 ```typescript
-import { traceMiddleware } from 'logixia';
+import { createExpressContextMiddleware, createFastifyContextHook } from 'logixia';
 
-// Zero-config — reads from traceparent / x-trace-id / x-request-id / x-correlation-id
-// and generates a UUID v4 if none is present. Sets X-Trace-Id on the response.
-app.use(traceMiddleware());
+// Express: trace ID = first present header of traceIdHeader (default
+// DEFAULT_TRACE_HEADERS: traceparent, x-trace-id, x-request-id, x-correlation-id,
+// trace-id; traceparent is parsed to its 32-hex trace id), else request.id, else a
+// generated UUID. The ID is available via getCurrentTraceId() and is the logger's
+// top-level traceId for everything inside the request. No response header is set
+// unless you ask for one with responseHeader.
+app.use(createExpressContextMiddleware({ responseHeader: 'X-Trace-Id' }));
 
-// With custom config:
-app.use(
-  traceMiddleware({
-    enabled: true,
-    generator: () => `req_${crypto.randomUUID()}`,
-    extractor: {
-      header: ['x-trace-id', 'traceparent'],
-      query: ['traceId'],
-    },
-  })
-);
+// Fastify: same resolution; fastify's default counter ids ('req-1', ...) are never
+// used as trace IDs. Also shared with createFastifyPlugin() from 'logixia/middleware'.
+// traceIdHeader accepts a single name or a list; responseHeader works as above.
+fastify.addHook('onRequest', createFastifyContextHook());
+
+// Prefer full control? Wrap the request yourself:
+app.use((req, res, next) => {
+  const traceId =
+    extractTraceId(req, { header: DEFAULT_TRACE_HEADERS, query: ['traceId'] }) ?? generateTraceId();
+  res.setHeader('X-Trace-Id', traceId);
+  runWithTraceId(traceId, () => next());
+});
+
+// Request/response logging (separate from tracing) lives in 'logixia/middleware':
+//   app.use(createExpressMiddleware(logger));
+//   await fastify.register(createFastifyPlugin(logger));
+// NestJS: import { TraceMiddleware } from 'logixia/nest';
 
 // Service layer — no parameters needed, trace ID propagates automatically
 class OrderService {

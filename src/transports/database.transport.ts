@@ -7,6 +7,7 @@ import type {
 import { internalError, internalWarn } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
 import { BufferCap } from './buffer-cap';
+import { protectSecrets, scrubError, urlSecrets } from './secret-config';
 
 /**
  * Validates that a SQL identifier (table/index name) contains only safe characters.
@@ -158,6 +159,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
   private readonly cap: BufferCap;
 
   constructor(private config: DatabaseTransportConfig) {
+    protectSecrets(this, ['config', 'connection']);
     this.batchSize = config.batchSize || 100;
     this.flushInterval = config.flushInterval || 5000; // 5 seconds
     this.cap = new BufferCap('DatabaseTransport', config.maxBufferSize, this.batchSize);
@@ -167,6 +169,11 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       validateSqlIdentifier(config.table, 'table');
     }
     this.setupFlushTimer();
+  }
+
+  private secretValues(): (string | undefined)[] {
+    const { connectionString, password } = this.config;
+    return [connectionString, password, ...(connectionString ? urlSecrets(connectionString) : [])];
   }
 
   async write(entry: TransportLogEntry): Promise<void> {
@@ -255,6 +262,14 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
   }
 
   private async writeEntries(entries: TransportLogEntry[]): Promise<void> {
+    try {
+      await this.writeEntriesUnscrubbed(entries);
+    } catch (error) {
+      throw scrubError(error, this.secretValues());
+    }
+  }
+
+  private async writeEntriesUnscrubbed(entries: TransportLogEntry[]): Promise<void> {
     switch (this.config.type) {
       case 'mongodb':
         await this.flushToMongoDB(entries);
@@ -354,6 +369,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       this.isConnected = true;
     } catch (error) {
       this.isConnected = false;
+      scrubError(error, this.secretValues());
       throw new Error(`Database connection failed: ${error}`, { cause: error });
     }
   }

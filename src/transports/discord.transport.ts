@@ -233,6 +233,11 @@ export class DiscordTransport implements IAsyncTransport {
     return { name: this.name, level: this.level };
   }
 
+  /** `showHidden` would otherwise print the non-enumerable queue (and its URL). */
+  [Symbol.for('nodejs.util.inspect.custom')](): Record<string, unknown> {
+    return this.toJSON();
+  }
+
   private buildPayload(drafts: EmbedDraft[], overflow: number): Record<string, unknown> {
     const kept = this.fitToBudget(drafts);
     const dropped = overflow + (drafts.length - kept.length);
