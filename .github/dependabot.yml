@@ -63,6 +63,32 @@ updates:
       - dependency-name: 'conventional-changelog-conventionalcommits'
         update-types: ['version-update:semver-major']
 
+  # ── Documentation website (VitePress) ─────────────────────────────
+  - package-ecosystem: npm
+    directory: /website
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      website-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    labels:
+      - 'dependencies'
+      - 'documentation'
+      - 'automated'
+    commit-message:
+      prefix: 'chore'
+      prefix-development: 'chore'
+      include: scope
+
   # ── GitHub Actions ────────────────────────────────────────────────
   - package-ecosystem: github-actions
     directory: /
