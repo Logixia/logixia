@@ -12,8 +12,11 @@ permissions: {}
 # PRs: cancel the old run when you push more changes (saves CI minutes).
 # main / develop pushes: never cancel — the release job lives inside this run,
 # so cancelling it mid-flight would abort a release in progress.
+# PRs share a group per branch (newer pushes cancel older runs); pushes to main
+# get one group per commit so a publish waiting for approval never blocks or
+# cancels CI for later commits.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -159,6 +162,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test, build]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    concurrency:
+      group: release-${{ github.ref }}
+      cancel-in-progress: false
     permissions:
       contents: write # push release tag, create the GitHub release
       issues: write # comment on released issues
@@ -194,8 +200,12 @@ jobs:
           HUSKY: 0
         run: npx semantic-release
 
+      # Runs even if semantic-release failed after pushing the tag (e.g. a
+      # GitHub comment/label call in the success step), so the tagged version
+      # still reaches npm. A tarball without a pushed tag is never published.
       - name: Locate tarball
         id: pack
+        if: ${{ !cancelled() }}
         run: |
           shopt -s nullglob
           files=(release/*.tgz)
@@ -209,6 +219,11 @@ jobs:
             exit 1
           fi
           version=$(node -p "require('./package.json').version")
+          if ! git ls-remote --exit-code --tags origin "refs/tags/v${version}" > /dev/null; then
+            echo "::error::Tag v${version} was not pushed; refusing to publish"
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
           {
             echo "released=true"
             echo "version=$version"
@@ -217,7 +232,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Upload npm tarball
-        if: steps.pack.outputs.released == 'true'
+        if: ${{ !cancelled() && steps.pack.outputs.released == 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: npm-tarball
@@ -241,7 +256,7 @@ jobs:
     name: Publish to npm
     runs-on: ubuntu-latest
     needs: release
-    if: needs.release.outputs.released == 'true'
+    if: ${{ !cancelled() && needs.release.outputs.released == 'true' }}
     environment: npm
     permissions:
       id-token: write # npm trusted publishing + provenance

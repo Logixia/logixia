@@ -39,6 +39,6 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           set -o pipefail
           status=0
-          npx size-limit 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || status=$?
+          npm run --silent size 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || status=$?
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
