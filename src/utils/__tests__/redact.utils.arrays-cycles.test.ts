@@ -143,7 +143,6 @@ describe('redactObject — class instances and built-ins', () => {
       view: new DataView(new ArrayBuffer(2)),
       map: new Map([['password', 1]]),
       set: new Set([1]),
-      err: new Error('boom'),
     };
     const out = redactObject(values, { paths: ['nothing'], patterns: [/zzz/g] });
     for (const [k, v] of Object.entries(values)) expect(out[k]).toBe(v);

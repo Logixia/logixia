@@ -49,9 +49,10 @@ import { safeToString } from '../utils/coerce.utils';
 import { isError, serializeError } from '../utils/error.utils';
 import { internalError, internalLog, internalWarn } from '../utils/internal-log';
 import { _getOtelPayloadIfEnabled, _isOtelBridgeEnabled } from '../utils/otel';
-import { applyRedaction, applyRedactionToString } from '../utils/redact.utils';
+import { applyRedaction, applyRedactionToString, REDACTION_FAILED } from '../utils/redact.utils';
 import { stringifyForLog } from '../utils/safe-stringify';
 import { Sampler } from '../utils/sampling.utils';
+import { stripControlChars } from '../utils/sanitize.utils';
 import { deregisterFromShutdown, flushOnExit, registerForShutdown } from '../utils/shutdown.utils';
 import { TraceContext } from '../utils/trace.utils';
 
@@ -824,9 +825,17 @@ export class LogixiaLogger<
     // code path when no redact config is present (fast path for the common case).
     let payload: Record<string, unknown> | undefined;
     if (rawPayload !== undefined && rawPayload !== null) {
-      payload = this._hasRedact
-        ? (applyRedaction(rawPayload, this.config.redact) ?? rawPayload)
-        : rawPayload;
+      if (this._hasRedact) {
+        // Fail closed: if redaction cannot complete, never emit the raw payload.
+        try {
+          payload = applyRedaction(rawPayload, this.config.redact) ?? rawPayload;
+        } catch (error) {
+          internalError('Redaction failed', error);
+          payload = { redaction: REDACTION_FAILED };
+        }
+      } else {
+        payload = rawPayload;
+      }
     }
 
     // Use a monomorphic LogEntry shape — always the same fields, some may be undefined.
@@ -838,9 +847,15 @@ export class LogixiaLogger<
     // interpolated into the message (e.g. `Auth: Bearer ${token}`) would
     // otherwise bypass redaction entirely and leak in plaintext. Path rules
     // don't apply to a bare string, so only `patterns` run here.
-    const safeMessage = this._hasRedact
-      ? applyRedactionToString(message, this.config.redact)
-      : message;
+    let safeMessage: string = message;
+    if (this._hasRedact) {
+      try {
+        safeMessage = applyRedactionToString(message, this.config.redact);
+      } catch (error) {
+        internalError('Redaction failed', error);
+        safeMessage = REDACTION_FAILED;
+      }
+    }
     const entry: LogEntry = {
       timestamp: nowIso(),
       level,
@@ -961,10 +976,12 @@ export class LogixiaLogger<
     formatted += this._formattedAppName;
 
     if (entry.traceId && this._fieldCache.get('traceId') !== false)
-      formatted += `${cyan}[${entry.traceId}]${reset} `;
+      formatted += `${cyan}[${stripControlChars(String(entry.traceId))}]${reset} `;
     if (entry.context && this._fieldCache.get('context') !== false)
-      formatted += `${yellow}[${entry.context}]${reset} `;
-    if (this._fieldCache.get('message') !== false) formatted += entry.message;
+      formatted += `${yellow}[${stripControlChars(String(entry.context))}]${reset} `;
+    if (this._fieldCache.get('message') !== false) {
+      formatted += stripControlChars(safeToString(entry.message));
+    }
 
     if (entry.payload !== undefined && this._fieldCache.get('payload') !== false) {
       formatted += ` ${stringifyForLog(entry.payload)}`;
