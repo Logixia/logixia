@@ -1,4 +1,3 @@
-/* eslint-disable sonarjs/no-hardcoded-passwords -- fake credentials are the point of this suite */
 /**
  * Credentials must not show up in JSON.stringify / util.inspect / spreads of a
  * transport (or the logger and manager that hold them), in health-check output,

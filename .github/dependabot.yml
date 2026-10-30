@@ -55,6 +55,9 @@ updates:
         update-types: ['version-update:semver-major']
       - dependency-name: '@nestjs/*'
         update-types: ['version-update:semver-major']
+      # Keep type definitions on the oldest-supported Node major (engines)
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
       # Must stay on 8.x: v9+ needs conventional-changelog-writer 9, but
       # @semantic-release/release-notes-generator ships writer 8.
       - dependency-name: 'conventional-changelog-conventionalcommits'

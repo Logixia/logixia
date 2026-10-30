@@ -1,6 +1,6 @@
 import * as main from '../index';
-import { SearchManager } from '../search';
 import * as searchEntry from '../search';
+import { SearchManager } from '../search';
 
 describe('logixia/search entry', () => {
   it('exports the search API', () => {
