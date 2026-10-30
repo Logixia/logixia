@@ -51,11 +51,12 @@ export default defineConfig([
     format: ['cjs', 'esm'],
     dts: true,
     clean: false,
+    fixedExtension: false,
     sourcemap: true,
     target: 'node16',
     platform: 'node',
     shims: true,
-    external: OPTIONAL_RUNTIME_DEPS,
+    deps: { neverBundle: OPTIONAL_RUNTIME_DEPS },
   },
   // Worker thread entry loaded by WorkerTransport (dist/worker-entry.js).
   {
@@ -64,9 +65,10 @@ export default defineConfig([
     format: ['cjs'],
     dts: false,
     clean: false,
+    fixedExtension: false,
     target: 'node16',
     platform: 'node',
-    external: OPTIONAL_RUNTIME_DEPS,
+    deps: { neverBundle: OPTIONAL_RUNTIME_DEPS },
   },
   // Browser / edge entry: must stay free of Node built-ins.
   {
@@ -75,9 +77,10 @@ export default defineConfig([
     format: ['cjs', 'esm'],
     dts: true,
     clean: false,
+    fixedExtension: false,
     sourcemap: true,
     platform: 'neutral',
-    external: OPTIONAL_RUNTIME_DEPS,
+    deps: { neverBundle: OPTIONAL_RUNTIME_DEPS },
   },
   // The `logixia` bin (package.json "bin" -> dist/cli/index.js).
   {
@@ -86,8 +89,9 @@ export default defineConfig([
     format: ['cjs'],
     dts: false,
     clean: false,
+    fixedExtension: false,
     target: 'node16',
     platform: 'node',
-    external: OPTIONAL_RUNTIME_DEPS,
+    deps: { neverBundle: OPTIONAL_RUNTIME_DEPS },
   },
 ]);
