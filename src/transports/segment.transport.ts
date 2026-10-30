@@ -10,7 +10,7 @@ import { protectSecrets } from './secret-config';
  * Sends log entries as Segment track/identify events via the HTTP Tracking API.
  *
  * @example
- * transports: { segment: { writeKey: process.env.SEGMENT_WRITE_KEY } }
+ * analytics: { segment: { writeKey: process.env.SEGMENT_WRITE_KEY } }
  */
 export class SegmentTransport extends AnalyticsTransport {
   private segmentConfig: SegmentTransportConfig;

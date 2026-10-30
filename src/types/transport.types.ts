@@ -113,7 +113,11 @@ export interface ConsoleTransportConfig {
 
 export interface AnalyticsTransportConfig {
   level?: string;
-  apiKey: string;
+  /**
+   * @deprecated Not used by Mixpanel, Segment or Google Analytics (they use `token`,
+   * `writeKey` and `measurementId`/`apiSecret`). Only DataDog reads an API key.
+   */
+  apiKey?: string;
   projectId?: string;
   endpoint?: string;
   batchSize?: number;
@@ -137,6 +141,7 @@ export interface MixpanelTransportConfig extends AnalyticsTransportConfig {
 }
 
 export interface DataDogTransportConfig extends AnalyticsTransportConfig {
+  /** Datadog API key (sent as `DD-API-KEY`). Required. */
   apiKey: string;
   site?:
     | 'datadoghq.com'

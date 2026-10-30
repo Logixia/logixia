@@ -8,7 +8,7 @@ import { protectSecrets } from './secret-config';
  * Sends log entries as Google Analytics 4 Measurement Protocol events.
  *
  * @example
- * transports: {
+ * analytics: {
  *   googleAnalytics: { measurementId: 'G-XXXXXXX', apiSecret: process.env.GA_API_SECRET }
  * }
  */
