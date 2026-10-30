@@ -288,10 +288,10 @@ describe('redactObject', () => {
     expect(result.createdAt).toBe(date);
   });
 
-  it('passes through Error values unchanged', () => {
+  it('serializes Error values so their props can be redacted', () => {
     const err = new Error('test');
     const result = redactObject({ error: err }, { paths: ['password'] });
-    expect(result.error).toBe(err);
+    expect(result.error).toMatchObject({ name: 'Error', message: 'test' });
   });
 
   it('passes through null values', () => {
