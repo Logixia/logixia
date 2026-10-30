@@ -162,6 +162,7 @@
     "dev:performance": "ts-node examples/performance-monitoring.ts",
     "dev:fields": "ts-node examples/field-configuration.ts",
     "dev:search": "ts-node examples/search-quickstart.ts",
+    "dev:search-readme": "ts-node examples/search-readme.ts",
     "dev:intelligent-search": "ts-node examples/intelligent-search.ts",
     "benchmark": "npm run build && node benchmarks/run.mjs",
     "check:exports": "node scripts/check-exports.mjs",
