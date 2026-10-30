@@ -982,23 +982,28 @@ const incomingTraceId = extractTraceId(req, {
 ### Express / Fastify middleware
 
 ```typescript
-import { traceMiddleware } from 'logixia';
+import { createExpressContextMiddleware, createFastifyContextHook } from 'logixia';
 
-// Zero-config — reads from traceparent / x-trace-id / x-request-id / x-correlation-id
-// and generates a UUID v4 if none is present. Sets X-Trace-Id on the response.
-app.use(traceMiddleware());
+// Express: reads x-trace-id (sanitised), falls back to a generated ID, and runs
+// the rest of the request in a context. Every log line carries it as its trace ID.
+app.use(createExpressContextMiddleware());
 
-// With custom config:
-app.use(
-  traceMiddleware({
-    enabled: true,
-    generator: () => `req_${crypto.randomUUID()}`,
-    extractor: {
-      header: ['x-trace-id', 'traceparent'],
-      query: ['traceId'],
-    },
-  })
-);
+// Fastify: register as an onRequest hook (no casts needed, no fastify import in logixia).
+// Reuses x-trace-id, then request.id, and shares the ID with createFastifyPlugin().
+fastify.addHook('onRequest', createFastifyContextHook());
+
+// Prefer full control? Wrap the request yourself:
+app.use((req, res, next) => {
+  const traceId =
+    extractTraceId(req, { header: DEFAULT_TRACE_HEADERS, query: ['traceId'] }) ?? generateTraceId();
+  res.setHeader('X-Trace-Id', traceId);
+  runWithTraceId(traceId, () => next());
+});
+
+// Request/response logging (separate from tracing) lives in 'logixia/middleware':
+//   app.use(createExpressMiddleware(logger));
+//   await fastify.register(createFastifyPlugin(logger));
+// NestJS: import { TraceMiddleware } from 'logixia/nest';
 
 // Service layer — no parameters needed, trace ID propagates automatically
 class OrderService {

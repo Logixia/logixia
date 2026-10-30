@@ -25,7 +25,7 @@
 import type { IBaseLogger } from '../types';
 import { internalError } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
-import { sanitizeIncomingId } from '../utils/trace.utils';
+import { resolveRequestTraceId } from '../utils/trace.utils';
 
 // ── Shared types ─────────────────────────────────────────────────────────────
 
@@ -182,11 +182,6 @@ function fire(result: unknown): void {
   }
 }
 
-function shortId(): string {
-  // eslint-disable-next-line sonarjs/pseudo-random -- non-security request ID
-  return Math.random().toString(36).slice(2, 10);
-}
-
 interface NameSets {
   headers: Set<string>;
   queryParams: Set<string>;
@@ -252,7 +247,7 @@ export function createExpressMiddleware(
       return;
     }
 
-    const traceId = sanitizeIncomingId(req.headers?.[traceHeaderName]) ?? shortId();
+    const traceId = resolveRequestTraceId(req, traceHeaderName);
     const startMs = Date.now();
     const baseFields = buildBaseFields(req, traceId, options, nameSets);
 
@@ -345,7 +340,7 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
         return;
       }
 
-      const traceId = sanitizeIncomingId(req.headers?.[traceHeaderName]) ?? shortId();
+      const traceId = resolveRequestTraceId(req, traceHeaderName);
       req._logixiaStart = Date.now();
       req._logixiaId = traceId;
 
@@ -371,7 +366,7 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
       const rep = reply as { statusCode?: number };
       const duration = Date.now() - req._logixiaStart;
       const status = rep.statusCode ?? 0;
-      const traceId = req._logixiaId ?? shortId();
+      const traceId = req._logixiaId ?? resolveRequestTraceId(req, traceHeaderName);
       const level = status >= 500 ? errorLevel : responseLevel;
       const baseFields = buildBaseFields(req, traceId, options, nameSets);
 

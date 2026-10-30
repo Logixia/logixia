@@ -197,8 +197,8 @@ export function runWithTraceId<T>(traceId: string, fn: () => T, data?: Record<st
 
 /** Shape that extractTraceId accepts (Express-compatible) */
 interface RequestLike {
-  headers?: Record<string, string | string[] | undefined>;
-  query?: Record<string, string | string[] | undefined>;
+  headers?: Record<string, HeaderValue>;
+  query?: Record<string, HeaderValue>;
   body?: Record<string, string | undefined>;
   params?: Record<string, string | undefined>;
 }
@@ -220,6 +220,37 @@ export function sanitizeIncomingId(value: unknown): string | undefined {
   if (typeof first !== 'string' || first.length > MAX_INCOMING_ID_LENGTH * 2) return undefined;
   const trimmed = first.trim();
   return SAFE_INCOMING_ID.test(trimmed) ? trimmed : undefined;
+}
+
+type HeaderValue = string | string[] | undefined;
+
+/** Minimal request shape for {@link resolveRequestTraceId}. */
+export interface TraceableRequest {
+  headers?: Record<string, HeaderValue>;
+  id?: unknown;
+}
+
+/**
+ * Resolve one trace ID per request, shared by every logixia hook that touches
+ * the request. The first caller picks the ID (sanitised header, then `request.id`,
+ * then a generated short ID) and stores it on the request so later hooks reuse it.
+ *
+ * @internal
+ */
+export function resolveRequestTraceId(req: TraceableRequest, headerName: string): string {
+  const holder = req as TraceableRequest & { _logixiaId?: string };
+  const cached = holder._logixiaId;
+  if (cached !== undefined) return cached;
+  const traceId =
+    sanitizeIncomingId(req.headers?.[headerName.toLowerCase()]) ??
+    sanitizeIncomingId(req.id) ??
+    randomUUID().slice(0, 8);
+  try {
+    holder._logixiaId = traceId;
+  } catch {
+    // frozen request object: fall back to per-call resolution
+  }
+  return traceId;
 }
 
 /** W3C trace-context: `version-traceId(32hex)-spanId(16hex)-flags(2hex)`. */

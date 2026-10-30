@@ -884,6 +884,17 @@ export class LogixiaLogger<
     deregisterFromShutdown(this);
   }
 
+  /**
+   * Active trace ID: TraceContext first, then the traceId carried by an active
+   * LogixiaContext scope. Both are plain ALS reads, so no extra per-call storage.
+   */
+  private activeTraceId(): string | undefined {
+    const fromTrace = TraceContext.instance.getCurrentTraceId();
+    if (fromTrace !== undefined) return fromTrace;
+    const fromContext = LogixiaContext.get()?.traceId;
+    return typeof fromContext === 'string' ? fromContext : undefined;
+  }
+
   // ── Core log method ──────────────────────────────────────────────────────────
 
   private async log(level: string, message: string, data?: Record<string, unknown>): Promise<void> {
@@ -892,7 +903,7 @@ export class LogixiaLogger<
 
     // ── Feature 8: Sampling ───────────────────────────────────────────────────
     if (this._sampler) {
-      const traceId = this.config.traceId ? TraceContext.instance.getCurrentTraceId() : undefined;
+      const traceId = this.config.traceId ? this.activeTraceId() : undefined;
       if (!this._sampler.shouldEmit(level, traceId)) return;
     }
 
@@ -938,7 +949,7 @@ export class LogixiaLogger<
     // Use a monomorphic LogEntry shape — always the same fields, some may be undefined.
     // Consistent shape lets V8 inline-cache property accesses across calls.
     const traceId = this.config.traceId
-      ? (TraceContext.instance.getCurrentTraceId() ?? this.fallbackTraceId)
+      ? (this.activeTraceId() ?? this.fallbackTraceId)
       : undefined;
     // Pattern-based redaction also applies to the message string — a secret
     // interpolated into the message (e.g. `Auth: Bearer ${token}`) would

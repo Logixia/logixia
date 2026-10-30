@@ -25,14 +25,8 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { randomUUID } from 'node:crypto';
 
-import { sanitizeIncomingId } from '../utils/trace.utils';
-
-/** Generates an 8-character random ID using Node's crypto module. */
-function randomShortId(): string {
-  return randomUUID().slice(0, 8);
-}
+import { resolveRequestTraceId } from '../utils/trace.utils';
 
 export interface LogContext {
   traceId?: string;
@@ -98,9 +92,18 @@ export const LogixiaContext = {
   },
 };
 
+/** Minimal structural request shape; Express and Fastify requests satisfy it. */
+export interface ContextRequestLike {
+  headers?: Record<string, string | string[] | undefined>;
+  id?: unknown;
+}
+
 /**
  * Create an Express/Connect-compatible middleware that wraps each request in
  * a `LogixiaContext.run()` scope populated with common request fields.
+ *
+ * The logger reads the scope's `traceId`, so every log line in the request
+ * carries it as its top-level trace ID.
  *
  * @example
  * ```ts
@@ -108,25 +111,19 @@ export const LogixiaContext = {
  * app.use(createExpressContextMiddleware());
  * ```
  */
-export function createExpressContextMiddleware(
+export function createExpressContextMiddleware<Req extends ContextRequestLike = ContextRequestLike>(
   options: {
     /** Extract additional fields from the request. */
-    enrich?: (req: Record<string, unknown>) => Partial<LogContext>;
+    enrich?: (req: Req) => Partial<LogContext>;
     /** Header to read the traceId from. Default: 'x-trace-id'. */
     traceIdHeader?: string;
   } = {}
 ) {
   const { enrich, traceIdHeader = 'x-trace-id' } = options;
 
-  return function logixiaContextMiddleware(
-    req: Record<string, unknown>,
-    _res: unknown,
-    next: () => void
-  ): void {
-    const headers = (req['headers'] ?? {}) as Record<string, string | undefined>;
-    const traceId = sanitizeIncomingId(headers[traceIdHeader.toLowerCase()]) ?? randomShortId();
-    const base: LogContext = { traceId };
-    LogixiaContext.run({ ...base, ...(enrich ? enrich(req) : {}) }, next);
+  return function logixiaContextMiddleware(req: Req, _res: unknown, next: () => void): void {
+    const traceId = resolveRequestTraceId(req, traceIdHeader);
+    LogixiaContext.run({ traceId, ...(enrich ? enrich(req) : {}) }, next);
   };
 }
 
@@ -134,26 +131,19 @@ export function createExpressContextMiddleware(
  * Create a Fastify lifecycle hook that wraps each request in a context scope.
  *
  * Register with `fastify.addHook('onRequest', createFastifyContextHook())`.
+ * Shares the per-request trace ID with `createFastifyPlugin()` from
+ * `logixia/middleware`, so both log the same ID regardless of registration order.
  */
-export function createFastifyContextHook(
+export function createFastifyContextHook<Req extends ContextRequestLike = ContextRequestLike>(
   options: {
-    enrich?: (request: Record<string, unknown>) => Partial<LogContext>;
+    enrich?: (request: Req) => Partial<LogContext>;
     traceIdHeader?: string;
   } = {}
 ) {
   const { enrich, traceIdHeader = 'x-trace-id' } = options;
 
-  return function logixiaFastifyHook(
-    request: Record<string, unknown>,
-    _reply: unknown,
-    done: () => void
-  ): void {
-    const headers = (request['headers'] ?? {}) as Record<string, string | undefined>;
-    const traceId =
-      sanitizeIncomingId(headers[traceIdHeader.toLowerCase()]) ??
-      sanitizeIncomingId(request['id']) ??
-      randomShortId();
-    const base: LogContext = { traceId };
-    LogixiaContext.run({ ...base, ...(enrich ? enrich(request) : {}) }, done);
+  return function logixiaFastifyHook(request: Req, _reply: unknown, done: () => void): void {
+    const traceId = resolveRequestTraceId(request, traceIdHeader);
+    LogixiaContext.run({ traceId, ...(enrich ? enrich(request) : {}) }, done);
   };
 }
