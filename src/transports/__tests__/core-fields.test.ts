@@ -224,8 +224,10 @@ describe('analytics providers', () => {
       data_ddsource: 'evil',
       data_hostname: 'evil',
     });
-    expect(log).not.toHaveProperty('status');
-    expect(log).not.toHaveProperty('ddtags');
+    expect(log.status).toBe('error');
+    expect(log.ddtags).toBe('env:prod,service:svc,version:1.2.3');
+    expect(log.ddsource).toBe('nodejs');
+    expect(log.hostname).not.toBe('evil');
     expect(log.host).not.toBe('evil');
   });
 

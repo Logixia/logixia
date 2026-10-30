@@ -1,5 +1,5 @@
 /**
- * Performance monitoring example using Logitron library
+ * Performance monitoring example using logixia
  */
 
 import { createLogger, LogLevel } from '../src';

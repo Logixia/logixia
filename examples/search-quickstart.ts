@@ -97,7 +97,7 @@ async function quickStart() {
 
   // 5. Find similar logs
   console.log('5. Find similar logs:');
-  const referenceLog = sampleLogs[0];
+  const referenceLog = sampleLogs[0]!;
   const similar = await searchManager.findSimilarLogs(referenceLog, 3);
   console.log(`   Reference: ${referenceLog.message}`);
   console.log(`   Similar logs:`);

@@ -123,6 +123,26 @@ interface ParsedQuery {
   limit: number | null;
 }
 
+/** Replace the contents of quoted literals with `_` (same length) so clause keywords inside them are ignored. */
+function maskQuoted(sql: string): string {
+  let out = '';
+  let quote: string | null = null;
+  for (const ch of sql) {
+    if (quote !== null) {
+      if (ch === quote) {
+        quote = null;
+        out += ch;
+      } else {
+        out += '_';
+      }
+    } else {
+      if (ch === "'" || ch === '"') quote = ch;
+      out += ch;
+    }
+  }
+  return out;
+}
+
 function parseSQL(sql: string): ParsedQuery {
   const result: ParsedQuery = {
     select: '*',
@@ -133,6 +153,8 @@ function parseSQL(sql: string): ParsedQuery {
   };
 
   const upper = sql.trim().toUpperCase();
+  const masked = maskQuoted(sql.trim());
+  const maskedUpper = masked.toUpperCase();
 
   // ── Aggregation shorthands ─────────────────────────────────────────────────
   // "COUNT BY field"
@@ -168,7 +190,7 @@ function parseSQL(sql: string): ParsedQuery {
 
   // ── SELECT ─────────────────────────────────────────────────────────────────
   if (upper.startsWith('SELECT')) {
-    const fromIdx = upper.indexOf(' FROM ');
+    const fromIdx = maskedUpper.indexOf(' FROM ');
     if (fromIdx !== -1) {
       const selectPart = sql.slice(6, fromIdx + sql.length - upper.length).trim();
       if (selectPart !== '*') {
@@ -183,11 +205,10 @@ function parseSQL(sql: string): ParsedQuery {
   // ── WHERE ──────────────────────────────────────────────────────────────────
   // Use indexOf-based extraction to avoid lazy .+? with |$ alternation (ReDoS risk).
   const remainder = sql.trim();
-  const upperRemainder = remainder.toUpperCase();
-  const whereTokenIdx = upperRemainder.indexOf('WHERE ');
+  const whereTokenIdx = maskedUpper.indexOf('WHERE ');
   if (whereTokenIdx !== -1) {
     const afterWhere = remainder.slice(whereTokenIdx + 6).trimStart();
-    const upperAfter = afterWhere.toUpperCase();
+    const upperAfter = maskedUpper.slice(whereTokenIdx + 6).trimStart();
     const orderIdx = upperAfter.indexOf(' ORDER BY ');
     const limitIdx = upperAfter.indexOf(' LIMIT ');
     const candidates = [orderIdx, limitIdx].filter((i) => i !== -1);
@@ -196,7 +217,7 @@ function parseSQL(sql: string): ParsedQuery {
   }
 
   // ── ORDER BY ───────────────────────────────────────────────────────────────
-  const orderMatch = /ORDER\s+BY\s+(\w+)(?:\s+(ASC|DESC))?/i.exec(remainder);
+  const orderMatch = /ORDER\s+BY\s+(\w+)(?:\s+(ASC|DESC))?/i.exec(masked);
   if (orderMatch) {
     result.orderBy = {
       field: orderMatch[1]!,
@@ -205,7 +226,7 @@ function parseSQL(sql: string): ParsedQuery {
   }
 
   // ── LIMIT ──────────────────────────────────────────────────────────────────
-  const limitMatch = /LIMIT\s+(\d+)/i.exec(remainder);
+  const limitMatch = /LIMIT\s+(\d+)/i.exec(masked);
   if (limitMatch) {
     result.limit = Number.parseInt(limitMatch[1]!, 10);
   }
@@ -532,7 +553,7 @@ export function executeQuery(
     sql?: string;
     since?: string;
     until?: string;
-    limit?: number;
+    limit?: number | undefined;
     orderBy?: string;
   }
 ): { results: any[]; aggregationOutput: string | null } {
@@ -573,19 +594,18 @@ export function executeQuery(
     return { results: [], aggregationOutput: runAggregation(rows, query.aggregation) };
   }
 
-  // ── SELECT projection ─────────────────────────────────────────────────────
-  rows = rows.map((row) => projectRow(row, query.select));
-
-  // ── ORDER BY ──────────────────────────────────────────────────────────────
+  // ── ORDER BY (before projection so non-selected fields can be sorted on) ───
   const orderField = query.orderBy?.field ?? opts.orderBy;
   if (orderField) {
     const dir = query.orderBy?.dir ?? 'ASC';
-    rows.sort((a, b) => {
+    rows = [...rows].sort((a, b) => {
       const av = a[orderField];
       const bv = b[orderField];
-      if (av === undefined && bv === undefined) return 0;
-      if (av === undefined) return dir === 'ASC' ? 1 : -1;
-      if (bv === undefined) return dir === 'ASC' ? -1 : 1;
+      const aMissing = av === undefined || av === null;
+      const bMissing = bv === undefined || bv === null;
+      if (aMissing && bMissing) return 0;
+      if (aMissing) return 1;
+      if (bMissing) return -1;
       if (typeof av === 'number' && typeof bv === 'number') {
         return dir === 'ASC' ? av - bv : bv - av;
       }
@@ -597,9 +617,12 @@ export function executeQuery(
 
   // ── LIMIT ─────────────────────────────────────────────────────────────────
   const limitN = query.limit ?? opts.limit;
-  if (limitN && limitN > 0) {
+  if (typeof limitN === 'number' && limitN >= 0) {
     rows = rows.slice(0, limitN);
   }
+
+  // ── SELECT projection ─────────────────────────────────────────────────────
+  rows = rows.map((row) => projectRow(row, query.select));
 
   return { results: rows, aggregationOutput: null };
 }
@@ -620,7 +643,7 @@ export const queryCommand = new Command('query')
   .option('--sql <query>', 'SQL-like query string')
   .option('--since <time>', 'Only include entries after this time (e.g. "last 2 hours", "today")')
   .option('--until <time>', 'Only include entries before this time')
-  .option('--limit <n>', 'Maximum number of results to return', '0')
+  .option('--limit <n>', 'Maximum number of results to return')
   .option('--order-by <field>', 'Sort results by this field')
   .option('--format <fmt>', 'Output format: line, table, json, ndjson', 'line')
   .option('--follow', 'Follow file for new entries matching the query (tail mode)', false)
@@ -634,7 +657,8 @@ export const queryCommand = new Command('query')
     const raw = fs.readFileSync(full, 'utf8');
     const entries = safeParseLogs(raw);
 
-    const limitN = opts.limit ? Number.parseInt(opts.limit, 10) : 0;
+    const parsedLimit = opts.limit === undefined ? Number.NaN : Number.parseInt(opts.limit, 10);
+    const limitN = Number.isNaN(parsedLimit) ? undefined : parsedLimit;
 
     const { results, aggregationOutput } = executeQuery(entries, {
       sql: opts.sql,

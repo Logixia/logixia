@@ -5,6 +5,16 @@
 import type { LogEntry } from '../../types';
 import type { AnomalyDetection, LogPattern } from '../types';
 
+const STACK_FRAME_TAIL = /:\d+:\d+\)?$/;
+
+/** True when any line is a real stack frame, e.g. `    at fn (/app/file.js:10:5)`. */
+function hasStackFrame(message: string): boolean {
+  return message.split('\n').some((line) => {
+    const t = line.trim();
+    return t.startsWith('at ') && STACK_FRAME_TAIL.test(t);
+  });
+}
+
 /**
  * Pattern recognition engine for log analysis
  */
@@ -148,6 +158,7 @@ export class PatternRecognitionEngine {
 
   private extractErrorPatterns(logs: LogEntry[]): LogPattern[] {
     const errorLogs = logs.filter((log) => log.level === 'error' || log.error);
+    this.patternFrequencies.clear();
     const patternMap = new Map<string, { examples: LogEntry[]; count: number }>();
 
     for (const log of errorLogs) {
@@ -162,6 +173,7 @@ export class PatternRecognitionEngine {
         pattern.examples.push(log);
       }
       pattern.count++;
+      this.patternFrequencies.set(errorPattern, pattern.count);
     }
 
     return Array.from(patternMap.entries()).map(([pattern, data], index) => ({
@@ -206,9 +218,9 @@ export class PatternRecognitionEngine {
 
   private normalizeMessage(message: string): string {
     return message
-      .replace(/\d+/g, '<NUM>') // Replace numbers
       .replace(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi, '<UUID>') // Replace UUIDs
       .replace(/[a-f0-9]{32}/gi, '<HASH>') // Replace hashes
+      .replace(/\d+/g, '<NUM>') // Replace numbers
       .replace(/"[^"]*"/g, '<STRING>') // Replace quoted strings
       .replace(/\b\w+@\w+\.\w+\b/g, '<EMAIL>') // Replace emails
       .trim();
@@ -289,7 +301,7 @@ export class PatternRecognitionEngine {
     }
 
     // Check for stack trace in non-error logs
-    if (log.level !== 'error' && log.message.includes('at ')) {
+    if (log.level !== 'error' && hasStackFrame(log.message)) {
       deviations.push('Stack trace in non-error log');
     }
 

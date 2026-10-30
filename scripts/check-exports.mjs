@@ -26,8 +26,8 @@ try {
   const project = path.join(tmp, 'project');
   fs.mkdirSync(project);
   fs.writeFileSync(path.join(project, 'package.json'), '{"name":"check","private":true}');
-  // The main entry still requires @nestjs/common; installing it keeps that
-  // separate problem from hiding a missing subpath.
+  // Nest peers are installed so logixia/nest loads; scripts/check-optional-peers.mjs
+  // covers the install without them.
   run(
     npm,
     [

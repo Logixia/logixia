@@ -673,7 +673,7 @@ const logger = createLogger({
     analytics: {
       datadog: {
         apiKey: process.env.DD_API_KEY!,
-        site: 'datadoghq.com', // or 'datadoghq.eu', 'us3.datadoghq.com'
+        site: 'datadoghq.com', // or 'datadoghq.eu', 'us3.datadoghq.com', 'us5.datadoghq.com', 'ap1.datadoghq.com', 'ddog-gov.com'
         service: 'api',
         env: 'production',
         enableLogs: true,
@@ -757,6 +757,31 @@ const logger = createLogger({
 // One call → console + file + postgres + datadog. All concurrent. All non-blocking.
 await logger.info('Order placed', { orderId: 'ord_789' });
 ```
+
+### Slack and Discord webhook transports
+
+Send alerts to a chat channel. Both default to `level: 'error'`, batch entries that arrive within `minIntervalMs` (default 1000) into one message, and cap a message at 10 entries (the rest are dropped and counted in the message).
+
+```typescript
+import { createLogger } from 'logixia';
+import { DiscordTransport, SlackTransport } from 'logixia';
+
+const logger = createLogger({
+  appName: 'api',
+  transports: {
+    custom: [
+      new SlackTransport({ webhookUrl: process.env.SLACK_WEBHOOK_URL!, level: 'error' }),
+      new DiscordTransport({ webhookUrl: process.env.DISCORD_WEBHOOK_URL!, level: 'warn' }),
+    ],
+  },
+});
+```
+
+- The webhook URL is a secret. It must be `https:` on `hooks.slack.com` (Slack) or `discord.com` / `discordapp.com` (Discord) unless you pass `allowCustomUrl: true`. It is never logged and never appears in error messages (only the host does).
+- Logged text is escaped: Slack `&`, `<`, `>` (so `<!channel>` and `<@U123>` in log data cannot ping anyone); Discord markdown, plus `allowed_mentions: { parse: [] }` on every request.
+- Platform limits are enforced by truncation (Slack header 150 and data 2,500 chars; Discord title 256, description 4,096, 25 fields, 6,000 per message).
+- HTTP 429 waits for `Retry-After` (Discord: `retry_after`), then retries up to `maxRetries` (default 1). Other failures keep the batch queued with backoff; `flush()` rejects with a host-only error. The queue is bounded by `maxBufferSize` (default 1000, oldest dropped).
+- Also available: `username`, `iconEmoji` (Slack), `avatarUrl` (Discord), `filter`, `formatter`, `flush()` and `close()` (flushes pending entries).
 
 ### Custom transport
 
@@ -992,6 +1017,25 @@ class OrderService {
 
 The default headers checked for an incoming trace ID (in priority order) are: `traceparent`, `x-trace-id`, `x-request-id`, `x-correlation-id`, `trace-id`.
 
+### Hono
+
+On Node, Hono needs nothing beyond `runWithTraceId()` — wrap `await next()` and every log line in the request carries the trace ID:
+
+```typescript
+app.use(async (c, next) => {
+  const traceId =
+    extractTraceId({ headers: c.req.header() }, { header: DEFAULT_TRACE_HEADERS }) ??
+    generateTraceId();
+  await runWithTraceId(traceId, next);
+});
+```
+
+See [`examples/hono-example.ts`](./examples/hono-example.ts) (`npm run dev:hono`) for the full version.
+
+### Next.js (App Router)
+
+In a route handler on the Node.js runtime (`export const runtime = 'nodejs'`) the regular `logixia` entry works: wrap the handler body in `runWithTraceId(traceId, ...)`. See [`examples/nextjs/`](./examples/nextjs/) for a copy-paste route handler.
+
 ### NestJS trace middleware
 
 The `TraceMiddleware` class integrates directly with NestJS's middleware system. `LogixiaLoggerModule.forRoot()` applies it automatically across all routes — no manual wiring needed:
@@ -1001,7 +1045,7 @@ The `TraceMiddleware` class integrates directly with NestJS's middleware system.
 // For manual use in a custom module:
 
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
-import { TraceMiddleware } from 'logixia';
+import { TraceMiddleware } from 'logixia/nest';
 
 @Module({})
 export class AppModule implements NestModule {
@@ -1016,7 +1060,7 @@ export class AppModule implements NestModule {
 Propagates trace IDs through Kafka message handlers. Reads `traceId` / `trace_id` / `x-trace-id` from the message body or headers and runs the handler inside that trace context:
 
 ```typescript
-import { KafkaTraceInterceptor } from 'logixia';
+import { KafkaTraceInterceptor } from 'logixia/nest';
 import { UseInterceptors, Controller } from '@nestjs/common';
 import { MessagePattern } from '@nestjs/microservices';
 
@@ -1038,7 +1082,7 @@ export class OrdersConsumer {
 Propagates trace IDs through WebSocket event handlers. Reads `traceId` from the message body, event payload, or handshake query:
 
 ```typescript
-import { WebSocketTraceInterceptor } from 'logixia';
+import { WebSocketTraceInterceptor } from 'logixia/nest';
 import { UseInterceptors, WebSocketGateway, SubscribeMessage } from '@nestjs/websockets';
 
 @UseInterceptors(new WebSocketTraceInterceptor())
@@ -1060,6 +1104,11 @@ export class EventsGateway {
 
 ## NestJS integration
 
+> **Upgrading from 1.x:** since 2.0.0, everything NestJS-specific lives in `logixia/nest` only.
+> Change `import { LogixiaLoggerModule, LogixiaLoggerService, LogixiaExceptionFilter, InjectLogger, LogMethod } from 'logixia'`
+> to `... from 'logixia/nest'`. The root `logixia` entry no longer loads `@nestjs/common`, so plain Node, Express and Fastify apps
+> work without NestJS installed.
+
 Drop-in module with zero boilerplate. Registers `TraceMiddleware` for all routes, provides `LogixiaLoggerService`, `KafkaTraceInterceptor`, and `WebSocketTraceInterceptor` via the global DI container.
 
 > **Full working example** — see [`examples/nestjs-app/`](./examples/nestjs-app/) for a complete NestJS app with Docker Compose (Postgres, MongoDB, Kafka, Kafdrop) that exercises every feature: `LogixiaLoggerModule`, `TraceMiddleware`, `LogixiaExceptionFilter`, `HttpLoggingInterceptor`, `WebSocketTraceInterceptor`, `KafkaTraceInterceptor`, `@LogMethod`, `child()` loggers, `timeAsync`, real Kafka producer + consumer.
@@ -1074,7 +1123,7 @@ Drop-in module with zero boilerplate. Registers `TraceMiddleware` for all routes
 ```typescript
 // app.module.ts
 import { Module } from '@nestjs/common';
-import { LogixiaLoggerModule } from 'logixia';
+import { LogixiaLoggerModule } from 'logixia/nest';
 
 @Module({
   imports: [
@@ -1120,7 +1169,7 @@ LogixiaLoggerModule.forRootAsync({
 ```typescript
 // orders.service.ts
 import { Injectable } from '@nestjs/common';
-import { LogixiaLoggerService } from 'logixia';
+import { LogixiaLoggerService } from 'logixia/nest';
 
 @Injectable()
 export class OrdersService {
@@ -1138,7 +1187,7 @@ export class OrdersService {
 ```typescript
 // orders.module.ts
 import { Module } from '@nestjs/common';
-import { LogixiaLoggerModule } from 'logixia';
+import { LogixiaLoggerModule } from 'logixia/nest';
 import { OrdersService } from './orders.service';
 
 @Module({
@@ -1151,7 +1200,7 @@ export class OrdersModule {}
 ```typescript
 // orders.service.ts — inject the feature-scoped token
 import { Inject, Injectable } from '@nestjs/common';
-import { LOGIXIA_LOGGER_PREFIX, LogixiaLoggerService } from 'logixia';
+import { LOGIXIA_LOGGER_PREFIX, LogixiaLoggerService } from 'logixia/nest';
 
 @Injectable()
 export class OrdersService {
@@ -1186,12 +1235,12 @@ await logger.mysql('Slow query detected', { query, ms: 1240 });
 await logger.payment('Charge captured', { txnId, amount: 99.99 });
 ```
 
-**TraceId** — with `traceId: true`, every log line carries a correlation ID automatically. Use `LogixiaContext.run()` to scope a trace to a block (the `TraceMiddleware` does this per-request automatically):
+**TraceId** — with `traceId: true`, every log line carries a correlation ID automatically. Use `runWithTraceId()` to scope a trace to a block (the `TraceMiddleware` does this per-request automatically):
 
 ```typescript
-import { LogixiaContext } from 'logixia';
+import { runWithTraceId } from 'logixia';
 
-await LogixiaContext.run({ traceId: req.headers['x-request-id'] }, async () => {
+await runWithTraceId(String(req.headers['x-request-id']), async () => {
   await logger.info('Request received'); // traceId: "abc-123" in every line
   await logger.kafka('Event published'); // same traceId
 });
@@ -1206,7 +1255,7 @@ Automatically logs method entry, exit, duration, and errors — no manual `try/c
 
 ```typescript
 import { Injectable } from '@nestjs/common';
-import { LogixiaLoggerService, LogMethod } from 'logixia';
+import { LogixiaLoggerService, LogMethod } from 'logixia/nest';
 
 @Injectable()
 export class PaymentService {
@@ -1243,7 +1292,7 @@ A global NestJS exception filter that automatically logs unhandled exceptions �
 ```typescript
 // main.ts
 import { NestFactory } from '@nestjs/core';
-import { LogixiaExceptionFilter } from 'logixia';
+import { LogixiaExceptionFilter } from 'logixia/nest';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -1258,7 +1307,7 @@ With `LogixiaLoggerModule` set up, inject the service directly so it logs to you
 
 ```typescript
 import { APP_FILTER } from '@nestjs/core';
-import { LogixiaExceptionFilter, LogixiaLoggerService } from 'logixia';
+import { LogixiaExceptionFilter, LogixiaLoggerService } from 'logixia/nest';
 
 // In AppModule providers:
 {
@@ -1356,6 +1405,8 @@ import { correlationFastifyHook } from 'logixia/correlation';
 const app = Fastify();
 app.addHook('onRequest', correlationFastifyHook());
 ```
+
+> **Full working example** — see [`examples/fastify-example.ts`](./examples/fastify-example.ts) (`npm run dev:fastify`) for request logging, trace IDs and redaction on Fastify.
 
 ### Outbound fetch / axios
 
@@ -1479,6 +1530,8 @@ const logger = new BrowserLogger({
   ],
 });
 ```
+
+**Cloudflare Workers** — see [`examples/cloudflare-worker/`](./examples/cloudflare-worker/) for a Worker that logs JSON, tags each request with `child({ requestId })` and flushes a `BrowserRemoteTransport` with `ctx.waitUntil()`. Pass `flushIntervalMs: 0` to the transport: Workers don't allow timers at global scope.
 
 The following utilities from the main package are also re-exported from `logixia/browser` (safe for non-Node runtimes):
 
@@ -2261,11 +2314,14 @@ import {
   registerForShutdown, // (logger) => void
   deregisterFromShutdown, // (logger) => void
   resetShutdownHandlers, // () => void — useful in tests
-  // NestJS extras
+} from 'logixia';
+
+// NestJS extras (requires @nestjs/common):
+import {
   InjectLogger, // @InjectLogger() parameter decorator
   LogMethod, // @LogMethod() method decorator
   LogixiaExceptionFilter, // global exception filter
-} from 'logixia';
+} from 'logixia/nest';
 
 // Cloud transports (subpath imports):
 import { CloudWatchTransport } from 'logixia/cloudwatch';

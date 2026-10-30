@@ -138,12 +138,21 @@ export interface MixpanelTransportConfig extends AnalyticsTransportConfig {
 
 export interface DataDogTransportConfig extends AnalyticsTransportConfig {
   apiKey: string;
-  site?: 'datadoghq.com' | 'datadoghq.eu' | 'us3.datadoghq.com' | 'us5.datadoghq.com';
+  site?:
+    | 'datadoghq.com'
+    | 'datadoghq.eu'
+    | 'us3.datadoghq.com'
+    | 'us5.datadoghq.com'
+    | 'ap1.datadoghq.com'
+    | 'ddog-gov.com';
+  /** Gzip log request bodies (`Content-Encoding: gzip`). Default false. */
+  compress?: boolean;
   service?: string;
   version?: string;
   env?: string;
   enableMetrics?: boolean;
   enableLogs?: boolean;
+  /** @deprecated No effect. Trace correlation is added to every log as `dd.trace_id`. */
   enableTraces?: boolean;
 }
 
