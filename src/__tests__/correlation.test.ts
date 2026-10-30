@@ -154,7 +154,7 @@ describe('correlation helpers', () => {
   });
 
   describe('childFromRequest', () => {
-    it('passes request metadata and the first forwarded IP to logger.child', () => {
+    it('passes request metadata to logger.child and ignores X-Forwarded-For by default', () => {
       const child = { child: jest.fn() };
       child.child.mockReturnValue(child);
 
@@ -167,6 +167,7 @@ describe('correlation helpers', () => {
           },
           method: 'POST',
           url: '/orders',
+          socket: { remoteAddress: '203.0.113.9' },
         },
         child
       );
@@ -177,8 +178,69 @@ describe('correlation helpers', () => {
         method: 'POST',
         url: '/orders',
         userAgent: 'test-agent',
-        ip: '203.0.113.7',
+        ip: '203.0.113.9',
       });
+    });
+
+    it('uses the first forwarded IP only with trustProxy', () => {
+      const child = { child: jest.fn() };
+      child.child.mockReturnValue(child);
+      childFromRequest(
+        { headers: { 'x-forwarded-for': ' 203.0.113.7, 10.0.0.2' }, ip: '203.0.113.9' },
+        child,
+        { trustProxy: true }
+      );
+      expect(child.child.mock.calls[0]![0]).toMatchObject({ ip: '203.0.113.7' });
+    });
+
+    it('caps the user agent length', () => {
+      const child = { child: jest.fn() };
+      childFromRequest({ headers: { 'user-agent': 'a'.repeat(5000) } }, child);
+      expect(child.child.mock.calls[0]![0].userAgent).toHaveLength(512);
+    });
+
+    it('falls back to child(context, data) for loggers that require a string context', () => {
+      const fake = {
+        child: jest.fn((ns: unknown, data?: unknown) => {
+          if (typeof ns !== 'string') throw new TypeError('ns.split is not a function');
+          return { ns, data } as never;
+        }),
+      };
+      const result = childFromRequest({ headers: {}, method: 'GET' }, fake as never) as never as {
+        ns: string;
+        data: Record<string, unknown>;
+      };
+      expect(result.ns).toBe('request');
+      expect(result.data.method).toBe('GET');
+    });
+
+    it('works with a real LogixiaLogger', async () => {
+      const { createLogger } = await import('../index');
+      const logger = createLogger({ appName: 'a', format: { json: false, colorize: false } });
+      expect(() => childFromRequest({ headers: {}, method: 'GET' }, logger as never)).not.toThrow();
+    });
+  });
+
+  describe('incoming id validation', () => {
+    it('drops unsafe message ids and origin service values', () => {
+      expect(
+        extractMessageCorrelationId({ headers: { 'x-correlation-id': 'a\r\nb' } })
+      ).toBeUndefined();
+      expect(
+        extractMessageCorrelationId({
+          MessageAttributes: { correlationId: { StringValue: 'x'.repeat(200) } },
+        })
+      ).toBeUndefined();
+      expect(extractMessageCorrelationId({ correlationId: '\u001b[2J' })).toBeUndefined();
+    });
+
+    it('ignores an invalid x-origin-service header', () => {
+      const mw = correlationMiddleware();
+      let seen: Record<string, unknown> | undefined;
+      mw({ headers: { 'x-origin-service': 'evil\u001b[2J' } }, {}, () => {
+        seen = LogixiaContext.get();
+      });
+      expect(seen?.originService).toBeUndefined();
     });
   });
 

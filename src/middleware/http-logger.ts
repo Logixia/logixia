@@ -24,6 +24,7 @@
 
 import type { IBaseLogger } from '../types';
 import { stringifyForLog } from '../utils/safe-stringify';
+import { sanitizeIncomingId } from '../utils/trace.utils';
 
 // ── Shared types ─────────────────────────────────────────────────────────────
 
@@ -165,7 +166,7 @@ export function createExpressMiddleware(
       return;
     }
 
-    const traceId = (req.headers?.[traceIdHeader] as string | undefined) ?? shortId();
+    const traceId = sanitizeIncomingId(req.headers?.[traceIdHeader]) ?? shortId();
     const startMs = Date.now();
     const baseFields = buildBaseFields(req, traceId, options);
 
@@ -250,7 +251,7 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
         return;
       }
 
-      const traceId = (req.headers?.[traceIdHeader] as string | undefined) ?? shortId();
+      const traceId = sanitizeIncomingId(req.headers?.[traceIdHeader]) ?? shortId();
       req._logixiaStart = Date.now();
       req._logixiaId = traceId;
 

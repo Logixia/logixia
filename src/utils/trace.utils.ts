@@ -3,8 +3,7 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
-
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 
 import type { TraceIdConfig, TraceIdExtractorConfig } from '../types';
 
@@ -65,7 +64,7 @@ export class TraceContext {
 
   /** UUID v4 generator (default). */
   generate(): string {
-    return uuidv4();
+    return randomUUID();
   }
 
   /** Read the trace ID from the current async context. */
@@ -204,15 +203,23 @@ interface RequestLike {
   params?: Record<string, string | undefined>;
 }
 
+/** Maximum accepted length for an incoming trace / correlation / request ID. */
+export const MAX_INCOMING_ID_LENGTH = 128;
+
+const SAFE_INCOMING_ID = /^[A-Za-z0-9._:-]{1,128}$/;
+
 /**
- * Coerce an arbitrary value to a non-empty trace ID string, or `undefined`.
- * Rejects empty/whitespace-only strings, non-strings, and non-first array elements.
+ * Validate an externally supplied identifier (trace ID, correlation ID, origin
+ * service name, message-queue ID). Accepts only 1-128 characters from
+ * `[A-Za-z0-9._:-]`; surrounding whitespace is trimmed first. Arrays use their
+ * first element. Returns the cleaned value, or `undefined` when it is unusable
+ * so callers can generate a fresh ID instead of passing client text through.
  */
-function toValidTraceId(value: unknown): string | undefined {
+export function sanitizeIncomingId(value: unknown): string | undefined {
   const first = Array.isArray(value) ? value[0] : value;
-  if (typeof first !== 'string') return undefined;
+  if (typeof first !== 'string' || first.length > MAX_INCOMING_ID_LENGTH * 2) return undefined;
   const trimmed = first.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
+  return SAFE_INCOMING_ID.test(trimmed) ? trimmed : undefined;
 }
 
 /** W3C trace-context: `version-traceId(32hex)-spanId(16hex)-flags(2hex)`. */
@@ -239,7 +246,7 @@ export function extractTraceId(
     const headers = Array.isArray(config.header) ? config.header : [config.header];
     for (const header of headers) {
       const lower = header.toLowerCase();
-      const value = toValidTraceId(req.headers?.[lower]);
+      const value = sanitizeIncomingId(req.headers?.[lower]);
       if (value) return lower === 'traceparent' ? parseTraceparent(value) : value;
     }
   }
@@ -247,7 +254,7 @@ export function extractTraceId(
   if (config.query) {
     const queries = Array.isArray(config.query) ? config.query : [config.query];
     for (const query of queries) {
-      const value = toValidTraceId(req.query?.[query]);
+      const value = sanitizeIncomingId(req.query?.[query]);
       if (value) return value;
     }
   }
@@ -255,7 +262,7 @@ export function extractTraceId(
   if (config.body) {
     const bodyFields = Array.isArray(config.body) ? config.body : [config.body];
     for (const field of bodyFields) {
-      const value = toValidTraceId(req.body?.[field]);
+      const value = sanitizeIncomingId(req.body?.[field]);
       if (value) return value;
     }
   }
@@ -263,7 +270,7 @@ export function extractTraceId(
   if (config.params) {
     const paramFields = Array.isArray(config.params) ? config.params : [config.params];
     for (const param of paramFields) {
-      const value = toValidTraceId(req.params?.[param]);
+      const value = sanitizeIncomingId(req.params?.[param]);
       if (value) return value;
     }
   }

@@ -54,6 +54,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { LogixiaContext } from './context/async-context';
+import { sanitizeIncomingId } from './utils/trace.utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -117,18 +118,15 @@ export function generateCorrelationId(): string {
   return randomUUID();
 }
 
-const MAX_INCOMING_ID_LENGTH = 128;
-const VALID_INCOMING_ID = /^[A-Za-z0-9._:-]+$/;
-
 /**
  * Return an incoming correlation ID only if it is short and made of safe
  * characters. Anything else (over-long, empty, or containing newlines or other
  * control characters) is dropped so the caller generates a fresh ID instead of
  * writing client-supplied text into every log line.
  */
-function validIncomingId(value: string | undefined): string | undefined {
-  if (value === undefined || value.length > MAX_INCOMING_ID_LENGTH) return undefined;
-  return VALID_INCOMING_ID.test(value) ? value : undefined;
+function validIncomingId(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.trim() !== value) return undefined;
+  return sanitizeIncomingId(value);
 }
 
 // ── Context helpers ───────────────────────────────────────────────────────────
@@ -194,7 +192,7 @@ export function correlationMiddleware(options: CorrelationMiddlewareOptions = {}
     // Node lower-cases incoming header names, so look up with lower-cased keys.
     const incomingId = trustIncoming ? validIncomingId(headers[header.toLowerCase()]) : undefined;
     const correlationId = incomingId ?? generate();
-    const originService = headers[originServiceHeader.toLowerCase()];
+    const originService = validIncomingId(headers[originServiceHeader.toLowerCase()]);
 
     if (setResponseHeader) {
       const setHeader = res['setHeader'] as ((name: string, value: string) => void) | undefined;
@@ -243,7 +241,7 @@ export function correlationFastifyHook(options: CorrelationMiddlewareOptions = {
     // Node lower-cases incoming header names, so look up with lower-cased keys.
     const incomingId = trustIncoming ? validIncomingId(headers[header.toLowerCase()]) : undefined;
     const correlationId = incomingId ?? generate();
-    const originService = headers[originServiceHeader.toLowerCase()];
+    const originService = validIncomingId(headers[originServiceHeader.toLowerCase()]);
 
     if (setResponseHeader) {
       const replyHeader = reply['header'] as ((name: string, value: string) => void) | undefined;
@@ -346,12 +344,35 @@ export function createCorrelationAxiosInterceptor(
 
 // ── Child logger from request ─────────────────────────────────────────────────
 
+const MAX_USER_AGENT_LENGTH = 512;
+const MAX_IP_LENGTH = 64;
+
+export interface ChildFromRequestOptions {
+  /** Header to read the correlation ID from. @default 'x-correlation-id' */
+  correlationHeader?: string;
+  /**
+   * Take the client IP from the first `X-Forwarded-For` entry. Only enable this
+   * when the app sits behind a proxy that overwrites the header; otherwise any
+   * client can choose the logged IP.
+   * @default false
+   */
+  trustProxy?: boolean;
+  /**
+   * Context name passed as the first argument to `logger.child(context, data)`.
+   * When omitted, `child(fields)` is tried first and `child('request', fields)`
+   * is used for loggers that require a string context (such as `LogixiaLogger`).
+   */
+  childContext?: string;
+}
+
 /**
  * Create a child logger enriched with all correlation-relevant identifiers
  * extracted from the incoming HTTP request.
  *
  * The child logger's every call automatically includes:
- * `correlationId`, `requestId`, `method`, `url`, `userAgent`, `ip`
+ * `correlationId`, `method`, `url`, `userAgent`, `ip`
+ *
+ * The IP comes from `req.ip` / the socket address unless `trustProxy` is set.
  *
  * @example
  * ```ts
@@ -368,10 +389,10 @@ export function createCorrelationAxiosInterceptor(
  * });
  * ```
  */
-export function childFromRequest<TLogger extends { child(ctx: Record<string, unknown>): TLogger }>(
+export function childFromRequest<TLogger extends { child(...args: never[]): TLogger }>(
   req: Record<string, unknown>,
   logger: TLogger,
-  options: { correlationHeader?: string } = {}
+  options: ChildFromRequestOptions = {}
 ): TLogger {
   const correlationHeader = options.correlationHeader ?? 'x-correlation-id';
 
@@ -384,19 +405,46 @@ export function childFromRequest<TLogger extends { child(ctx: Record<string, unk
 
   const method = req['method'] as string | undefined;
   const url = (req['url'] as string | undefined) ?? (req['originalUrl'] as string | undefined);
-  const userAgent = headers['user-agent'];
-  const ip =
-    (headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ??
-    ((req['socket'] as Record<string, unknown> | undefined)?.['remoteAddress'] as
-      string | undefined);
+  const rawUserAgent = headers['user-agent'];
+  const userAgent =
+    typeof rawUserAgent === 'string' ? rawUserAgent.slice(0, MAX_USER_AGENT_LENGTH) : undefined;
+  const ip = resolveClientIp(req, headers, options.trustProxy === true);
 
-  return logger.child({
+  const fields = {
     correlationId,
     ...(method !== undefined ? { method } : {}),
     ...(url !== undefined ? { url } : {}),
     ...(userAgent !== undefined ? { userAgent } : {}),
     ...(ip !== undefined ? { ip } : {}),
-  });
+  };
+
+  const child = logger.child as (...args: unknown[]) => TLogger;
+  if (options.childContext !== undefined) {
+    return child.call(logger, options.childContext, fields);
+  }
+  try {
+    return child.call(logger, fields);
+  } catch (error) {
+    // LogixiaLogger.child(context: string, data?) rejects an object as its first argument.
+    if (!(error instanceof TypeError)) throw error;
+    return child.call(logger, 'request', fields);
+  }
+}
+
+function resolveClientIp(
+  req: Record<string, unknown>,
+  headers: Record<string, string | undefined>,
+  trustProxy: boolean
+): string | undefined {
+  if (trustProxy) {
+    const forwarded = headers['x-forwarded-for'];
+    const first = typeof forwarded === 'string' ? forwarded.split(',')[0]?.trim() : undefined;
+    if (first) return first.slice(0, MAX_IP_LENGTH);
+  }
+  const fromReq = req['ip'];
+  if (typeof fromReq === 'string' && fromReq) return fromReq.slice(0, MAX_IP_LENGTH);
+  const remote = (req['socket'] as Record<string, unknown> | undefined)?.['remoteAddress'];
+  return typeof remote === 'string' ? remote.slice(0, MAX_IP_LENGTH) : undefined;
 }
 
 // ── Message queue helpers ─────────────────────────────────────────────────────
@@ -428,7 +476,7 @@ export function extractMessageCorrelationId(message: Record<string, unknown>): s
       kafkaHeaders['correlationId'] ??
       kafkaHeaders['correlation_id'];
     if (raw !== undefined) {
-      return Buffer.isBuffer(raw) ? raw.toString('utf8') : String(raw);
+      return validIncomingId(Buffer.isBuffer(raw) ? raw.toString('utf8', 0, 512) : String(raw));
     }
   }
 
@@ -436,18 +484,15 @@ export function extractMessageCorrelationId(message: Record<string, unknown>): s
   const sqsAttrs = message['MessageAttributes'] as
     Record<string, { StringValue?: string }> | undefined;
   if (sqsAttrs) {
-    return (
+    return validIncomingId(
       sqsAttrs['x-correlation-id']?.StringValue ??
-      sqsAttrs['correlationId']?.StringValue ??
-      sqsAttrs['correlation_id']?.StringValue
+        sqsAttrs['correlationId']?.StringValue ??
+        sqsAttrs['correlation_id']?.StringValue
     );
   }
 
   // AMQP / generic envelope
-  return (
-    (message['correlationId'] as string | undefined) ??
-    (message['correlation_id'] as string | undefined)
-  );
+  return validIncomingId(message['correlationId'] ?? message['correlation_id']);
 }
 
 /**

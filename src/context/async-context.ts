@@ -27,6 +27,8 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 
+import { sanitizeIncomingId } from '../utils/trace.utils';
+
 /** Generates an 8-character random ID using Node's crypto module. */
 function randomShortId(): string {
   return randomUUID().slice(0, 8);
@@ -81,7 +83,10 @@ export const LogixiaContext = {
       // before a request context is established (e.g. background jobs).
       return;
     }
-    Object.assign(store, fields);
+    for (const key of Object.keys(fields)) {
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
+      store[key] = fields[key];
+    }
   },
 
   /**
@@ -119,7 +124,7 @@ export function createExpressContextMiddleware(
     next: () => void
   ): void {
     const headers = (req['headers'] ?? {}) as Record<string, string | undefined>;
-    const traceId = headers[traceIdHeader] ?? randomShortId();
+    const traceId = sanitizeIncomingId(headers[traceIdHeader.toLowerCase()]) ?? randomShortId();
     const base: LogContext = { traceId };
     LogixiaContext.run({ ...base, ...(enrich ? enrich(req) : {}) }, next);
   };
@@ -145,7 +150,9 @@ export function createFastifyContextHook(
   ): void {
     const headers = (request['headers'] ?? {}) as Record<string, string | undefined>;
     const traceId =
-      headers[traceIdHeader] ?? (request['id'] as string | undefined) ?? randomShortId();
+      sanitizeIncomingId(headers[traceIdHeader.toLowerCase()]) ??
+      sanitizeIncomingId(request['id']) ??
+      randomShortId();
     const base: LogContext = { traceId };
     LogixiaContext.run({ ...base, ...(enrich ? enrich(request) : {}) }, done);
   };
