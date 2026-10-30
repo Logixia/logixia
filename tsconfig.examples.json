@@ -14,7 +14,12 @@
       "logixia/browser": ["./src/browser.ts"],
       "logixia/transports": ["./src/transports.ts"],
       "logixia/search": ["./src/search.ts"],
-      "logixia/nest": ["./src/nest.ts"]
+      "logixia/nest": ["./src/nest.ts"],
+      "logixia/testing": ["./src/testing.ts"],
+      "logixia/azure": ["./src/azure.ts"],
+      "logixia/cloudwatch": ["./src/cloudwatch.ts"],
+      "logixia/gcp": ["./src/gcp.ts"],
+      "logixia/worker": ["./src/worker.ts"]
     }
   },
   "include": ["examples/**/*.ts"],

@@ -54,6 +54,26 @@ export function formatAsTable(rows: any[], columns: string[]) {
   return [hdr, sep, body].join('\n');
 }
 
+export interface ParsedLogLine {
+  /** 1-based line number in the source text. */
+  line: number;
+  entry: any;
+}
+
+/** Parse like {@link safeParseLogs} but keep each entry's original file line number. */
+export function parseLogLines(raw: string): ParsedLogLine[] {
+  const parsed: ParsedLogLine[] = [];
+  for (const [i, text] of raw.split(/\r?\n/).entries()) {
+    if (!text) continue;
+    try {
+      parsed.push({ line: i + 1, entry: JSON.parse(text) });
+    } catch {
+      parsed.push({ line: i + 1, entry: { message: text } });
+    }
+  }
+  return parsed;
+}
+
 export function safeParseLogs(raw: string) {
   // try JSON lines first, fallback to simple line parser
   const lines = raw.split(/\r?\n/).filter(Boolean);

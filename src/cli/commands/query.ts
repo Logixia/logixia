@@ -450,10 +450,15 @@ function matchesNode(row: Record<string, any>, node: WhereNode): boolean {
 
 // ── Aggregation engine ────────────────────────────────────────────────────────
 
-function runAggregation(entries: any[], agg: NonNullable<ParsedQuery['aggregation']>): string {
+type AggregationResult = { rows: any[]; columns: string[] } | { warning: string };
+
+function runAggregation(
+  entries: any[],
+  agg: NonNullable<ParsedQuery['aggregation']>
+): AggregationResult {
   const { fn, field, groupBy } = agg;
 
-  if (!groupBy) return pc.yellow('Aggregation requires a GROUP BY field');
+  if (!groupBy) return { warning: 'Aggregation requires a GROUP BY field' };
 
   // Build groups
   const groups = new Map<string, any[]>();
@@ -469,11 +474,11 @@ function runAggregation(entries: any[], agg: NonNullable<ParsedQuery['aggregatio
       .map(([k, v]) => ({ [groupBy]: k, count: v.length }))
       .sort((a, b) => b.count - a.count);
 
-    return formatAsTable(rows, [groupBy, 'count']);
+    return { rows, columns: [groupBy, 'count'] };
   }
 
   // AVG / SUM / MIN / MAX require a numeric field
-  if (!field) return pc.yellow('Numeric aggregation requires a field: AVG(field) BY group');
+  if (!field) return { warning: 'Numeric aggregation requires a field: AVG(field) BY group' };
 
   const rows = [...groups.entries()]
     .map(([k, v]) => {
@@ -502,7 +507,7 @@ function runAggregation(entries: any[], agg: NonNullable<ParsedQuery['aggregatio
       return (b[key] as number) - (a[key] as number);
     });
 
-  return formatAsTable(rows, [groupBy, `${fn}(${field})`, 'count']);
+  return { rows, columns: [groupBy, `${fn}(${field})`, 'count'] };
 }
 
 // ── Format results ────────────────────────────────────────────────────────────
@@ -514,6 +519,15 @@ function projectRow(row: Record<string, any>, select: string[] | '*'): Record<st
     projected[field] = row[field];
   }
   return projected;
+}
+
+/** json prints an array (`[]` when empty); ndjson prints one row per line (nothing when empty). */
+function printMachineRows(rows: any[], format: string): void {
+  if (format === 'json') {
+    console.log(sanitizeForTerminal(JSON.stringify(rows, null, 2)));
+  } else if (rows.length > 0) {
+    console.log(rows.map((r) => sanitizeForTerminal(JSON.stringify(r))).join('\n'));
+  }
 }
 
 function formatResults(results: any[], format: string): string {
@@ -556,7 +570,7 @@ export function executeQuery(
     limit?: number | undefined;
     orderBy?: string;
   }
-): { results: any[]; aggregationOutput: string | null } {
+): { results: any[]; aggregationOutput: string | null; aggregationRows: any[] | null } {
   let rows: any[] = entries;
 
   // ── Time filtering ─────────────────────────────────────────────────────────
@@ -591,7 +605,15 @@ export function executeQuery(
 
   // ── Aggregation ───────────────────────────────────────────────────────────
   if (query.aggregation) {
-    return { results: [], aggregationOutput: runAggregation(rows, query.aggregation) };
+    const agg = runAggregation(rows, query.aggregation);
+    if ('warning' in agg) {
+      return { results: [], aggregationOutput: pc.yellow(agg.warning), aggregationRows: [] };
+    }
+    return {
+      results: [],
+      aggregationOutput: formatAsTable(agg.rows, agg.columns),
+      aggregationRows: agg.rows,
+    };
   }
 
   // ── ORDER BY (before projection so non-selected fields can be sorted on) ───
@@ -624,7 +646,7 @@ export function executeQuery(
   // ── SELECT projection ─────────────────────────────────────────────────────
   rows = rows.map((row) => projectRow(row, query.select));
 
-  return { results: rows, aggregationOutput: null };
+  return { results: rows, aggregationOutput: null, aggregationRows: null };
 }
 
 // ── Commander command ─────────────────────────────────────────────────────────
@@ -660,7 +682,7 @@ export const queryCommand = new Command('query')
     const parsedLimit = opts.limit === undefined ? Number.NaN : Number.parseInt(opts.limit, 10);
     const limitN = Number.isNaN(parsedLimit) ? undefined : parsedLimit;
 
-    const { results, aggregationOutput } = executeQuery(entries, {
+    const { results, aggregationOutput, aggregationRows } = executeQuery(entries, {
       sql: opts.sql,
       since: opts.since,
       until: opts.until,
@@ -668,23 +690,33 @@ export const queryCommand = new Command('query')
       orderBy: opts.orderBy,
     });
 
+    // Keep stdout parseable for machine formats; status text goes to stderr.
+    const machineFormat = opts.format === 'json' || opts.format === 'ndjson';
+    const status = machineFormat ? console.error : console.log;
+
     if (aggregationOutput !== null) {
-      console.log(pc.bold('\nAggregation result:'));
-      console.log(aggregationOutput);
+      status(pc.bold('\nAggregation result:'));
+      if (machineFormat) {
+        printMachineRows(aggregationRows ?? [], opts.format);
+      } else {
+        console.log(aggregationOutput);
+      }
     } else {
-      console.log(
+      status(
         pc.bold(
           `\nFound ${pc.cyan(String(results.length))} match${results.length === 1 ? '' : 'es'}`
         )
       );
-      if (results.length > 0) {
+      if (machineFormat) {
+        printMachineRows(results, opts.format);
+      } else if (results.length > 0) {
         console.log(formatResults(results, opts.format || 'line'));
       }
     }
 
     // ── Live tail mode ─────────────────────────────────────────────────────
     if (opts.follow) {
-      console.log(pc.dim('\n--- following (ctrl-c to exit) ---'));
+      status(pc.dim('\n--- following (ctrl-c to exit) ---'));
       let pos = fs.statSync(full).size;
       let buffer = '';
 
