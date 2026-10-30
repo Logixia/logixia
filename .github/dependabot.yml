@@ -10,6 +10,9 @@ updates:
       time: '09:00'
       timezone: Asia/Kolkata
     open-pull-requests-limit: 10
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     # Group all non-major updates into a single PR to reduce noise
     groups:
       eslint-and-plugins:
@@ -52,6 +55,10 @@ updates:
         update-types: ['version-update:semver-major']
       - dependency-name: '@nestjs/*'
         update-types: ['version-update:semver-major']
+      # Must stay on 8.x: v9+ needs conventional-changelog-writer 9, but
+      # @semantic-release/release-notes-generator ships writer 8.
+      - dependency-name: 'conventional-changelog-conventionalcommits'
+        update-types: ['version-update:semver-major']
 
   # ── GitHub Actions ────────────────────────────────────────────────
   - package-ecosystem: github-actions
@@ -62,6 +69,9 @@ updates:
       time: '09:00'
       timezone: Asia/Kolkata
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     labels:
       - 'github-actions'
       - 'automated'
