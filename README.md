@@ -1357,6 +1357,8 @@ const app = Fastify();
 app.addHook('onRequest', correlationFastifyHook());
 ```
 
+> **Full working example** — see [`examples/fastify-example.ts`](./examples/fastify-example.ts) (`npm run dev:fastify`) for request logging, trace IDs and redaction on Fastify.
+
 ### Outbound fetch / axios
 
 Every outbound HTTP call made inside a correlated context automatically carries the `X-Correlation-ID` header.
