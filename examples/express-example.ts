@@ -3,7 +3,14 @@
  */
 
 import express from 'express';
-import { createLogger, generateTraceId, getCurrentTraceId, runWithTraceId } from '../src';
+import {
+  createLogger,
+  DEFAULT_TRACE_HEADERS,
+  extractTraceId,
+  generateTraceId,
+  getCurrentTraceId,
+  runWithTraceId,
+} from '../src';
 
 // Create Express app
 const app = express();
@@ -49,10 +56,10 @@ const logger = createLogger({
   }
 });
 
-// Trace middleware: reuse the caller's trace ID or generate one for this request
+// Trace middleware: reuse a validated incoming trace ID (traceparent, x-trace-id, ...) or generate one
 app.use((req, res, next) => {
-  const incoming = req.get('x-trace-id') ?? req.get('x-request-id');
-  const traceId = incoming ?? generateTraceId();
+  const traceId =
+    extractTraceId(req, { header: DEFAULT_TRACE_HEADERS, query: ['traceId'] }) ?? generateTraceId();
   res.setHeader('X-Trace-Id', traceId);
   runWithTraceId(traceId, () => next());
 });

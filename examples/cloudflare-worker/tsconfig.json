@@ -8,7 +8,7 @@
     "declarationMap": false,
     "sourceMap": false,
     "lib": ["ES2022", "DOM"],
-    "types": ["node"],
+    "types": [],
     "paths": {
       "logixia/browser": ["../../src/browser.ts"]
     }

@@ -14,8 +14,9 @@ To ship logs, set `LOG_ENDPOINT` under `[vars]` in `wrangler.toml` (and optional
 
 Things the example gets right:
 
-- **No timers at global scope.** Workers reject `setInterval` outside a request handler, and `BrowserRemoteTransport` normally starts one in its constructor. The transport is created inside `fetch()` with `flushIntervalMs: 0`, so no timer is ever started.
+- **No timers at global scope.** Workers reject `setInterval` outside a request handler, and `BrowserRemoteTransport` normally starts one in its constructor. The transport is created lazily on the first request (it needs `env`) and kept at module scope with `flushIntervalMs: 0`, so no timer is ever started and a batch that fails to send stays buffered for the next request's flush.
 - **Flush with `ctx.waitUntil`.** A `fetch` started after the response returns is cancelled, so `ctx.waitUntil(remote.flush())` keeps the Worker alive until the batch is delivered.
+- **Delivery problems are visible.** After each flush the Worker logs a warning when `transport.dropped` or `transport.failedFlushes` is non-zero.
 - **Per-request context.** `logger.child({ requestId })` adds the request ID to every line.
 - Only `logixia/browser` is imported; it has no Node built-ins and no `AsyncLocalStorage`.
 

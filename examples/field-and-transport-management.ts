@@ -13,6 +13,7 @@ async function demonstrateFieldAndTransportManagement() {
         level: 'info'
       },
       file: {
+        level: 'debug',
         filename: 'app.log'
       },
       database: {

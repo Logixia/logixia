@@ -6,7 +6,13 @@
  *        curl localhost:3000/boom
  */
 import Fastify from 'fastify';
-import { createFastifyContextHook, createLogger, generateTraceId } from 'logixia';
+import {
+  createLogger,
+  DEFAULT_TRACE_HEADERS,
+  extractTraceId,
+  generateTraceId,
+  runWithTraceId,
+} from 'logixia';
 import { createFastifyPlugin } from 'logixia/middleware';
 
 const logger = createLogger({
@@ -17,18 +23,15 @@ const logger = createLogger({
 });
 
 const app = Fastify({
-  // One ID per request: the caller's x-trace-id, or a generated one.
-  genReqId: (req) => {
-    const incoming = req.headers['x-trace-id'];
-    return typeof incoming === 'string' && incoming !== '' ? incoming : generateTraceId();
-  },
+  // One ID per request: a validated incoming trace header, or a generated one.
+  genReqId: (req) => extractTraceId(req, { header: DEFAULT_TRACE_HEADERS }) ?? generateTraceId(),
 });
 
-// Puts { traceId } in async context, so every logger call in a handler carries it.
-const contextHook = createFastifyContextHook();
-app.addHook('onRequest', (request, reply, done) =>
-  contextHook(request as unknown as Record<string, unknown>, reply, done)
-);
+// Runs the rest of the request inside the trace context, so every logger call
+// in a handler carries request.id as its trace ID.
+app.addHook('onRequest', (request, _reply, done) => {
+  runWithTraceId(request.id, done);
+});
 
 // Logs "request started" / "request completed" with status and duration.
 // Authorization, Cookie and similar headers are redacted by default.
@@ -52,9 +55,14 @@ app.get('/boom', async () => {
   throw new Error('Something broke');
 });
 
-app.setErrorHandler(async (error, _request, reply) => {
-  await logger.error(error instanceof Error ? error : new Error(String(error)));
-  return reply.status(500).send({ error: 'Internal Server Error' });
+app.setErrorHandler(async (error: Error & { statusCode?: number }, _request, reply) => {
+  const statusCode = error.statusCode ?? 500;
+  // Client errors (4xx) are expected traffic; only 5xx are actual failures.
+  if (statusCode >= 500) await logger.error(error);
+  else await logger.warn(error.message, { statusCode });
+  return reply
+    .status(statusCode)
+    .send({ error: statusCode >= 500 ? 'Internal Server Error' : error.message });
 });
 
 const port = Number(process.env['PORT'] ?? 3000);

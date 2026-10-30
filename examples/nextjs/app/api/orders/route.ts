@@ -1,4 +1,10 @@
-import { createLogger, generateTraceId, LogixiaContext } from 'logixia';
+import {
+  createLogger,
+  DEFAULT_TRACE_HEADERS,
+  extractTraceId,
+  generateTraceId,
+  runWithTraceId,
+} from 'logixia';
 
 // logixia uses AsyncLocalStorage and Node built-ins, so this route must not run on the Edge runtime.
 export const runtime = 'nodejs';
@@ -17,9 +23,12 @@ async function loadOrders(customerId: string | null) {
 }
 
 export async function GET(request: Request): Promise<Response> {
-  const traceId = request.headers.get('x-trace-id') || generateTraceId();
+  // Validated incoming trace header (traceparent, x-trace-id, ...), or a new ID.
+  const traceId =
+    extractTraceId({ headers: Object.fromEntries(request.headers) }, { header: DEFAULT_TRACE_HEADERS }) ??
+    generateTraceId();
 
-  return LogixiaContext.run({ traceId }, async () => {
+  return runWithTraceId(traceId, async () => {
     const customerId = new URL(request.url).searchParams.get('customerId');
     try {
       const orders = await loadOrders(customerId);
