@@ -1,4 +1,5 @@
 import type { ReservedLevelName } from '../types';
+import { internalWarn } from '../utils/internal-log';
 
 /** Logger members that a custom level name must not collide with. */
 const RESERVED_LEVEL_NAMES = [
@@ -40,14 +41,20 @@ export const reservedLevelNamesAreExhaustive: [MissingReservedNames] extends [ne
 
 const RESERVED = new Set<string>(RESERVED_LEVEL_NAMES);
 
-/** Throw when `levels` defines a level named like a logger method (e.g. `flush`, `child`). */
-export function assertNoReservedLevelNames(levels: Record<string, number> | undefined): void {
-  if (!levels) return;
+/**
+ * Warn when `levels` defines a level named like a logger method (e.g. `flush`, `child`).
+ * The method keeps its normal behaviour and no level shortcut is installed for that
+ * name; log at it with `logger.logLevel(name, ...)` or pick a different level name.
+ * Returns the clashing names.
+ */
+export function warnOnReservedLevelNames(levels: Record<string, number> | undefined): string[] {
+  if (!levels) return [];
   const clashes = Object.keys(levels).filter((name) => RESERVED.has(name));
   if (clashes.length > 0) {
-    throw new Error(
-      `logixia: levelOptions.levels cannot use reserved logger method name(s): ${clashes.join(', ')}. ` +
-        'Pick a different level name.'
+    internalWarn(
+      `levelOptions.levels uses reserved logger method name(s): ${clashes.join(', ')}. ` +
+        'No level shortcut is created for them; use logger.logLevel(name, ...) or rename the level.'
     );
   }
+  return clashes;
 }

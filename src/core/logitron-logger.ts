@@ -56,7 +56,7 @@ import { Sampler } from '../utils/sampling.utils';
 import { stripControlChars } from '../utils/sanitize.utils';
 import { deregisterFromShutdown, flushOnExit, registerForShutdown } from '../utils/shutdown.utils';
 import { TraceContext } from '../utils/trace.utils';
-import { assertNoReservedLevelNames } from './reserved-levels';
+import { warnOnReservedLevelNames } from './reserved-levels';
 
 // ── Hot-path timestamp cache ─────────────────────────────────────────────────
 // `new Date().toISOString()` is one of the most expensive things on the log hot
@@ -357,7 +357,7 @@ export class LogixiaLogger<
   }
 
   private createCustomLevelMethods(): void {
-    assertNoReservedLevelNames(this.config.levelOptions?.levels);
+    warnOnReservedLevelNames(this.config.levelOptions?.levels);
     if (this.config.levelOptions?.levels) {
       for (const levelName of Object.keys(this.config.levelOptions.levels)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1191,7 +1191,6 @@ export function createLogger<T extends LoggerConfig<Record<string, number>>>(
   config: T,
   context?: string
 ): LoggerWithLevels<T> {
-  assertNoReservedLevelNames(config.levelOptions?.levels);
   const logger = new LogixiaLogger<T>(config, context);
   const mutableLogger = logger as unknown as Record<string, unknown>;
 

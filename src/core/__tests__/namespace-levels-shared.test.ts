@@ -81,14 +81,27 @@ describe('shared namespace levels', () => {
 
 describe('reserved custom level names', () => {
   it.each(['flush', 'setLevel', 'healthCheck', 'child', 'close', 'setNamespaceLevels'])(
-    'createLogger throws for a level named %s',
+    'createLogger warns once and keeps the %s method for a level with that name',
     (name) => {
-      expect(() =>
-        createLogger({
+      const writes: string[] = [];
+      const spy = jest.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+        writes.push(String(chunk));
+        return true;
+      });
+      try {
+        const logger = createLogger({
           appName: 'x',
+          silent: true,
           levelOptions: { level: 'info', levels: { info: 2, [name]: 3 } },
-        })
-      ).toThrow(new RegExp(`reserved logger method name.*${name}`));
+        }) as unknown as Record<string, unknown>;
+        const original = (Object.getPrototypeOf(logger) as Record<string, unknown>)[name];
+        expect(logger[name]).toBe(original);
+        const warnings = writes.filter((w) => w.includes('reserved logger method name'));
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain(name);
+      } finally {
+        spy.mockRestore();
+      }
     }
   );
 
