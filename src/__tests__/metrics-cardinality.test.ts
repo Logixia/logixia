@@ -46,7 +46,10 @@ describe('MetricsPlugin label cardinality cap', () => {
   it('defaults to 1000 label sets and truncates long label values', () => {
     const m = createMetricsPlugin({ req: { type: 'counter', labels: ['u'] } });
     for (let i = 0; i < 1100; i++) m.onLog(entry({ u: `u${i}` }));
-    const lines = m.render().split('\n').filter((l) => l.startsWith('logixia_req{'));
+    const lines = m
+      .render()
+      .split('\n')
+      .filter((l) => l.startsWith('logixia_req{'));
     expect(lines).toHaveLength(1001);
 
     const m2 = createMetricsPlugin({ req: { type: 'counter', labels: ['u'] } });

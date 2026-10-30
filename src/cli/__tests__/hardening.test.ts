@@ -29,9 +29,7 @@ describe('sanitizeForTerminal', () => {
 describe('terminal output is sanitized', () => {
   it('tail highlightLine strips escapes from raw and JSON lines', () => {
     expect(highlightLine(`plain ${ESC}[2J line`)).not.toContain(ESC);
-    expect(highlightLine(`{"level":"info","m":"${ESC}[2J"}`, 'x')).not.toContain(
-      `${ESC}[2J`
-    );
+    expect(highlightLine(`{"level":"info","m":"${ESC}[2J"}`, 'x')).not.toContain(`${ESC}[2J`);
   });
 
   it('formatAsTable escapes control characters in cells', () => {

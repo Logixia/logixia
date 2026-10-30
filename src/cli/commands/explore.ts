@@ -666,7 +666,10 @@ export class TUIExplorer {
           allKeys
             .map((k) => {
               const v = e[k];
-              return csvField(typeof v === 'string' || typeof v === 'number' ? v : JSON.stringify(v ?? ''), true);
+              return csvField(
+                typeof v === 'string' || typeof v === 'number' ? v : JSON.stringify(v ?? ''),
+                true
+              );
             })
             .join(',')
         );

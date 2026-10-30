@@ -153,7 +153,14 @@ describe('createLevelControlHandler', () => {
     const logger = makeLogger();
     const handler = createLevelControlHandler(logger);
     const res = fakeRes();
-    handler({ method: 'POST', headers: { 'content-type': 'application/json' }, body: { level: 'debug' } } as never, res);
+    handler(
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: { level: 'debug' },
+      } as never,
+      res
+    );
     expect(res.statusCode).toBe(200);
     expect(logger.getLevel()).toBe('debug');
   });
@@ -162,14 +169,28 @@ describe('createLevelControlHandler', () => {
     const logger = makeLogger();
     const handler = createLevelControlHandler(logger);
     const res = fakeRes();
-    handler({ method: 'POST', headers: { 'content-type': 'application/json' }, body: { namespaceLevels: { 'db.*': 'trace' } } } as never, res);
+    handler(
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: { namespaceLevels: { 'db.*': 'trace' } },
+      } as never,
+      res
+    );
     expect(logger.getNamespaceLevels!()).toEqual({ 'db.*': 'trace' });
   });
 
   it('rejects an unknown level with 400', () => {
     const handler = createLevelControlHandler(makeLogger());
     const res = fakeRes();
-    handler({ method: 'POST', headers: { 'content-type': 'application/json' }, body: { level: 'loud' } } as never, res);
+    handler(
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: { level: 'loud' },
+      } as never,
+      res
+    );
     expect(res.statusCode).toBe(400);
     expect(JSON.parse(res.body).error).toContain('unknown level');
   });
