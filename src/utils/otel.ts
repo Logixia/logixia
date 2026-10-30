@@ -83,26 +83,14 @@ type OtelApi = {
   };
 };
 
-// CommonJS `module`, declared locally so the file typechecks without Node types.
-declare const module: { require?: (id: string) => unknown } | undefined;
-
 let _otelApi: OtelApi | null | undefined; // undefined = not yet resolved; null = not available
 
 function tryLoadOtelApi(): OtelApi | null {
   if (_otelApi !== undefined) return _otelApi;
   try {
-    // module.require keeps the package optional and, unlike a bare require(), is
-    // neither rewritten to a throwing shim in the ESM bundle nor resolved
-    // statically by browser bundlers. Absent in ESM, browsers and edge runtimes.
-    const req =
-      typeof module !== 'undefined' && typeof module.require === 'function'
-        ? module.require.bind(module)
-        : undefined;
-    if (!req) {
-      _otelApi = null;
-      return null;
-    }
-    _otelApi = req('@opentelemetry/api') as OtelApi;
+    // Dynamic require so the package stays optional — no hard peer dep
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    _otelApi = require('@opentelemetry/api') as OtelApi;
     return _otelApi;
   } catch {
     _otelApi = null;

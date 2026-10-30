@@ -208,17 +208,14 @@ describe('BrowserRemoteTransport', () => {
 
   describe('failure reporting', () => {
     let errSpy: jest.SpyInstance;
-    let logSpy: jest.SpyInstance;
     let savedSilent: string | undefined;
 
     beforeEach(() => {
       savedSilent = process.env.LOGIXIA_SILENT_INTERNAL;
       delete process.env.LOGIXIA_SILENT_INTERNAL;
       errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
-      logSpy = errSpy;
     });
     afterEach(() => {
-      errSpy.mockRestore();
       if (savedSilent === undefined) delete process.env.LOGIXIA_SILENT_INTERNAL;
       else process.env.LOGIXIA_SILENT_INTERNAL = savedSilent;
       jest.restoreAllMocks();
@@ -231,22 +228,32 @@ describe('BrowserRemoteTransport', () => {
         flushIntervalMs: 0,
         ...extra,
       });
-    const output = () => logSpy.mock.calls.map((c) => String(c[0])).join('');
+    const output = () => errSpy.mock.calls.map((c) => String(c[0])).join('');
 
-    it('never leaks the URL or query credentials, keeping the raw error in lastError', async () => {
-      const raw = new TypeError(
-        'error sending request for url (https://logs.example/ingest?api_key=SECRET)'
-      );
+    it.each([
+      'error sending request for url (https://logs.example/ingest?api_key=SECRET)',
+      'Failed to parse URL from /api/logs?token=SECRET',
+      'Invalid value "Bearer SECRET" for header "Authorization"',
+    ])('never includes error message text: %s', async (message) => {
+      const raw = new TypeError(message);
       fetchMock.mockRejectedValueOnce(raw);
       const t = make();
       t.write(makeEntry(1));
       await t.flush();
       const out = output();
       expect(out).toContain('TypeError');
-      expect(out).toContain('logs.example');
+      expect(out).toContain('host logs.example');
       expect(out).not.toContain('SECRET');
       expect(out).not.toContain('api_key');
       expect(t.lastError).toBe(raw);
+    });
+
+    it('describes a relative endpoint without a host', async () => {
+      fetchMock.mockRejectedValueOnce(new TypeError('Failed to parse URL from /api/logs'));
+      const t = make({ url: '/api/logs' });
+      t.write(makeEntry(1));
+      await t.flush();
+      expect(output()).toContain('relative endpoint');
     });
 
     it('throttles repeated failures and reports recovery', async () => {
@@ -258,18 +265,85 @@ describe('BrowserRemoteTransport', () => {
       await t.flush();
       await t.flush();
       await t.flush();
-      expect(logSpy).toHaveBeenCalledTimes(1);
+      expect(errSpy).toHaveBeenCalledTimes(1);
       expect(t.failedFlushes).toBe(3);
 
       now.mockReturnValue(1_000_000 + 61_000);
       await t.flush();
-      expect(logSpy).toHaveBeenCalledTimes(2);
+      expect(errSpy).toHaveBeenCalledTimes(2);
 
       fetchMock.mockReset().mockResolvedValue({ ok: true });
       await t.flush();
       expect(output()).toContain('recovered');
-      expect(logSpy).toHaveBeenCalledTimes(3);
+      expect(errSpy).toHaveBeenCalledTimes(3);
       t.destroy();
+    });
+
+    it('alternating failure and success does not bypass the throttle', async () => {
+      jest.spyOn(Date, 'now').mockReturnValue(5_000_000);
+      const t = make();
+      for (let i = 0; i < 4; i += 1) {
+        fetchMock.mockRejectedValueOnce(new TypeError('down'));
+        t.write(makeEntry(i));
+        await t.flush(); // failure
+        await t.flush(); // success (re-buffered entry delivered)
+      }
+      // one failure report + one recovery notice, nothing more inside the window
+      expect(errSpy).toHaveBeenCalledTimes(2);
+      expect(t.failedFlushes).toBe(4);
+      t.destroy();
+    });
+
+    it('counts entries written while reporting as dropped', async () => {
+      const t = make();
+      errSpy.mockImplementation(() => {
+        t.write(makeEntry(99));
+        return true;
+      });
+      fetchMock.mockRejectedValueOnce(new TypeError('down'));
+      t.write(makeEntry(1));
+      await t.flush();
+      expect(t.dropped).toBe(1);
+      t.destroy();
+    });
+
+    it('drops writes made from inside onError', async () => {
+      const holder: { t?: BrowserRemoteTransport } = {};
+      const t = make({ silent: true, onError: () => holder.t?.write(makeEntry(98)) });
+      holder.t = t;
+      fetchMock.mockRejectedValueOnce(new TypeError('down'));
+      t.write(makeEntry(1));
+      await t.flush();
+      expect(t.dropped).toBe(1);
+      fetchMock.mockClear();
+      await t.flush();
+      const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string) as BrowserLogEntry[];
+      expect(body.map((e) => e.message)).toEqual(['b-1']);
+      t.destroy();
+    });
+
+    it('defaults to silent in a real browser page and reports elsewhere', async () => {
+      const g = globalThis as Record<string, unknown>;
+      g['window'] = {};
+      g['document'] = {};
+      try {
+        const onError = jest.fn();
+        fetchMock.mockRejectedValueOnce(new TypeError('down'));
+        const quiet = make({ onError });
+        quiet.write(makeEntry(1));
+        await quiet.flush();
+        expect(errSpy).not.toHaveBeenCalled();
+        expect(onError).toHaveBeenCalledTimes(1);
+
+        fetchMock.mockRejectedValueOnce(new TypeError('down'));
+        const loud = make({ silent: false });
+        loud.write(makeEntry(1));
+        await loud.flush();
+        expect(errSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        delete g['window'];
+        delete g['document'];
+      }
     });
 
     it('silent suppresses the console report but onError still fires', async () => {
@@ -279,7 +353,7 @@ describe('BrowserRemoteTransport', () => {
       const t = make({ silent: true, onError });
       t.write(makeEntry(1));
       await t.flush();
-      expect(logSpy).not.toHaveBeenCalled();
+      expect(errSpy).not.toHaveBeenCalled();
       expect(onError).toHaveBeenCalledWith(boom);
       expect(t.failedFlushes).toBe(1);
     });
@@ -351,18 +425,18 @@ describe('BrowserRemoteTransport', () => {
 });
 
 describe('BrowserLogger.child()', () => {
-  let logSpy: jest.SpyInstance;
+  let errSpy: jest.SpyInstance;
 
   beforeEach(() => {
-    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    errSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    logSpy.mockRestore();
+    errSpy.mockRestore();
   });
 
   function lastJsonEntry(): BrowserLogEntry {
-    const calls = logSpy.mock.calls;
+    const calls = errSpy.mock.calls;
     return JSON.parse(calls[calls.length - 1]![0] as string) as BrowserLogEntry;
   }
 
@@ -372,7 +446,7 @@ describe('BrowserLogger.child()', () => {
 
     child.info('hello');
 
-    expect(logSpy).toHaveBeenCalledTimes(1);
+    expect(errSpy).toHaveBeenCalledTimes(1);
     const entry = lastJsonEntry();
     expect(entry.message).toBe('hello');
     expect(entry.payload).toEqual({ requestId: 'r-1' });

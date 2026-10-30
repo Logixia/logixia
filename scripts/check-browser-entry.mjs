@@ -5,7 +5,9 @@
 //
 // Run via `npm run check:browser` (needs --experimental-vm-modules, set in the script).
 import { webcrypto } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
@@ -32,7 +34,7 @@ function createSandbox(extra = {}) {
     }
     if (state.failNext) {
       state.failNext = false;
-      throw new TypeError('network down https://logs.example/ingest?api_key=SECRET');
+      throw new TypeError('Failed to parse URL from /x?token=SECRET');
     }
     return new Response('{}', { status: 200 });
   };
@@ -129,11 +131,11 @@ async function exercise(api, state, label) {
   await transport.flush();
   assert(transport.failedFlushes === 1, `${label}: failed flush is counted`);
   const report = state.errors.find((m) => m.includes('[logixia:error]'));
-  assert(report && report.includes('network down'), `${label}: delivery failure surfaced`);
   assert(
-    !report.includes('SECRET') && !report.includes('api_key'),
-    `${label}: report leaks no URL`
+    report && report.includes('TypeError') && report.includes('host logs.example'),
+    `${label}: delivery failure surfaced`
   );
+  assert(!report.includes('SECRET') && !report.includes('token'), `${label}: report leaks no URL`);
   await transport.flush();
   assert(state.calls.length === 2, `${label}: second flush delivered through stub fetch`);
 
@@ -176,9 +178,9 @@ async function checkEsm() {
 }
 
 async function checkCjs() {
-  let requireCalls = 0;
+  const requireCalls = [];
   const throwingRequire = (id) => {
-    requireCalls += 1;
+    requireCalls.push(id);
     throw new Error(`unexpected require("${id}")`);
   };
   const { context, state } = createSandbox();
@@ -192,10 +194,68 @@ async function checkCjs() {
   ).runInContext(context);
   wrapper(module, module.exports, throwingRequire);
   await exercise(module.exports, state, 'cjs');
-  assert(requireCalls === 0, `cjs: browser entry called require (${requireCalls} times)`);
+  assert(
+    requireCalls.every((id) => id === '@opentelemetry/api'),
+    `cjs: browser entry required unexpected modules: ${requireCalls.join(', ')}`
+  );
+}
+
+// Node ESM must still resolve the optional OTel peer (via the createRequire shim).
+function checkNodeEsmOtel() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'logixia-otel-'));
+  try {
+    // Reuse the repo's installed runtime deps; only the OTel peer is faked.
+    const repoModules = path.join(dist, '..', 'node_modules');
+    fs.mkdirSync(path.join(tmp, 'node_modules'));
+    for (const name of fs.readdirSync(repoModules)) {
+      if (name === 'logixia' || name === '@opentelemetry' || name.startsWith('.')) continue;
+      fs.symlinkSync(path.join(repoModules, name), path.join(tmp, 'node_modules', name));
+    }
+    const pkgDir = path.join(tmp, 'node_modules', 'logixia');
+    fs.mkdirSync(pkgDir, { recursive: true });
+    fs.cpSync(dist, path.join(pkgDir, 'dist'), { recursive: true });
+    fs.copyFileSync(path.join(dist, '..', 'package.json'), path.join(pkgDir, 'package.json'));
+    const otel = path.join(tmp, 'node_modules', '@opentelemetry', 'api');
+    fs.mkdirSync(otel, { recursive: true });
+    fs.writeFileSync(
+      path.join(otel, 'package.json'),
+      '{"name":"@opentelemetry/api","version":"0.0.0","main":"index.js"}'
+    );
+    fs.writeFileSync(
+      path.join(otel, 'index.js'),
+      `exports.context = { active: () => ({}) };
+exports.trace = {
+  getSpanContext: () => ({ traceId: 'a'.repeat(32), spanId: 'b'.repeat(16), traceFlags: 1 }),
+  isSpanContextValid: () => true,
+  TraceFlags: { SAMPLED: 1 },
+};`
+    );
+    const probe = path.join(tmp, 'probe.mjs');
+    fs.writeFileSync(
+      probe,
+      `import { getActiveOtelContext } from 'logixia';
+const ctx = getActiveOtelContext();
+if (!ctx || ctx.traceId !== 'a'.repeat(32)) { console.error('OTel not resolved in Node ESM', ctx); process.exit(1); }`
+    );
+    execFileSync(process.execPath, [probe], { cwd: tmp, stdio: 'inherit' });
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+function checkProductionLiteral() {
+  for (const file of [entryEsm, entryCjs]) {
+    const src = fs.readFileSync(file, 'utf8');
+    assert(
+      /try \{\s*return process\.env\.NODE_ENV === "production";/.test(src),
+      `${path.basename(file)} keeps a literal, try-wrapped process.env.NODE_ENV`
+    );
+  }
 }
 
 try {
+  checkProductionLiteral();
+  checkNodeEsmOtel();
   await checkEsm();
   await checkCjs();
 } catch (error) {

@@ -67,6 +67,16 @@ export interface CompiledSchema<TFields extends Record<string, unknown>> {
   validate(payload: Partial<TFields>): string[];
 }
 
+// The literal `process.env.NODE_ENV` must stay intact so bundlers can replace it;
+// on runtimes without `process` the ReferenceError is caught.
+function isProduction(): boolean {
+  try {
+    return process.env.NODE_ENV === 'production';
+  } catch {
+    return false;
+  }
+}
+
 // ── defineLogSchema ──────────────────────────────────────────────────────────
 
 /**
@@ -81,9 +91,7 @@ export function defineLogSchema<TFields extends Record<string, unknown>>(
   return {
     fields,
     validate(payload: Partial<TFields>): string[] {
-      if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'production') {
-        return [];
-      }
+      if (isProduction()) return [];
 
       const warnings: string[] = [];
 

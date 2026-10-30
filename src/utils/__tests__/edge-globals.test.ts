@@ -69,9 +69,14 @@ describe('Node-global guards (edge runtimes)', () => {
   it('internal-log stays silent with LOGIXIA_SILENT_INTERNAL=1', () => {
     const c = spyConsole();
     spies.push(c.log, c.warn, c.error);
+    const stderr = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    spies.push(stderr);
+    internalError('audible');
+    expect(stderr).toHaveBeenCalledTimes(1);
     process.env.LOGIXIA_SILENT_INTERNAL = '1';
     internalLog('x');
     internalError('x');
+    expect(stderr).toHaveBeenCalledTimes(1);
     expect(c.log).not.toHaveBeenCalled();
     expect(c.error).not.toHaveBeenCalled();
   });
