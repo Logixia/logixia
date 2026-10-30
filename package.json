@@ -131,7 +131,7 @@
   },
   "files": [
     "dist",
-    "scripts/postinstall.js",
+    "!dist/.tsbuildinfo",
     "README.md",
     "LICENSE"
   ],
@@ -166,7 +166,6 @@
     "benchmark": "npm run build && node benchmarks/run.mjs",
     "check:exports": "node scripts/check-exports.mjs",
     "size": "size-limit",
-    "postinstall": "node scripts/postinstall.js",
     "prepare": "node -e \"if(process.env.HUSKY!=='0'&&process.env.CI!=='true'){try{require('child_process').execSync('husky install',{stdio:'inherit'})}catch(e){process.exit(0)}}\"",
     "benchmark:features": "npm run build && node benchmarks/features.mjs"
   },
