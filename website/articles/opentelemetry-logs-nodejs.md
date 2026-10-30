@@ -25,6 +25,8 @@ Two ways a trace ID can reach a log line.
 
 **Taking it from the active span.** When no `traceparent` arrives, the OpenTelemetry SDK starts a new root trace while logixia would generate its own UUID, so the two disagree. The robust fix is to ask OpenTelemetry for the active span and hand its IDs to logixia's context. `LogixiaContext.run` accepts a `traceId`, which also becomes the logger's top-level trace ID inside that scope:
 
+<!-- snippet-check: skip -->
+
 ```ts
 import { trace } from '@opentelemetry/api';
 import type { RequestHandler } from 'express';

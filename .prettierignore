@@ -10,8 +10,6 @@ node_modules/
 examples/
 benchmarks/
 
-# Docs
-docs/
 
 # Generated files
 **/*.d.ts

@@ -90,6 +90,8 @@ export class OrderService {
 
 To make Nest's own internal logging use it:
 
+<!-- snippet-check: skip -->
+
 ```ts
 import { NestFactory } from '@nestjs/core';
 import { LogixiaLoggerService } from 'logixia/nest';
@@ -140,6 +142,8 @@ The Kafka and WebSocket interceptors take their configuration from the `traceId`
 ## Exception filter
 
 `LogixiaExceptionFilter` turns any thrown value into a consistent JSON error body and logs it with request context.
+
+<!-- snippet-check: skip -->
 
 ```ts
 import { NestFactory } from '@nestjs/core';

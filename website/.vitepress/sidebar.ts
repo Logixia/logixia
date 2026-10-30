@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import matter from 'gray-matter';
 import type { DefaultTheme } from 'vitepress';
+import { compareArticles, readDate } from './meta';
 
 interface PageInfo {
   title: string;
@@ -19,7 +20,7 @@ function readPage(file: string, link: string, fallback: string): PageInfo {
   return {
     title: String(data['title'] ?? fallback),
     order: typeof data['order'] === 'number' ? data['order'] : Number.POSITIVE_INFINITY,
-    date: data['date'] instanceof Date ? data['date'].toISOString() : String(data['date'] ?? ''),
+    date: readDate(data['date'], file),
     link,
   };
 }
@@ -71,8 +72,6 @@ export function guideSidebar(srcDir: string): DefaultTheme.SidebarItem[] {
 export function articlesSidebar(srcDir: string): DefaultTheme.SidebarItem[] {
   const pages = pagesIn(srcDir, 'articles', '/articles');
   const index = pages.filter((p) => p.link === '/articles/');
-  const rest = pages
-    .filter((p) => p.link !== '/articles/')
-    .sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title));
+  const rest = pages.filter((p) => p.link !== '/articles/').sort(compareArticles);
   return toItems([...index, ...rest]);
 }

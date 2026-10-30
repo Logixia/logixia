@@ -8,10 +8,10 @@
     "docs:dev": "vitepress dev",
     "docs:build": "vitepress build",
     "docs:preview": "vitepress preview",
+    "check:snippets": "node scripts/check-snippets.mjs",
     "og": "node scripts/generate-og.mjs"
   },
   "devDependencies": {
-    "@resvg/resvg-js": "^2.6.2",
     "gray-matter": "^4.0.3",
     "vitepress": "^1.6.4"
   }

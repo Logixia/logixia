@@ -103,62 +103,13 @@ You can still use Logixia next to other tools. It is one more option, not a requ
 
 ::: code-group
 
-```ts [Express]
-import express from 'express';
-import { createLogger, createExpressContextMiddleware } from 'logixia';
+<<< @/../examples/website/express.ts [Express]
 
-const logger = createLogger({ appName: 'api', traceId: true });
-const app = express();
+<<< @/../examples/website/fastify.ts [Fastify]
 
-app.use(createExpressContextMiddleware({ responseHeader: 'x-trace-id' }));
+<<< @/../examples/website/nestjs.ts [NestJS]
 
-app.get('/orders/:id', async (req, res) => {
-  await logger.info('Loading order', { id: req.params.id }); // carries the request trace id
-  res.json({ ok: true });
-});
-```
-
-```ts [Fastify]
-import Fastify from 'fastify';
-import { createLogger, createFastifyContextHook } from 'logixia';
-import { createFastifyPlugin } from 'logixia/middleware';
-
-const logger = createLogger({ appName: 'api', traceId: true });
-const app = Fastify();
-app.addHook('onRequest', createFastifyContextHook());
-app.register(createFastifyPlugin(logger)); // logs request start and completion
-```
-
-```ts [NestJS]
-import { Module } from '@nestjs/common';
-import { LogixiaLoggerModule } from 'logixia/nest';
-
-@Module({
-  imports: [
-    LogixiaLoggerModule.forRoot({
-      appName: 'nestjs-api',
-      environment: 'production',
-      traceId: true,
-      transports: { console: {} },
-    }),
-  ],
-})
-export class AppModule {}
-```
-
-```ts [Cloudflare Worker]
-import { createBrowserLogger } from 'logixia/browser';
-
-const logger = createBrowserLogger({ appName: 'edge-worker', json: true });
-
-export default {
-  fetch(request: Request): Response {
-    const requestId = request.headers.get('cf-ray') ?? crypto.randomUUID();
-    logger.child({ requestId }).info('request received', { url: request.url });
-    return Response.json({ ok: true, requestId });
-  },
-};
-```
+<<< @/../examples/website/cloudflare-worker.ts [Cloudflare Worker]
 
 :::
 
@@ -168,7 +119,7 @@ export default {
 
 Install the package, add a logger, and ship logs where you need them.
 
-<a class="VPButton medium brand" href="/logixia/guide/getting-started">Read the guide</a>
-<a class="VPButton medium alt" href="/logixia/articles/">Browse articles</a>
+[Read the guide](/guide/getting-started){.cta-primary}
+[Browse articles](/articles/){.cta-secondary}
 
 </div>

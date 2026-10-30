@@ -42,8 +42,35 @@
   margin: 8px 0;
 }
 
-.home-cta .VPButton {
+.home-cta a.cta-primary,
+.home-cta a.cta-secondary {
+  display: inline-block;
   margin: 8px 6px 0;
+  padding: 0 20px;
+  line-height: 38px;
+  border: 1px solid transparent;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.home-cta a.cta-primary {
+  color: var(--vp-button-brand-text);
+  background-color: var(--vp-button-brand-bg);
+}
+
+.home-cta a.cta-primary:hover {
+  background-color: var(--vp-button-brand-hover-bg);
+}
+
+.home-cta a.cta-secondary {
+  color: var(--vp-button-alt-text);
+  background-color: var(--vp-button-alt-bg);
+}
+
+.home-cta a.cta-secondary:hover {
+  background-color: var(--vp-button-alt-hover-bg);
 }
 
 @media (prefers-reduced-motion: reduce) {

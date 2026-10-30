@@ -67,6 +67,8 @@ Pick one convention across services. If you use OpenTelemetry, use `traceparent`
 
 Install `logixia`. Two pieces work together: the **context middleware** from `logixia` stores the ID in async context, and the **HTTP logger** from `logixia/middleware` writes the request-completed line (a Morgan replacement).
 
+<!-- snippet-check: skip -->
+
 ```ts
 import express from 'express';
 import {

@@ -57,6 +57,8 @@ Note the `transports` line: when you pass a `transports` object, logixia creates
 
 Now wire the logger into Nest itself in `main.ts`, so framework messages go through logixia too:
 
+<!-- snippet-check: skip -->
+
 ```ts
 import { NestFactory } from '@nestjs/core';
 import { LogixiaLoggerService } from 'logixia/nest';

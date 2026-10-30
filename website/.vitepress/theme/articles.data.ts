@@ -1,4 +1,5 @@
 import { createContentLoader } from 'vitepress';
+import { compareArticles, readDate } from '../meta';
 
 export interface ArticleEntry {
   url: string;
@@ -18,9 +19,9 @@ export default createContentLoader(['articles/*.md', '!articles/index.md'], {
         url,
         title: String(frontmatter['title'] ?? url),
         description: String(frontmatter['description'] ?? ''),
-        date: frontmatter['date'] ? new Date(frontmatter['date']).toISOString().slice(0, 10) : '',
+        date: readDate(frontmatter['date'], `${url.replace(/^\//, '').replace(/\/$/, '')}.md`),
         tags: Array.isArray(frontmatter['tags']) ? frontmatter['tags'].map(String) : [],
       }))
-      .sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title));
+      .sort(compareArticles);
   },
 });

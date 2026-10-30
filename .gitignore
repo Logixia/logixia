@@ -77,3 +77,6 @@ release/
 
 # Documentation website (VitePress) build cache
 website/.vitepress/cache/
+
+# Temporary snippet-check dir
+.snippet-check/

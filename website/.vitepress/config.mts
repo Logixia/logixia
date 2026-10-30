@@ -1,9 +1,12 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type HeadConfig } from 'vitepress';
+import { readDate } from './meta';
 import { articlesSidebar, guideSidebar } from './sidebar';
 
-const SITE = 'https://logixia.github.io/logixia/';
+const BASE = '/logixia/';
+const HOST = 'https://logixia.github.io';
+const SITE = `${HOST}${BASE}`;
 const REPO = 'https://github.com/Logixia/logixia';
 const SITE_DESCRIPTION =
   'Structured logging, request tracing and multi-destination export for Node.js, NestJS and the edge, in one TypeScript-first library.';
@@ -31,7 +34,7 @@ function breadcrumbs(relativePath: string, title: string) {
     if (!last && !existsSync(`${srcDir}${acc}index.md`)) return;
     trail.push({
       name: last ? title : part.charAt(0).toUpperCase() + part.slice(1),
-      url: SITE + (last ? acc.slice(0, -1) : acc),
+      url: last ? pageUrl(relativePath) : SITE + acc,
     });
   });
   return {
@@ -51,13 +54,14 @@ export default defineConfig({
   title: 'Logixia',
   titleTemplate: ':title | Logixia',
   description: SITE_DESCRIPTION,
-  base: '/logixia/',
+  base: BASE,
   cleanUrls: true,
+  srcExclude: ['README.md'],
   lastUpdated: true,
   sitemap: { hostname: SITE },
 
   head: [
-    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/logixia/favicon.svg' }],
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: `${BASE}favicon.svg` }],
     ['meta', { name: 'theme-color', content: '#4f46e5' }],
     ['meta', { name: 'author', content: 'Logixia contributors' }],
   ],
@@ -107,7 +111,8 @@ export default defineConfig({
     const modified = pageData.lastUpdated
       ? new Date(pageData.lastUpdated).toISOString()
       : undefined;
-    const published = frontmatter['date'] ? new Date(frontmatter['date']).toISOString() : modified;
+    const publishedDay = readDate(frontmatter['date'], relativePath);
+    const published = publishedDay ? `${publishedDay}T00:00:00.000Z` : modified;
     const dateModified = modified ?? published;
 
     const head: HeadConfig[] = [

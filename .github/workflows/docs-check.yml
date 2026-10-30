@@ -4,6 +4,10 @@ on:
   pull_request:
     paths:
       - 'website/**'
+      - 'src/**'
+      - 'examples/website/**'
+      - 'tsconfig*.json'
+      - 'package-lock.json'
       - '.github/workflows/docs-check.yml'
 
 permissions: {}
@@ -29,11 +33,20 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: website/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            website/package-lock.json
 
-      - name: Install dependencies
+      - name: Install library dependencies (for snippet typechecking)
+        run: npm ci --ignore-scripts
+
+      - name: Install website dependencies
         working-directory: website
         run: npm ci --ignore-scripts
+
+      - name: Typecheck website code snippets
+        working-directory: website
+        run: npm run check:snippets
 
       - name: Build site (fails on dead links)
         working-directory: website

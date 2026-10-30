@@ -160,9 +160,9 @@ const child = logger.child('RequestHandler', { requestId: '123' });
 
 ---
 
-## DOCS-05 🟡 CLI reference — add to README and expand CLI-GUIDE.md
+## DOCS-05 🟡 CLI reference — add to README and expand website/guide/cli.md
 
-The existing `docs/CLI-GUIDE.md` is a start but missing:
+The existing `website/guide/cli.md` is a start but missing:
 
 - Exit codes
 - Environment variable support (`LOGIXIA_LOG_FILE`, `LOGIXIA_CONFIG`)

@@ -155,6 +155,8 @@ You get one `checkout` entry containing `route`, `userId`, `cartItems`, `cacheHi
 
 For HTTP servers, `wideEventMiddleware(logger)` does the scoping for you and emits on response `finish` or `close`, adding method, URL, IP, `statusCode` and duration:
 
+<!-- snippet-check: skip -->
+
 ```ts
 import express from 'express';
 import { addEventFields, createLogger, wideEventMiddleware } from 'logixia';
