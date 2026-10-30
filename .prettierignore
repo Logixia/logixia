@@ -16,3 +16,6 @@ docs/
 # Generated files
 **/*.d.ts
 CHANGELOG.md
+
+# Vendored third-party bundles
+docs/vendor/
