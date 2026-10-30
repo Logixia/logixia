@@ -10,20 +10,23 @@
  *
  * @example
  * ```ts
- * import { AzureMonitorTransport } from 'logixia';
+ * import { createLogger } from 'logixia';
+ * import { AzureMonitorTransport } from 'logixia/azure';
  *
  * const logger = createLogger({
  *   transports: {
- *     azure: new AzureMonitorTransport({
- *       // Logs Ingestion API endpoint (from your DCR)
- *       endpoint: 'https://<dce>.ingest.monitor.azure.com',
- *       ruleId: 'dcr-xxxxxxxxxxxxxxxx',
- *       streamName: 'Custom-LogixiaLogs',
- *       // Client credentials (or managed identity via no-credential mode)
- *       tenantId: process.env.AZURE_TENANT_ID,
- *       clientId: process.env.AZURE_CLIENT_ID,
- *       clientSecret: process.env.AZURE_CLIENT_SECRET,
- *     }),
+ *     custom: [
+ *       new AzureMonitorTransport({
+ *         // Logs Ingestion API endpoint (from your DCR)
+ *         endpoint: 'https://<dce>.ingest.monitor.azure.com',
+ *         ruleId: 'dcr-xxxxxxxxxxxxxxxx',
+ *         streamName: 'Custom-LogixiaLogs',
+ *         // Client credentials are required; managed identity is not supported.
+ *         tenantId: process.env.AZURE_TENANT_ID,
+ *         clientId: process.env.AZURE_CLIENT_ID,
+ *         clientSecret: process.env.AZURE_CLIENT_SECRET,
+ *       }),
+ *     ],
  *   },
  * });
  * ```
