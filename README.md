@@ -758,6 +758,31 @@ const logger = createLogger({
 await logger.info('Order placed', { orderId: 'ord_789' });
 ```
 
+### Slack and Discord webhook transports
+
+Send alerts to a chat channel. Both default to `level: 'error'`, batch entries that arrive within `minIntervalMs` (default 1000) into one message, and cap a message at 10 entries (the rest are dropped and counted in the message).
+
+```typescript
+import { createLogger } from 'logixia';
+import { DiscordTransport, SlackTransport } from 'logixia';
+
+const logger = createLogger({
+  appName: 'api',
+  transports: {
+    custom: [
+      new SlackTransport({ webhookUrl: process.env.SLACK_WEBHOOK_URL!, level: 'error' }),
+      new DiscordTransport({ webhookUrl: process.env.DISCORD_WEBHOOK_URL!, level: 'warn' }),
+    ],
+  },
+});
+```
+
+- The webhook URL is a secret. It must be `https:` on `hooks.slack.com` (Slack) or `discord.com` / `discordapp.com` (Discord) unless you pass `allowCustomUrl: true`. It is never logged and never appears in error messages (only the host does).
+- Logged text is escaped: Slack `&`, `<`, `>` (so `<!channel>` and `<@U123>` in log data cannot ping anyone); Discord markdown, plus `allowed_mentions: { parse: [] }` on every request.
+- Platform limits are enforced by truncation (Slack header 150 and data 2,500 chars; Discord title 256, description 4,096, 25 fields, 6,000 per message).
+- HTTP 429 waits for `Retry-After` (Discord: `retry_after`), then retries up to `maxRetries` (default 1). Other failures keep the batch queued with backoff; `flush()` rejects with a host-only error. The queue is bounded by `maxBufferSize` (default 1000, oldest dropped).
+- Also available: `username`, `iconEmoji` (Slack), `avatarUrl` (Discord), `filter`, `formatter`, `flush()` and `close()` (flushes pending entries).
+
 ### Custom transport
 
 Implement `ITransport` to send logs anywhere — Slack, PagerDuty, S3, an internal queue:
