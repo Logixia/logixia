@@ -131,6 +131,8 @@ describe('ErrorResponseBuilder.build — LogixiaException', () => {
     const { response } = ErrorResponseBuilder.build({
       exception: ex,
       path: '/p',
+      exposeDebug: true,
+      exposeCause: true,
       service: 'gatekeeper',
     });
     expect(response.debug?.service).toBe('gatekeeper');
@@ -141,6 +143,8 @@ describe('ErrorResponseBuilder.build — LogixiaException', () => {
     const { response } = ErrorResponseBuilder.build({
       exception: ex,
       path: '/p',
+      exposeDebug: true,
+      exposeCause: true,
       startTime: Date.now() - 50,
     });
     expect(typeof response.debug?.duration_ms).toBe('number');
@@ -149,14 +153,24 @@ describe('ErrorResponseBuilder.build — LogixiaException', () => {
 
   it('populates debug.stack for exceptions with a stack', () => {
     const ex = new LogixiaException(baseOpts);
-    const { response } = ErrorResponseBuilder.build({ exception: ex, path: '/p' });
+    const { response } = ErrorResponseBuilder.build({
+      exception: ex,
+      path: '/p',
+      exposeDebug: true,
+      exposeCause: true,
+    });
     expect(response.debug?.stack).toBeDefined();
   });
 
   it('populates debug.cause when exception has a cause', () => {
     const root = new Error('root cause message');
     const ex = new LogixiaException({ ...baseOpts, cause: root });
-    const { response } = ErrorResponseBuilder.build({ exception: ex, path: '/p' });
+    const { response } = ErrorResponseBuilder.build({
+      exception: ex,
+      path: '/p',
+      exposeDebug: true,
+      exposeCause: true,
+    });
     expect(response.debug?.cause).toBe('root cause message');
   });
 });
@@ -315,7 +329,42 @@ describe('ErrorResponseBuilder.build — unknown exception', () => {
     const { response } = ErrorResponseBuilder.build({
       exception: new Error('boom'),
       path: '/p',
+      exposeDebug: true,
+      exposeCause: true,
     });
     expect(response.debug?.stack).toBeDefined();
+  });
+});
+
+describe('ErrorResponseBuilder.build — debug is opt-in', () => {
+  const err = new Error('boom', { cause: new Error('postgres://u:secret@db/x') });
+
+  it('omits debug by default', () => {
+    const { response } = ErrorResponseBuilder.build({
+      exception: err,
+      path: '/p',
+      service: 'svc',
+      startTime: Date.now(),
+    });
+    expect(response.debug).toBeUndefined();
+  });
+
+  it('includes stack but not cause with exposeDebug only', () => {
+    const { response } = ErrorResponseBuilder.build({
+      exception: err,
+      path: '/p',
+      exposeDebug: true,
+    });
+    expect(response.debug?.stack).toBeDefined();
+    expect(response.debug?.cause).toBeUndefined();
+  });
+
+  it('exposeCause alone does not enable debug', () => {
+    const { response } = ErrorResponseBuilder.build({
+      exception: err,
+      path: '/p',
+      exposeCause: true,
+    });
+    expect(response.debug).toBeUndefined();
   });
 });
