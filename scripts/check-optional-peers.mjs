@@ -5,8 +5,9 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const run = (cmd, args, cwd, opts = {}) =>
@@ -30,9 +31,13 @@ const newProject = (name) => {
 const probe = (project, kind, specifier) => {
   const code =
     kind === 'require'
-      ? `console.log(Object.keys(require(${JSON.stringify(specifier)})).length)`
-      : `import(${JSON.stringify(specifier)}).then(m => console.log(Object.keys(m).length))`;
-  return Number(run(process.execPath, ['-e', code], project).trim());
+      ? `console.log('EXPORTS=' + Object.keys(require(${JSON.stringify(specifier)})).length)`
+      : `import(${JSON.stringify(specifier)}).then(m => console.log('EXPORTS=' + Object.keys(m).length))`;
+  // Read only our marker line, so an entry that prints on load can't turn the count into NaN.
+  const out = run(process.execPath, ['-e', code], project);
+  const match = /^EXPORTS=(\d+)$/m.exec(out);
+  if (!match) throw new Error(`could not read export count from output: ${out.slice(0, 200)}`);
+  return Number(match[1]);
 };
 
 const check = (project, specifier) => {

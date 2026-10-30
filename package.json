@@ -287,6 +287,9 @@
     },
     "express": {
       "optional": true
+    },
+    "reflect-metadata": {
+      "optional": true
     }
   },
   "devDependencies": {

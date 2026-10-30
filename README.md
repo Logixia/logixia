@@ -1001,7 +1001,7 @@ The `TraceMiddleware` class integrates directly with NestJS's middleware system.
 // For manual use in a custom module:
 
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
-import { TraceMiddleware } from 'logixia';
+import { TraceMiddleware } from 'logixia/nest';
 
 @Module({})
 export class AppModule implements NestModule {
@@ -1016,7 +1016,7 @@ export class AppModule implements NestModule {
 Propagates trace IDs through Kafka message handlers. Reads `traceId` / `trace_id` / `x-trace-id` from the message body or headers and runs the handler inside that trace context:
 
 ```typescript
-import { KafkaTraceInterceptor } from 'logixia';
+import { KafkaTraceInterceptor } from 'logixia/nest';
 import { UseInterceptors, Controller } from '@nestjs/common';
 import { MessagePattern } from '@nestjs/microservices';
 
@@ -1038,7 +1038,7 @@ export class OrdersConsumer {
 Propagates trace IDs through WebSocket event handlers. Reads `traceId` from the message body, event payload, or handshake query:
 
 ```typescript
-import { WebSocketTraceInterceptor } from 'logixia';
+import { WebSocketTraceInterceptor } from 'logixia/nest';
 import { UseInterceptors, WebSocketGateway, SubscribeMessage } from '@nestjs/websockets';
 
 @UseInterceptors(new WebSocketTraceInterceptor())
@@ -2261,11 +2261,14 @@ import {
   registerForShutdown, // (logger) => void
   deregisterFromShutdown, // (logger) => void
   resetShutdownHandlers, // () => void — useful in tests
-  // NestJS extras
+} from 'logixia';
+
+// NestJS extras (requires @nestjs/common):
+import {
   InjectLogger, // @InjectLogger() parameter decorator
   LogMethod, // @LogMethod() method decorator
   LogixiaExceptionFilter, // global exception filter
-} from 'logixia';
+} from 'logixia/nest';
 
 // Cloud transports (subpath imports):
 import { CloudWatchTransport } from 'logixia/cloudwatch';
