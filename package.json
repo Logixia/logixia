@@ -315,7 +315,7 @@
     "@size-limit/file": "^14.3.0",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
-    "@types/node": "^26.6.5",
+    "@types/node": "^20.19.43",
     "@types/pg": "^8.15.5",
     "@types/pino": "^7.0.5",
     "conventional-changelog-conventionalcommits": "8.0.0",

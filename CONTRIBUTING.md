@@ -81,7 +81,7 @@ People _love_ thorough bug reports. I'm not even kidding.
 
 ### Prerequisites
 
-- Node.js >= 16.0.0
+- Node.js >= 16.0.0 to use the library; building from source (tsdown, size-limit) requires Node.js >= 22.18
 - npm or pnpm
 
 ### Setup
