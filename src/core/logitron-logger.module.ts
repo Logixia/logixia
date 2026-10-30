@@ -24,6 +24,13 @@ const DEFAULT_ROUTES: RouteInfo[] = [{ path: '*', method: RequestMethod.ALL }];
 export const LOGIXIA_LOGGER_CONFIG = 'LOGIXIA_LOGGER_CONFIG';
 export const LOGIXIA_TRACE_CONFIG = 'TRACE_CONFIG';
 export const LOGIXIA_LOGGER_PREFIX = 'LOGIXIA_LOGGER_';
+/** Token injected by `@InjectLogger()`; aliases the root `LogixiaLoggerService`. */
+export const LOGIXIA_LOGGER_SERVICE = `${LOGIXIA_LOGGER_PREFIX}SERVICE`;
+
+const loggerServiceAlias = {
+  provide: LOGIXIA_LOGGER_SERVICE,
+  useExisting: LogixiaLoggerService,
+};
 
 // Export the service and interceptors for external use
 export { KafkaTraceInterceptor } from './kafka-trace.interceptor';
@@ -207,6 +214,7 @@ export class LogixiaLoggerModule implements NestModule {
           },
           inject: [LOGIXIA_LOGGER_CONFIG],
         },
+        loggerServiceAlias,
         {
           provide: KafkaTraceInterceptor,
           useFactory: (traceConfig: TraceIdConfig | undefined) =>
@@ -222,6 +230,7 @@ export class LogixiaLoggerModule implements NestModule {
       ],
       exports: [
         LogixiaLoggerService,
+        LOGIXIA_LOGGER_SERVICE,
         LOGIXIA_LOGGER_CONFIG,
         KafkaTraceInterceptor,
         WebSocketTraceInterceptor,
@@ -285,6 +294,7 @@ export class LogixiaLoggerModule implements NestModule {
           },
           inject: [LOGIXIA_LOGGER_CONFIG],
         },
+        loggerServiceAlias,
         {
           provide: KafkaTraceInterceptor,
           useFactory: (traceConfig: TraceIdConfig | undefined) =>
@@ -300,6 +310,7 @@ export class LogixiaLoggerModule implements NestModule {
       ],
       exports: [
         LogixiaLoggerService,
+        LOGIXIA_LOGGER_SERVICE,
         LOGIXIA_LOGGER_CONFIG,
         KafkaTraceInterceptor,
         WebSocketTraceInterceptor,

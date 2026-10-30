@@ -10,13 +10,13 @@
  * @example Full setup
  * ```ts
  * // app.module.ts
- * import { LogixiaModule } from 'logixia';
- * @Module({ imports: [LogixiaModule.forRoot({ appName: 'api' })] })
+ * import { LogixiaLoggerModule } from 'logixia/nest';
+ * @Module({ imports: [LogixiaLoggerModule.forRoot({ service: 'api' })] })
  * export class AppModule {}
  *
  * // order.service.ts
  * import { Injectable } from '@nestjs/common';
- * import { InjectLogger, LogMethod, LogixiaLoggerService } from 'logixia';
+ * import { InjectLogger, LogMethod, LogixiaLoggerService } from 'logixia/nest';
  *
  * @Injectable()
  * export class OrderService {
@@ -27,7 +27,7 @@
  * }
  *
  * // main.ts
- * import { LogixiaExceptionFilter } from 'logixia';
+ * import { LogixiaExceptionFilter } from 'logixia/nest';
  * app.useGlobalFilters(new LogixiaExceptionFilter(logger));
  * ```
  */
@@ -42,7 +42,7 @@ import { internalError, internalWarn } from '../utils/internal-log';
 import { sanitizeIncomingId, TraceContext } from '../utils/trace.utils';
 import {
   LOGIXIA_LOGGER_CONFIG,
-  LOGIXIA_LOGGER_PREFIX,
+  LOGIXIA_LOGGER_SERVICE,
   LogixiaLoggerModule,
 } from './logitron-logger.module';
 import type { LogixiaLoggerService } from './logitron-nestjs.service';
@@ -53,15 +53,15 @@ import { resolveResponseHeader } from './trace.middleware';
 /**
  * Inject the Logixia logger registered in the current NestJS DI container.
  *
- * Equivalent to `@Inject(LOGIXIA_LOGGER_TOKEN)` but without needing to import
- * the internal token constant yourself.
+ * Equivalent to `@Inject(LOGIXIA_LOGGER_SERVICE)`; `LogixiaLoggerModule.forRoot[Async]()`
+ * provides that token as an alias of the root `LogixiaLoggerService`.
  *
  * @example
  * ```ts
  * constructor(@InjectLogger() private readonly logger: LogixiaLoggerService) {}
  * ```
  */
-export const InjectLogger = (): ParameterDecorator => Inject(`${LOGIXIA_LOGGER_PREFIX}SERVICE`);
+export const InjectLogger = (): ParameterDecorator => Inject(LOGIXIA_LOGGER_SERVICE);
 
 // ── @LogMethod() ─────────────────────────────────────────────────────────────
 
@@ -240,8 +240,10 @@ export function LogMethod(options: LogMethodOptions = {}): MethodDecorator {
  * `new LogixiaExceptionFilter(logger, undefined, { exposeDebug: process.env.NODE_ENV === 'development' })`.
  *
  * **Trace ID headers:**
- * `X-Trace-ID` and `X-Request-ID` are echoed back on every error response so
- * clients can correlate with server logs.
+ * The request's trace ID is written to one response header — `X-Trace-ID` by
+ * default, or the name set via `traceId.responseHeader` (`false` disables it) — so
+ * clients can correlate with server logs. The filter does not write
+ * `X-Request-ID`.
  *
  * **Retry-After header:**
  * Automatically added for `429` responses (`Retry-After: 60`).
@@ -276,7 +278,7 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
 
   constructor(
     @Optional()
-    @Inject(`${LOGIXIA_LOGGER_PREFIX}SERVICE`)
+    @Inject(LOGIXIA_LOGGER_SERVICE)
     logger?: LogixiaLoggerService,
     @Optional()
     @Inject(LOGIXIA_LOGGER_CONFIG)
