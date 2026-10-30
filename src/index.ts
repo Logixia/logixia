@@ -18,6 +18,7 @@ import { createLogger as createLoggerFromCore, LogixiaLogger } from './core/logi
 // Type exports
 export * from './formatters';
 export * from './types';
+export type { ITransport, TransportConfig, TransportLogEntry } from './types/transport.types';
 export * from './utils/error.utils';
 export type { OtelBridgeOptions, OtelSpanContext } from './utils/otel';
 export {

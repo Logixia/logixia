@@ -3,7 +3,11 @@
 // `dist/*.d.ts`, under strict + exactOptionalPropertyTypes with real framework types.
 import express from 'express';
 import Fastify from 'fastify';
-import type { ILoggerDefault } from 'logixia';
+import type {
+  ILoggerDefault,
+  ITransport as RootTransport,
+  TransportLogEntry as RootEntry,
+} from 'logixia';
 import {
   createExpressContextMiddleware,
   createFastifyContextHook,
@@ -17,6 +21,16 @@ import {
 } from 'logixia/correlation';
 import { createExpressMiddleware, createFastifyPlugin } from 'logixia/middleware';
 import { createMockLogger } from 'logixia/testing';
+import type {
+  ConsoleTransportConfig,
+  FileTransportConfig,
+  IAsyncTransport,
+  IBatchTransport,
+  ITransport,
+  OtlpLogTransportConfig,
+  TransportConfig,
+  TransportLogEntry,
+} from 'logixia/transports';
 
 const logger = createLogger({ appName: 'consumer', environment: 'development' });
 
@@ -106,4 +120,42 @@ const handWritten: ILoggerDefault = {
 const mock = createMockLogger();
 const asDefault: ILoggerDefault = mock.logger;
 
-export { asDefault, flushed, handWritten, level, namespaces };
+// Custom transports are implementable against the public transport types.
+class MemoryTransport implements ITransport, IAsyncTransport, IBatchTransport {
+  readonly name = 'memory';
+  readonly entries: TransportLogEntry[] = [];
+  write(entry: TransportLogEntry): void {
+    this.entries.push(entry);
+  }
+  addToBatch(entry: TransportLogEntry): void {
+    this.entries.push(entry);
+  }
+  async flush(): Promise<void> {}
+}
+const consoleConfig: ConsoleTransportConfig = { level: 'warn', format: 'json' };
+const fileConfig: FileTransportConfig = { filename: 'app.log' };
+const otlpConfig: OtlpLogTransportConfig = { url: 'http://localhost:4318/v1/logs' };
+const transportConfig: TransportConfig = {
+  console: consoleConfig,
+  file: fileConfig,
+  custom: [new MemoryTransport()],
+};
+const withTransports = createLogger({ appName: 'consumer', transports: transportConfig });
+const rootEntry: RootEntry = {
+  timestamp: new Date(),
+  level: 'info',
+  message: 'x',
+};
+const rootTransport: RootTransport = new MemoryTransport();
+
+export {
+  asDefault,
+  flushed,
+  handWritten,
+  level,
+  namespaces,
+  otlpConfig,
+  rootEntry,
+  rootTransport,
+  withTransports,
+};
