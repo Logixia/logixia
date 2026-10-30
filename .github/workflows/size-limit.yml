@@ -1,34 +1,44 @@
 name: Bundle Size
 
-# Measures the real gzipped cost of the package on every PR and posts a diff
-# comment so reviewers can see the size impact before merging.
-# Example comment: "dist/index.mjs: 42.3 KB (+1.2 KB, +2.9%)"
+# Builds the package and reports the gzipped size of each entry in the job
+# summary. The job fails if an entry exceeds its limit in package.json
+# ("size-limit"). No third-party action and no write token.
 on:
   pull_request:
     branches: [main, develop]
 
-permissions:
-  contents: read
-  pull-requests: write # post the size diff comment
+permissions: {}
 
 jobs:
   size-limit:
     name: Bundle Size
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build
+        run: npm run build
 
       - name: Size Limit
-        uses: andresz1/size-limit-action@v1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          # Runs `npm run size` on both the base branch and the PR branch,
-          # then posts the diff as a PR comment. 'size' is defined in
-          # package.json scripts: "size": "size-limit"
-          script: npm run size
+        run: |
+          echo '### Bundle size' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          set -o pipefail
+          status=0
+          npm run --silent size 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || status=$?
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
