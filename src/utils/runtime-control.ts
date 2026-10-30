@@ -87,12 +87,23 @@ export function registerLevelSignal(
 
 interface MinimalReq {
   method?: string | undefined;
+  headers?: Record<string, string | string[] | undefined> | undefined;
   on?: (event: string, cb: (chunk?: unknown) => void) => void;
 }
 interface MinimalRes {
   statusCode?: number;
   setHeader?: (k: string, v: string) => void;
   end: (body?: string) => void;
+}
+
+/** Maximum accepted request body size for the level control handler. */
+const MAX_BODY_BYTES = 16 * 1024;
+
+function isJsonContentType(req: MinimalReq): boolean {
+  const raw = req.headers?.['content-type'];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof value !== 'string') return false;
+  return value.split(';')[0]!.trim().toLowerCase() === 'application/json';
 }
 
 const VALID_LEVELS = new Set<string>([
@@ -114,7 +125,16 @@ const VALID_LEVELS = new Set<string>([
  *
  * Custom levels are accepted too: any level the logger already knows passes
  * through. Unknown levels are rejected with 400 so a typo can't silently mute
- * logging. Mount behind your own auth — this intentionally has none.
+ * logging.
+ *
+ * **SECURITY: this handler has NO authentication or authorization.** Anyone who
+ * can reach it can silence logging or turn on verbose output. Always mount it
+ * behind your own auth (and on an internal-only route/port), never on a public
+ * listener.
+ *
+ * Mutating requests must send `Content-Type: application/json` (otherwise 415,
+ * which also keeps cross-site form posts out) and a body of at most 16 KB
+ * (otherwise 413).
  */
 export function createLevelControlHandler(
   logger: ReconfigurableLogger,
@@ -171,10 +191,9 @@ export function createLevelControlHandler(
         }
       }
       if (logger.setNamespaceLevels) {
-        const coerced: NamespaceLevels = {};
-        for (const [pat, lvl] of Object.entries(nl)) {
-          coerced[pat] = String(lvl).toLowerCase() as LogLevelString;
-        }
+        const coerced: NamespaceLevels = Object.fromEntries(
+          Object.entries(nl).map(([pat, lvl]) => [pat, String(lvl).toLowerCase() as LogLevelString])
+        );
         logger.setNamespaceLevels(coerced);
       } else {
         internalWarn('level control: logger does not support setNamespaceLevels — ignored');
@@ -193,18 +212,46 @@ export function createLevelControlHandler(
     }
 
     if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
+      if (!isJsonContentType(req)) {
+        send(res, 415, { error: 'Content-Type must be application/json' });
+        return;
+      }
+      const declared = Number(req.headers?.['content-length']);
+      if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
+        send(res, 413, { error: 'request body too large' });
+        return;
+      }
+
       // Express already-parsed body (req.body) vs raw stream.
       const maybeBody = (req as unknown as { body?: unknown }).body;
       if (maybeBody !== undefined && typeof req.on !== 'function') {
-        applyBody(res, typeof maybeBody === 'string' ? maybeBody : JSON.stringify(maybeBody));
+        const text = typeof maybeBody === 'string' ? maybeBody : JSON.stringify(maybeBody);
+        if (Buffer.byteLength(text) > MAX_BODY_BYTES) {
+          send(res, 413, { error: 'request body too large' });
+          return;
+        }
+        applyBody(res, text);
         return;
       }
       if (typeof req.on === 'function') {
         let raw = '';
+        let size = 0;
+        let rejected = false;
         req.on('data', (chunk?: unknown) => {
-          raw += String(chunk ?? '');
+          if (rejected) return;
+          const piece = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk ?? '');
+          size += Buffer.byteLength(piece);
+          if (size > MAX_BODY_BYTES) {
+            rejected = true;
+            raw = '';
+            send(res, 413, { error: 'request body too large' });
+            return;
+          }
+          raw += piece;
         });
-        req.on('end', () => applyBody(res, raw));
+        req.on('end', () => {
+          if (!rejected) applyBody(res, raw);
+        });
         return;
       }
       applyBody(res, '');

@@ -1,9 +1,9 @@
 /* eslint-disable no-control-regex -- tests assert on control characters */
+import { buildDetailLines } from '../commands/explore';
 import { exportLogs } from '../commands/export';
 import { executeQuery } from '../commands/query';
 import { generateStats } from '../commands/stats';
 import { highlightLine } from '../commands/tail';
-import { buildDetailLines } from '../commands/explore';
 import {
   csvField,
   escapeRegExp,

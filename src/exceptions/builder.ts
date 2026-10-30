@@ -179,8 +179,16 @@ export class ErrorResponseBuilder {
   static build<TCode extends string = string, TType extends string = string>(
     params: BuildParams
   ): { response: LogixiaErrorResponse<TCode, TType>; httpStatus: number } {
-    const { exception, path, service, startTime, traceId: rawTraceId } = params;
-    const expose = { debug: params.exposeDebug, cause: params.exposeCause };
+    const {
+      exception,
+      path,
+      service,
+      startTime,
+      traceId: rawTraceId,
+      exposeDebug,
+      exposeCause,
+    } = params;
+    const expose = { debug: exposeDebug, cause: exposeCause };
     // ALS is authoritative → caller-supplied → undefined (field omitted from response).
     const traceId = TraceContext.instance.getCurrentTraceId() ?? rawTraceId;
     const timestamp = new Date().toISOString();
