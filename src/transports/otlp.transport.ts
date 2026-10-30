@@ -27,6 +27,7 @@
 
 import type { IAsyncTransport, TransportLogEntry } from '../types/transport.types';
 import { internalWarn } from '../utils/internal-log';
+import { _getOtelBridgeFieldNames } from '../utils/otel';
 import { stringifyForLog } from '../utils/safe-stringify';
 import {
   BatchBuffer,
@@ -103,6 +104,67 @@ export function toOtelSeverity(level: string): { number: number; text: string } 
     default:
       return { number: 9, text: 'INFO' };
   }
+}
+
+interface NativeIds {
+  traceId?: string;
+  spanId?: string;
+  /** The entry's own trace id when it could not become the native `traceId`. */
+  traceAttr?: string;
+}
+
+function findHexId(
+  attrs: Record<string, unknown>,
+  names: readonly string[],
+  convert: (id: string) => string | undefined
+): { key: string; hex: string } | undefined {
+  for (const key of names) {
+    const value = attrs[key];
+    if (typeof value !== 'string') continue;
+    const hex = convert(value);
+    if (hex) return { key, hex };
+  }
+  return undefined;
+}
+
+/**
+ * Pick the native OTLP `traceId`/`spanId` and remove the ids they came from out of
+ * `attrs`. A valid OTel pair in the payload (the bridge's trace and span id) wins
+ * and is used for both fields, so they always belong to the same trace. Otherwise a
+ * valid `entry.traceId` is used alone. A `spanId` is never emitted without its trace.
+ */
+function resolveNativeIds(entry: TransportLogEntry, attrs: Record<string, unknown>): NativeIds {
+  const bridge = _getOtelBridgeFieldNames();
+  const traceNames = [...(bridge ? [bridge.traceIdField] : []), 'traceId', 'trace_id'];
+  const spanNames = [...(bridge ? [bridge.spanIdField] : []), 'spanId', 'span_id'];
+  const payloadTrace = findHexId(attrs, traceNames, toOtlpTraceId);
+  const payloadSpan = findHexId(attrs, spanNames, toOtlpSpanId);
+  const entryHex = entry.traceId ? toOtlpTraceId(entry.traceId) : undefined;
+
+  const ids: NativeIds = {};
+  if (payloadTrace && payloadSpan) {
+    ids.traceId = payloadTrace.hex;
+    ids.spanId = payloadSpan.hex;
+    delete attrs[payloadSpan.key];
+  } else if (entryHex) {
+    ids.traceId = entryHex;
+  } else if (payloadTrace) {
+    ids.traceId = payloadTrace.hex;
+  }
+
+  if (ids.traceId) {
+    for (const key of traceNames) {
+      const value = attrs[key];
+      if (
+        typeof value === 'string' &&
+        (value === entry.traceId || toOtlpTraceId(value) === ids.traceId)
+      ) {
+        delete attrs[key];
+      }
+    }
+  }
+  if (entry.traceId && !(entryHex && entryHex === ids.traceId)) ids.traceAttr = entry.traceId;
+  return ids;
 }
 
 /** Coerce a JS value into an OTLP AnyValue. */
@@ -186,23 +248,7 @@ export class OtlpLogTransport implements IAsyncTransport {
     const tsNanos = String(entry.timestamp.getTime() * 1_000_000);
 
     const attrs: Record<string, unknown> = { ...(entry.data ?? {}) };
-    // A payload traceId (the OTel bridge writes one) becomes the native field when
-    // the entry has none, and is not repeated as an attribute when it is the same id.
-    let nativeDataTraceId: string | undefined;
-    const payloadTraceId = attrs['traceId'];
-    if (typeof payloadTraceId === 'string') {
-      if (entry.traceId === undefined && toOtlpTraceId(payloadTraceId)) {
-        nativeDataTraceId = payloadTraceId;
-        delete attrs['traceId'];
-      } else if (payloadTraceId === entry.traceId) {
-        delete attrs['traceId'];
-      }
-    }
-    let nativeSpanId: string | undefined;
-    if (typeof attrs['spanId'] === 'string') {
-      nativeSpanId = toOtlpSpanId(attrs['spanId']);
-      if (nativeSpanId) delete attrs['spanId'];
-    }
+    const ids = resolveNativeIds(entry, attrs);
     if (entry.context !== undefined) attrs['context'] = entry.context;
     if (entry.appName !== undefined) attrs['app.name'] = entry.appName;
     if (entry.environment !== undefined) attrs['deployment.environment'] = entry.environment;
@@ -216,17 +262,13 @@ export class OtlpLogTransport implements IAsyncTransport {
       attributes: toAttributes(attrs),
     };
 
-    if (nativeSpanId) record['spanId'] = nativeSpanId;
-
-    const traceSource = entry.traceId ?? nativeDataTraceId;
-    if (traceSource) {
-      const traceId = toOtlpTraceId(traceSource);
-      if (traceId) record['traceId'] = traceId;
-      else
-        (record['attributes'] as unknown[]).push({
-          key: 'trace_id',
-          value: { stringValue: traceSource },
-        });
+    if (ids.traceId) record['traceId'] = ids.traceId;
+    if (ids.spanId) record['spanId'] = ids.spanId;
+    if (ids.traceAttr !== undefined) {
+      (record['attributes'] as unknown[]).push({
+        key: 'trace_id',
+        value: { stringValue: ids.traceAttr },
+      });
     }
 
     return record;

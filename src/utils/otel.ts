@@ -208,6 +208,20 @@ export function _getOtelPayloadIfEnabled(): Record<string, unknown> {
 }
 
 /**
+ * @internal
+ * Payload field names the active bridge writes the trace and span ids to, or
+ * `undefined` when the bridge is not initialised.
+ */
+export function _getOtelBridgeFieldNames():
+  { traceIdField: string; spanIdField: string } | undefined {
+  if (!_bridgeOptions) return undefined;
+  return {
+    traceIdField: _bridgeOptions.traceIdField ?? 'traceId',
+    spanIdField: _bridgeOptions.spanIdField ?? 'spanId',
+  };
+}
+
+/**
  * Disable the OTel bridge (useful for tests).
  */
 export function disableOtelBridge(): void {
