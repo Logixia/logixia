@@ -8,11 +8,10 @@
 
 ## Current Test Inventory
 
-| File                                 | Tests | What they cover                                   |
-| ------------------------------------ | ----- | ------------------------------------------------- |
-| `test/analyze.test.ts`               | 2     | `analyzeFileContents()` time filter + empty input |
-| `src/cli/__tests__/analyze.test.ts`  | ~3    | CLI analyze command                               |
-| `src/cli/__tests__/commands.test.ts` | ~3    | CLI command parsing                               |
+| File                                 | Tests | What they cover     |
+| ------------------------------------ | ----- | ------------------- |
+| `src/cli/__tests__/analyze.test.ts`  | ~3    | CLI analyze command |
+| `src/cli/__tests__/commands.test.ts` | ~3    | CLI command parsing |
 
 **Total: ~8 tests — essentially nothing for a production logging library.**
 

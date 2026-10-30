@@ -165,6 +165,7 @@
     "dev:performance": "ts-node -P tsconfig.examples.json --transpile-only -r ./examples/register.js examples/performance-monitoring.ts",
     "dev:fields": "ts-node -P tsconfig.examples.json --transpile-only -r ./examples/register.js examples/field-configuration.ts",
     "dev:search": "ts-node -P tsconfig.examples.json --transpile-only -r ./examples/register.js examples/search-quickstart.ts",
+    "dev:search-readme": "ts-node -P tsconfig.examples.json --transpile-only -r ./examples/register.js examples/search-readme.ts",
     "dev:intelligent-search": "ts-node -P tsconfig.examples.json --transpile-only -r ./examples/register.js examples/intelligent-search.ts",
     "benchmark": "npm run build && node benchmarks/run.mjs",
     "check:exports": "node scripts/check-exports.mjs",
@@ -346,7 +347,6 @@
     "tsdown": "^0.15.0",
     "typescript": "^5.0.0",
     "typescript-eslint": "^8.57.0",
-    "uuid": "^11.1.1",
     "winston": "^3.19.0"
   },
   "engines": {

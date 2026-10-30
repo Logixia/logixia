@@ -46,6 +46,7 @@ export class KafkaTraceInterceptor implements NestInterceptor {
   }
 
   private readonly ctx = TraceContext.instance;
+  private readonly config: TraceIdConfig;
 
   /**
    * @param config        - TraceIdConfig options (extractor keys, contextKey, etc.)
@@ -56,7 +57,7 @@ export class KafkaTraceInterceptor implements NestInterceptor {
    *                         Default: false (handler runs without trace context).
    */
   constructor(
-    private readonly config?: TraceIdConfig,
+    config?: TraceIdConfig,
     private readonly requireTraceId: boolean = false
   ) {
     this.config = {
@@ -72,7 +73,7 @@ export class KafkaTraceInterceptor implements NestInterceptor {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NestJS interceptor interface requires Observable<any>
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
-    if (!this.config?.enabled) {
+    if (!this.config.enabled) {
       return next.handle();
     }
 

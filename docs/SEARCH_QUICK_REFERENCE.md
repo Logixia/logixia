@@ -487,8 +487,8 @@ const searchManager = new SearchManager({
 
 ## 🔗 Useful Links
 
-- **Full Documentation**: `SEARCH_DOCUMENTATION.md`
-- **Feature Overview**: `SEARCH_FEATURE.md`
+- **Full Documentation**: [SEARCH_DOCUMENTATION.md](./SEARCH_DOCUMENTATION.md)
+- **Feature Overview**: [SEARCH_FEATURE.md](./SEARCH_FEATURE.md)
 - **Examples**: `examples/search-quickstart.ts`
 - **Comprehensive Demo**: `examples/intelligent-search.ts`
 
@@ -504,4 +504,4 @@ npm run dev:intelligent-search
 
 ---
 
-**Need more help?** Check the full documentation in `SEARCH_DOCUMENTATION.md`
+**Need more help?** Check the full documentation in [SEARCH_DOCUMENTATION.md](./SEARCH_DOCUMENTATION.md)
