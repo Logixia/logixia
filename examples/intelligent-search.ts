@@ -242,12 +242,12 @@ async function generateSampleLogs(logger: any): Promise<LogEntry[]> {
   const traceIds = ['trace-123', 'trace-456', 'trace-789'];
   const userIds = ['user123', 'user456', 'user789'];
 
-  // Generate diverse logs
+  // Generate diverse, deterministic demo logs (no randomness needed for sample data)
   for (let i = 0; i < 100; i++) {
-    const service = services[Math.floor(Math.random() * services.length)]!;
-    const traceId = traceIds[Math.floor(Math.random() * traceIds.length)]!;
-    const userId = userIds[Math.floor(Math.random() * userIds.length)]!;
-    const timestamp = new Date(Date.now() - Math.random() * 3600000).toISOString();
+    const service = services[i % services.length]!;
+    const traceId = traceIds[(i * 7) % traceIds.length]!;
+    const userId = userIds[(i * 5) % userIds.length]!;
+    const timestamp = new Date(Date.now() - ((i * 37) % 3600) * 1000).toISOString();
 
     if (i % 10 === 0) {
       // Error log
@@ -277,7 +277,7 @@ async function generateSampleLogs(logger: any): Promise<LogEntry[]> {
         appName: service,
         traceId,
         message: `Request processed successfully by ${service}`,
-        payload: { userId, responseTime: Math.floor(Math.random() * 500) },
+        payload: { userId, responseTime: (i * 53) % 500 },
       });
     }
   }
