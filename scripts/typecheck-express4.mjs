@@ -50,6 +50,26 @@ try {
       stdio: 'inherit',
     }
   );
+  const consumerConfig = path.join(tmp, 'tsconfig.consumer.json');
+  writeFileSync(
+    consumerConfig,
+    JSON.stringify({
+      extends: path.join(root, 'tests/consumer/tsconfig.json'),
+      compilerOptions: {
+        baseUrl: root,
+        typeRoots: [path.join(root, 'node_modules/@types')],
+        paths: { express: [path.join(tmp, 'node_modules/@types/express')] },
+      },
+      include: [path.join(root, 'tests/consumer/*.ts')],
+    })
+  );
+  execFileSync(
+    process.execPath,
+    [path.join(root, 'node_modules/typescript/bin/tsc'), '-p', consumerConfig],
+    {
+      stdio: 'inherit',
+    }
+  );
   console.log('express@4 types: OK');
 } finally {
   rmSync(tmp, { recursive: true, force: true });

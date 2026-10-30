@@ -14,7 +14,7 @@
  * ```
  */
 
-import type { IBaseLogger, LogEntry } from '../types';
+import type { ILogger, LogEntry } from '../types';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,8 +33,8 @@ export type LogMatcher =
   | Partial<Record<'message' | 'level' | string, unknown>>;
 
 export interface MockLoggerInstance {
-  /** The logger itself — pass this where an IBaseLogger is expected. */
-  readonly logger: IBaseLogger;
+  /** The logger itself — pass this where an IBaseLogger or ILogger is expected. */
+  readonly logger: ILogger;
   /** Every call recorded across all levels, in insertion order. */
   readonly calls: MockLogCall[];
   /**
@@ -113,7 +113,7 @@ function formatCalls(calls: MockLogCall[]): string {
 /**
  * Create a mock logger for use in tests.
  *
- * The returned object implements `IBaseLogger` and additionally exposes `.calls`,
+ * The returned object implements `ILogger` and additionally exposes `.calls`,
  * `.getCalls()`, `.getLastCall()`, `.expectLog()`, `.expectNoLog()`, and `.reset()`.
  *
  * @param options.silent  Suppress console output (default: true)
@@ -149,7 +149,7 @@ export function createMockLogger(
     });
   }
 
-  const logger: IBaseLogger = {
+  const logger: ILogger = {
     async error(messageOrError, data) {
       record('error', messageOrError as string | Error, data);
     },
@@ -187,6 +187,15 @@ export function createMockLogger(
     },
     getLevel() {
       return 'info';
+    },
+    setNamespaceLevels(_levels) {
+      /* no-op */
+    },
+    patchNamespaceLevels(_levels) {
+      /* no-op */
+    },
+    getNamespaceLevels() {
+      return {};
     },
     setContext(_ctx) {
       /* no-op */
@@ -232,6 +241,12 @@ export function createMockLogger(
 
     child(ctx, _data) {
       return createMockLogger({ silent, context: ctx }).logger;
+    },
+    async flush() {
+      /* no-op */
+    },
+    async healthCheck() {
+      return { healthy: true, details: {} };
     },
     async close() {
       /* no-op */

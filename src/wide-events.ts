@@ -161,7 +161,7 @@ interface MwReq {
   originalUrl?: string | undefined;
   ip?: string | undefined;
   headers?: Record<string, unknown> | undefined;
-  socket?: { remoteAddress?: string } | undefined;
+  socket?: { remoteAddress?: string | undefined } | undefined;
 }
 interface MwRes {
   statusCode?: number;

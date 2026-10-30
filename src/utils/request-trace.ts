@@ -14,7 +14,7 @@ export type TraceHeaderOption = string | readonly string[];
 
 /** Minimal structural request shape; Express and Fastify requests satisfy it. */
 export interface ContextRequestLike {
-  headers?: Record<string, string | string[] | undefined>;
+  headers?: Record<string, string | string[] | undefined> | undefined;
   id?: unknown;
 }
 

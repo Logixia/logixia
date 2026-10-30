@@ -305,7 +305,9 @@ export interface IBaseLogger {
   timeEnd(label: string): Promise<number | undefined>;
   timeAsync<T>(label: string, fn: () => Promise<T>): Promise<T>;
 
+  /** Set the minimum log level at runtime. Unknown levels are ignored with a warning. */
   setLevel(level: LogLevel | string): void;
+  /** Return the configured minimum log level (not the per-namespace effective one). */
   getLevel(): string;
   setContext(context: string): void;
   getContext(): string | undefined;
@@ -337,6 +339,27 @@ export interface IBaseLogger {
   unuse(pluginName: string): this;
 }
 
+/**
+ * Runtime controls implemented by loggers returned from `createLogger`.
+ * Kept separate from {@link IBaseLogger} so custom `IBaseLogger` implementations
+ * (mocks, adapters) are not forced to provide them.
+ */
+export interface ILoggerRuntimeControls {
+  /**
+   * Replace the per-namespace level map at runtime.
+   * @example logger.setNamespaceLevels({ 'db.*': 'debug', '*': 'info' });
+   */
+  setNamespaceLevels(levels: NamespaceLevels): void;
+  /** Merge entries into the existing per-namespace level map at runtime. */
+  patchNamespaceLevels(levels: NamespaceLevels): void;
+  /** Return a copy of the current per-namespace level map. */
+  getNamespaceLevels(): NamespaceLevels;
+  /** Flush buffered entries in all transports without closing them. */
+  flush(): Promise<void>;
+  /** Report whether the transports are healthy. */
+  healthCheck(): Promise<{ healthy: boolean; details: Record<string, unknown> }>;
+}
+
 // Type for custom level methods based on config
 export type CustomLevelMethods<T extends Record<string, number>> = {
   [K in keyof T]: (message: string, data?: Record<string, unknown>) => Promise<void>;
@@ -345,11 +368,11 @@ export type CustomLevelMethods<T extends Record<string, number>> = {
 // Generic logger type that combines base logger with custom level methods
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- empty default is intentional for optional generic
 export type ILogger<TLevels extends Record<string, number> = {}> = IBaseLogger &
+  ILoggerRuntimeControls &
   CustomLevelMethods<TLevels>;
 
 // Default logger interface for backward compatibility
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- marker interface for backward compat
-export interface ILoggerDefault extends IBaseLogger {}
+export interface ILoggerDefault extends IBaseLogger, ILoggerRuntimeControls {}
 
 // Helper type to create logger with specific custom levels
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic type needs any to accept all LoggerConfig shapes
