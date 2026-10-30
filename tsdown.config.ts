@@ -32,8 +32,17 @@ const OPTIONAL_RUNTIME_DEPS = [
   'socket.io',
 ];
 
+// Shared by every entry: keep .js/.mjs output names and never bundle optional deps.
+const base = {
+  outDir: 'dist',
+  clean: false,
+  fixedExtension: false,
+  deps: { neverBundle: OPTIONAL_RUNTIME_DEPS },
+} as const;
+
 export default defineConfig([
   {
+    ...base,
     entry: [
       'src/index.ts',
       'src/nest.ts',
@@ -47,51 +56,38 @@ export default defineConfig([
       'src/gcp.ts',
       'src/azure.ts',
     ],
-    outDir: 'dist',
     format: ['cjs', 'esm'],
     dts: true,
-    clean: false,
-    fixedExtension: false,
     sourcemap: true,
     target: 'node16',
     platform: 'node',
     shims: true,
-    deps: { neverBundle: OPTIONAL_RUNTIME_DEPS },
   },
   // Worker thread entry loaded by WorkerTransport (dist/worker-entry.js).
   {
+    ...base,
     entry: { 'worker-entry': 'src/transports/worker-entry.ts' },
-    outDir: 'dist',
     format: ['cjs'],
     dts: false,
-    clean: false,
-    fixedExtension: false,
     target: 'node16',
     platform: 'node',
-    deps: { neverBundle: OPTIONAL_RUNTIME_DEPS },
   },
   // Browser / edge entry: must stay free of Node built-ins.
   {
+    ...base,
     entry: ['src/browser.ts'],
-    outDir: 'dist',
     format: ['cjs', 'esm'],
     dts: true,
-    clean: false,
-    fixedExtension: false,
     sourcemap: true,
     platform: 'neutral',
-    deps: { neverBundle: OPTIONAL_RUNTIME_DEPS },
   },
   // The `logixia` bin (package.json "bin" -> dist/cli/index.js).
   {
+    ...base,
     entry: { 'cli/index': 'src/cli/index.ts' },
-    outDir: 'dist',
     format: ['cjs'],
     dts: false,
-    clean: false,
-    fixedExtension: false,
     target: 'node16',
     platform: 'node',
-    deps: { neverBundle: OPTIONAL_RUNTIME_DEPS },
   },
 ]);
