@@ -10,25 +10,6 @@ We love your input! We want to make contributing to Logixia as easy and transpar
 - Proposing new features
 - Becoming a maintainer
 
-## 🎃 Hacktoberfest 2025
-
-We're participating in **Hacktoberfest 2025**! This is a great opportunity for new contributors to get involved.
-
-### For Hacktoberfest Contributors:
-
-- Look for issues labeled with `hacktoberfest` and `good first issue`
-- Read this entire contributing guide before starting
-- Join our community discussions for help and guidance
-- Quality over quantity - we value meaningful contributions
-- All skill levels welcome - from documentation to complex features
-
-### Hacktoberfest Guidelines:
-
-- **No spam PRs** - Low-quality PRs will be marked as `spam` or `invalid`
-- **Follow our standards** - Ensure your code meets our quality requirements
-- **Test your changes** - All PRs must include appropriate tests
-- **Be patient** - Maintainers will review PRs as quickly as possible
-
 ## We Develop with GitHub
 
 We use GitHub to host code, to track issues and feature requests, as well as accept pull requests.
@@ -82,7 +63,7 @@ People _love_ thorough bug reports. I'm not even kidding.
 ### Prerequisites
 
 - Node.js >= 16.0.0 to use the library at runtime. The development toolchain (build, lint, size-limit and the commit hooks) needs Node.js `^22.19.0 || ^24.11.0 || >=26` (see `.nvmrc`); lint and the pre-commit hook fail on older Node
-- npm or pnpm
+- npm (the repository uses `package-lock.json`)
 
 ### Setup
 
@@ -93,12 +74,10 @@ People _love_ thorough bug reports. I'm not even kidding.
    cd logixia
    ```
 
-2. Install dependencies:
+2. Install dependencies. The lockfile is committed, so use a clean install and skip lifecycle scripts:
 
    ```bash
-   npm install
-   # or
-   pnpm install
+   npm ci --ignore-scripts
    ```
 
 3. Build the project:
@@ -108,9 +87,26 @@ People _love_ thorough bug reports. I'm not even kidding.
    ```
 
 4. Run tests:
+
    ```bash
    npm test
    ```
+
+5. Before pushing, run the same checks CI runs:
+
+   ```bash
+   npm run typecheck && npm run lint:check && npm run format:check && npm test
+   ```
+
+### Documentation site
+
+The documentation site (VitePress) lives in `website/` and is published to https://logixia.github.io/logixia/. To run it locally:
+
+```bash
+cd website
+npm ci --ignore-scripts
+npm run docs:dev
+```
 
 ### Development Scripts
 
@@ -181,7 +177,7 @@ We use ESLint and Prettier to maintain code quality and consistency:
 
 ## Documentation
 
-- Update README.md if you change functionality
+- Update the docs site pages under `website/` (and the README, if the change is headline-level) when you change functionality
 - Add JSDoc comments for new public APIs
 - Update examples if APIs change
 - Keep documentation clear and concise
@@ -191,7 +187,7 @@ We use ESLint and Prettier to maintain code quality and consistency:
 1. Comment on the issue you want to work on so it can be assigned to you. Issues labelled `good first issue` are a good place to start.
 2. Fork the repo and create a branch from `main`: `git checkout -b fix/short-description`
 3. Make your change, with tests.
-4. Run `npm run typecheck && npm run lint && npm test` before pushing.
+4. Run `npm run typecheck && npm run lint:check && npm run format:check && npm test` before pushing.
 5. Open a pull request against `main` and fill in the template.
 
 ### What happens next
@@ -239,7 +235,6 @@ Contributors will be recognized in:
 - **Documentation**: Check README.md and examples
 - **Issues**: Search existing issues
 - **Discussions**: Use GitHub Discussions for questions
-- **Community**: Join our community channels
 
 ## 🚀 First-Time Contributors
 
