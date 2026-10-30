@@ -63,6 +63,10 @@ export class SegmentTransport extends AnalyticsTransport {
     // Segment doesn't require explicit cleanup
   }
 
+  protected override reservedKeys(): readonly string[] {
+    return ['logger'];
+  }
+
   private transformToSegmentEvent(entry: TransportLogEntry): Record<string, unknown> {
     const transformed = this.transformEntry(entry);
 
@@ -73,10 +77,10 @@ export class SegmentTransport extends AnalyticsTransport {
       anonymousId: this.generateAnonymousId(),
       timestamp: entry.timestamp.toISOString(),
       properties: {
+        ...transformed,
         level: entry.level,
         message: entry.message,
         logger: 'logixia',
-        ...transformed,
         ...(entry.context && { context: entry.context }),
         ...(entry.traceId && { traceId: entry.traceId }),
         ...(entry.appName && { appName: entry.appName }),
@@ -154,13 +158,9 @@ export class SegmentTransport extends AnalyticsTransport {
   }
 
   private extractUserId(entry: TransportLogEntry): string | undefined {
-    // Try to extract user ID from entry data
-    if (entry.data) {
-      const d = entry.data as Record<string, unknown>;
-      const id = d['userId'] ?? d['user_id'] ?? d['id'];
-      return typeof id === 'string' ? id : undefined;
-    }
-    return undefined;
+    const field = this.segmentConfig.userIdField ?? 'userId';
+    const id = entry.data?.[field];
+    return typeof id === 'string' ? id : undefined;
   }
 
   private generateAnonymousId(): string {

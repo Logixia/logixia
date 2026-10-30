@@ -46,6 +46,10 @@ export class MixpanelTransport extends AnalyticsTransport {
     // Mixpanel doesn't require explicit cleanup
   }
 
+  protected override reservedKeys(): readonly string[] {
+    return ['token', 'distinct_id', 'time', '$insert_id'];
+  }
+
   private transformToMixpanelEvent(entry: TransportLogEntry): AnalyticsEvent {
     const transformed = this.transformEntry(entry);
 
@@ -53,6 +57,7 @@ export class MixpanelTransport extends AnalyticsTransport {
       name: `log_${entry.level}`,
       properties: {
         ...transformed,
+        token: this.mixpanelConfig.token,
         distinct_id: this.mixpanelConfig.distinct_id || 'anonymous',
         time: entry.timestamp.getTime(),
         $insert_id: this.generateInsertId(entry),
@@ -67,8 +72,8 @@ export class MixpanelTransport extends AnalyticsTransport {
     const payload = {
       event: event.name,
       properties: {
-        token: this.mixpanelConfig.token,
         ...event.properties,
+        token: this.mixpanelConfig.token,
       },
     };
 
@@ -79,8 +84,8 @@ export class MixpanelTransport extends AnalyticsTransport {
     const payload = events.map((event) => ({
       event: event.name,
       properties: {
-        token: this.mixpanelConfig.token,
         ...event.properties,
+        token: this.mixpanelConfig.token,
       },
     }));
 
@@ -175,11 +180,11 @@ export class MixpanelTransport extends AnalyticsTransport {
     const payload = {
       event: eventName,
       properties: {
+        ...properties,
+        ...(this.mixpanelConfig.enableSuperProperties ? this.mixpanelConfig.superProperties : {}),
         token: this.mixpanelConfig.token,
         distinct_id: this.mixpanelConfig.distinct_id || 'anonymous',
         time: Date.now(),
-        ...properties,
-        ...(this.mixpanelConfig.enableSuperProperties ? this.mixpanelConfig.superProperties : {}),
       },
     };
 

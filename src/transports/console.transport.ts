@@ -5,6 +5,8 @@ import type {
 } from '../types/transport.types';
 import { safeToString } from '../utils/coerce.utils';
 import { stringifyForLog } from '../utils/safe-stringify';
+import { stripControlChars } from '../utils/sanitize.utils';
+import { mergeCoreFields } from './entry-fields';
 
 /**
  * Writes log entries to stdout (info/debug/verbose) and stderr (error/warn).
@@ -40,19 +42,10 @@ export class ConsoleTransport implements ITransport {
     ['reset', '\x1b[0m'],
   ]);
 
-  // CWE-117 guard: strip ASCII control characters from user-supplied text so
-  // attacker-controlled log payloads cannot inject ANSI escapes, overwrite
-  // lines, or forge log entries on the operator's terminal. Keeps \t (0x09)
-  // since tabs are harmless, and strips everything else in the C0 + DEL + C1
-  // ranges. Applied only to text mode — JSON mode already escapes via
-  // JSON.stringify.
-  // eslint-disable-next-line no-control-regex
-  private static readonly CONTROL_CHARS_RE = /[\x00-\x08\x0B-\x1F\x7F-\x9F]/g;
-
   private static sanitize(value: unknown): string {
     // Coerce to string first: upstream code (NestJS internals, user payloads)
     // can pass objects / Errors here, and .replace() would throw otherwise.
-    return safeToString(value).replace(ConsoleTransport.CONTROL_CHARS_RE, '');
+    return stripControlChars(safeToString(value));
   }
 
   constructor(private config: ConsoleTransportConfig = {}) {
@@ -77,16 +70,20 @@ export class ConsoleTransport implements ITransport {
     if (this.config.format === 'json') {
       // Compact (single-line) JSON so line-based log collectors can parse one
       // entry per line. JSON.stringify already escapes control chars.
-      return stringifyForLog({
-        timestamp: this.config.timestamp !== false ? entry.timestamp.toISOString() : undefined,
-        level: entry.level,
-        message: entry.message,
-        ...(entry.data || {}),
-        context: entry.context,
-        traceId: entry.traceId,
-        appName: entry.appName,
-        environment: entry.environment,
-      });
+      return stringifyForLog(
+        mergeCoreFields(
+          {
+            timestamp: this.config.timestamp !== false ? entry.timestamp.toISOString() : undefined,
+            level: entry.level,
+            message: entry.message,
+            context: entry.context,
+            traceId: entry.traceId,
+            appName: entry.appName,
+            environment: entry.environment,
+          },
+          entry.data
+        )
+      );
     }
 
     // Text format

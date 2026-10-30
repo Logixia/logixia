@@ -5,14 +5,11 @@
 import type { ILogFormatter, LogEntry } from '../types';
 import { LogLevel } from '../types';
 import { safeToString } from '../utils/coerce.utils';
+import { stripControlChars } from '../utils/sanitize.utils';
 
-// CWE-117 guard: strip ASCII control chars so attacker-supplied log data
-// cannot smuggle ANSI escapes through the text formatter.
-// eslint-disable-next-line no-control-regex
-const CONTROL_CHARS_RE = /[\x00-\x08\x0B-\x1F\x7F-\x9F]/g;
 // Coerce non-strings (objects passed via setContext, Errors as messages, etc.)
 // before .replace() to avoid TypeError on the hot path.
-const stripControls = (value: unknown): string => safeToString(value).replace(CONTROL_CHARS_RE, '');
+const stripControls = (value: unknown): string => stripControlChars(safeToString(value));
 
 export class TextFormatter implements ILogFormatter {
   private colorize: boolean;

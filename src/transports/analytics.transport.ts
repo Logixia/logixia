@@ -5,6 +5,8 @@ import type {
   TransportLogEntry,
 } from '../types/transport.types';
 import { internalError } from '../utils/internal-log';
+import { BufferCap } from './buffer-cap';
+import { mergeCoreFields } from './entry-fields';
 
 export abstract class AnalyticsTransport implements ITransport, IBatchTransport {
   public readonly name: string;
@@ -27,6 +29,7 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
   private flushPromise?: Promise<void> | undefined;
   /** Set on the first write. Subclass fields don't exist yet while the base constructor runs. */
   private initPromise?: Promise<void> | undefined;
+  private readonly cap: BufferCap;
 
   constructor(name: string, config: AnalyticsTransportConfig) {
     this.name = name;
@@ -40,6 +43,7 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
     this.level = config.level;
     this.batchSize = this.config.batchSize || 50;
     this.flushInterval = this.config.flushInterval || 10000;
+    this.cap = new BufferCap(name, config.maxBufferSize, this.batchSize);
   }
 
   async write(entry: TransportLogEntry): Promise<void> {
@@ -58,6 +62,7 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
 
   addToBatch(entry: TransportLogEntry): void {
     this.batch.push(entry);
+    this.cap.enforce(this.batch);
 
     if (this.batch.length >= (this.config.batchSize || 50)) {
       this.flush().catch((err: unknown) => internalError(`${this.name} batch flush failed`, err));
@@ -107,6 +112,7 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
         internalError(`Analytics transport ${this.name} flush failed`, error);
         // Re-add failed entries to the front of the batch for retry, then stop.
         this.batch.unshift(...entriesToSend);
+        this.cap.enforce(this.batch);
         return;
       }
     }
@@ -136,6 +142,7 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
       );
     }
 
+    this.cap.report(0);
     await this.cleanup();
   }
 
@@ -146,27 +153,18 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
   }
 
   protected transformEntry(entry: TransportLogEntry): Record<string, unknown> {
-    const transformed: Record<string, unknown> = {
+    const core: Record<string, unknown> = {
       timestamp: entry.timestamp.toISOString(),
       level: entry.level,
       message: entry.message,
-      ...entry.data,
+      context: entry.context,
+      traceId: entry.traceId,
+      appName: entry.appName,
+      environment: entry.environment,
     };
-
-    if (entry.context) {
-      transformed.context = entry.context;
-    }
-
-    if (entry.traceId) {
-      transformed.traceId = entry.traceId;
-    }
-
-    if (entry.appName) {
-      transformed.appName = entry.appName;
-    }
-
-    if (entry.environment) {
-      transformed.environment = entry.environment;
+    const transformed = mergeCoreFields(core, entry.data, this.reservedKeys());
+    for (const key of ['context', 'traceId', 'appName', 'environment']) {
+      if (!core[key]) delete transformed[key];
     }
 
     // Add custom properties
@@ -175,6 +173,11 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
     }
 
     return transformed;
+  }
+
+  /** Provider-specific field names a payload key must not replace. */
+  protected reservedKeys(): readonly string[] {
+    return [];
   }
 
   /**
