@@ -88,6 +88,10 @@ let _otelApi: OtelApi | null | undefined; // undefined = not yet resolved; null 
 function tryLoadOtelApi(): OtelApi | null {
   if (_otelApi !== undefined) return _otelApi;
   try {
+    if (typeof require !== 'function') {
+      _otelApi = null;
+      return null;
+    }
     // Dynamic require so the package stays optional — no hard peer dep
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     _otelApi = require('@opentelemetry/api') as OtelApi;

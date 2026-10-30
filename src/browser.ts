@@ -34,6 +34,7 @@
  * ```
  */
 
+import { internalError } from './utils/internal-log';
 import { stringifyForLog } from './utils/safe-stringify';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -383,6 +384,7 @@ export class BrowserRemoteTransport implements IBrowserTransport {
     this.batch.unshift(...entries);
     this.failedFlushCount += 1;
     this.lastFlushError = error;
+    internalError(`BrowserRemoteTransport flush failed; batch re-buffered`, error);
   }
 
   private scheduleFlush(): void {

@@ -135,6 +135,9 @@ jobs:
             || { echo "dist/index.d.ts (or .d.mts) missing"; exit 1; }
           echo "All dist artifacts present"
 
+      - name: Check browser entry runs without Node globals
+        run: npm run check:browser
+
       - name: Check package exports
         run: npm run check:exports
 
