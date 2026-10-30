@@ -584,8 +584,8 @@ export function executeQuery(
       const av = a[orderField];
       const bv = b[orderField];
       if (av === undefined && bv === undefined) return 0;
-      if (av === undefined) return dir === 'ASC' ? 1 : -1;
-      if (bv === undefined) return dir === 'ASC' ? -1 : 1;
+      if (av === undefined) return 1;
+      if (bv === undefined) return -1;
       if (typeof av === 'number' && typeof bv === 'number') {
         return dir === 'ASC' ? av - bv : bv - av;
       }
