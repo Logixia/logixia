@@ -67,7 +67,7 @@ export async function analyzeFileContents(raw: string, opts: any = {}) {
       'level,count',
       ...Object.keys(byLevel).map((k) => `${csvField(k)},${byLevel[k]}`),
     ];
-    return lines.join('\n');
+    return sanitizeForTerminal(lines.join('\n'));
   }
 
   const rows = Object.keys(byLevel).map((k) => ({ level: k, count: byLevel[k] }));

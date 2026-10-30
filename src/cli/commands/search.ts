@@ -5,7 +5,7 @@ import path from 'node:path';
 import { Command } from 'commander';
 import pc from 'picocolors';
 
-import { formatAsTable, safeParseLogs, sanitizeForTerminal } from '../utils';
+import { formatAsTable, parseLogLines, safeParseLogs, sanitizeForTerminal } from '../utils';
 
 interface SearchCriteria {
   field?: string;
@@ -21,6 +21,8 @@ function parseQuery(query: string): SearchCriteria {
 }
 
 export interface SearchHit {
+  /** 0-based index among parsed entries. */
+  index: number;
   /** 1-based index of the entry among parsed log entries. */
   line: number;
   entry: any;
@@ -46,19 +48,42 @@ export async function searchLogs(raw: string, opts: any = {}) {
   return safeParseLogs(raw).filter(entryMatcher(opts.query || ''));
 }
 
-/** Like grep -C: matches plus `context` entries before and after each, in file order. */
+/**
+ * Like grep -C: matches plus `context` parsed entries (blank lines are skipped) before and
+ * after each, in file order, tagged with their original file line numbers. Single pass.
+ */
 export async function searchLogsWithContext(raw: string, opts: any = {}): Promise<SearchHit[]> {
-  const entries = safeParseLogs(raw);
+  const parsed = parseLogLines(raw);
   const isMatch = entryMatcher(opts.query || '');
   const context = Math.max(0, Number.parseInt(String(opts.context ?? 0), 10) || 0);
-  const matched = entries.map((e: unknown) => isMatch(e));
+  const matched = parsed.map((p) => isMatch(p.entry));
+
+  // nextMatch[i] = index of the nearest match at or after i
+  const nextMatch = Array.from({ length: parsed.length }, () => Number.POSITIVE_INFINITY);
+  let next = Number.POSITIVE_INFINITY;
+  for (let i = parsed.length - 1; i >= 0; i--) {
+    if (matched[i]) next = i;
+    nextMatch[i] = next;
+  }
+
   const hits: SearchHit[] = [];
-  for (const [i, entry] of entries.entries()) {
-    const near =
-      matched[i] || matched.slice(Math.max(0, i - context), i + context + 1).includes(true);
-    if (near) hits.push({ line: i + 1, entry, match: Boolean(matched[i]) });
+  let lastMatch = Number.NEGATIVE_INFINITY;
+  for (const [i, p] of parsed.entries()) {
+    if (matched[i]) lastMatch = i;
+    if (i - lastMatch <= context || nextMatch[i]! - i <= context) {
+      hits.push({ index: i, line: p.line, entry: p.entry, match: Boolean(matched[i]) });
+    }
   }
   return hits;
+}
+
+function matchedColumns(hits: SearchHit[]): string[] {
+  const cols = new Set<string>();
+  for (const h of hits) if (h.match) for (const k of Object.keys(h.entry || {})) cols.add(k);
+  if (cols.size === 0) {
+    for (const h of hits) for (const k of Object.keys(h.entry || {})) cols.add(k);
+  }
+  return [...cols].slice(0, 4);
 }
 
 function formatSearchResults(hits: SearchHit[], format: string): string {
@@ -75,16 +100,19 @@ function formatSearchResults(hits: SearchHit[], format: string): string {
   if (hits.length === 0) return pc.yellow('No results found');
 
   if (format === 'table') {
-    const results = hits.map((h) => h.entry);
-    const displayColumns = Object.keys(results[0] || {}).slice(0, 4);
-    return formatAsTable(results, displayColumns);
+    const withContext = hits.some((h) => !h.match);
+    const rows = hits.map((h) =>
+      withContext ? { match: h.match ? '*' : '', ...h.entry } : h.entry
+    );
+    const columns = matchedColumns(hits);
+    return formatAsTable(rows, withContext ? ['match', ...columns] : columns);
   }
 
   const lines: string[] = [];
-  let prev = 0;
+  let prev = -1;
   for (const h of hits) {
-    if (prev > 0 && h.line > prev + 1) lines.push(pc.gray('--'));
-    prev = h.line;
+    if (prev >= 0 && h.index > prev + 1) lines.push(pc.gray('--'));
+    prev = h.index;
     const sep = h.match ? ':' : '-';
     lines.push(`${pc.gray(String(h.line) + sep)} ${sanitizeForTerminal(JSON.stringify(h.entry))}`);
   }
