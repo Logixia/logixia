@@ -1,0 +1,7 @@
+name = "logixia-worker-example"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# Optional: batched logs are POSTed here. Set LOG_TOKEN with `npx wrangler secret put LOG_TOKEN`.
+# [vars]
+# LOG_ENDPOINT = "https://logs.example.com/ingest"

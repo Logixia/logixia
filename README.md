@@ -1499,6 +1499,8 @@ const logger = new BrowserLogger({
 });
 ```
 
+**Cloudflare Workers** — see [`examples/cloudflare-worker/`](./examples/cloudflare-worker/) for a Worker that logs JSON, tags each request with `child({ requestId })` and flushes a `BrowserRemoteTransport` with `ctx.waitUntil()`. Create the transport inside `fetch()` (or pass `flushIntervalMs: 0`): Workers don't allow timers at global scope.
+
 The following utilities from the main package are also re-exported from `logixia/browser` (safe for non-Node runtimes):
 
 ```typescript

@@ -150,7 +150,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "typecheck:examples": "tsc -p tsconfig.examples.json",
+    "typecheck:examples": "tsc -p tsconfig.examples.json && tsc -p examples/cloudflare-worker/tsconfig.json",
     "check": "npm run typecheck && npm run lint:check",
     "ci": "npm run typecheck && npm run lint:check && npm run test:ci",
     "validate": "npm run clean && npm run build && npm run typecheck && npm run lint:check && npm run test:coverage",
@@ -292,7 +292,6 @@
     }
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20261027.1",
     "@commitlint/cli": "^21.2.3",
     "@commitlint/config-conventional": "^21.2.3",
     "@commitlint/types": "^21.2.3",
