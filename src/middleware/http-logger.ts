@@ -57,10 +57,17 @@ export interface HttpLoggerOptions {
    */
   traceIdHeader?: string;
   /**
-   * Headers to redact from logged output.
-   * Default: ['authorization', 'cookie', 'set-cookie', 'x-api-key'].
+   * Additional headers to redact from logged output. Merged with the defaults
+   * (authorization, cookie, set-cookie, x-api-key, proxy-authorization,
+   * x-auth-token, x-access-token, x-csrf-token, x-amz-security-token).
    */
   redactHeaders?: string[];
+  /**
+   * Additional query-string parameter names whose values are redacted from the
+   * logged URL. Merged with the defaults (token, access_token, refresh_token,
+   * code, password, secret, api_key, apikey, key, signature, sig, auth).
+   */
+  redactQueryParams?: string[];
   /**
    * Log level for request-start entries. Default: 'debug'.
    * Set to 'silent' to suppress request-start logs entirely.
@@ -91,7 +98,65 @@ export interface OutgoingResponse {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const DEFAULT_REDACT_HEADERS = new Set(['authorization', 'cookie', 'set-cookie', 'x-api-key']);
+const DEFAULT_REDACT_HEADERS = [
+  'authorization',
+  'cookie',
+  'set-cookie',
+  'x-api-key',
+  'proxy-authorization',
+  'x-auth-token',
+  'x-access-token',
+  'x-csrf-token',
+  'x-amz-security-token',
+];
+
+const DEFAULT_REDACT_QUERY_PARAMS = [
+  'token',
+  'access_token',
+  'refresh_token',
+  'code',
+  'password',
+  'secret',
+  'api_key',
+  'apikey',
+  'key',
+  'signature',
+  'sig',
+  'auth',
+];
+
+function buildNameSet(defaults: readonly string[], extra: readonly string[] | undefined) {
+  return new Set([...defaults, ...(extra ?? [])].map((n) => n.toLowerCase()));
+}
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value.replace(/\+/g, ' '));
+  } catch {
+    return value;
+  }
+}
+
+/** Replace the values of sensitive query parameters, leaving the rest verbatim. */
+function sanitizeUrl(url: string, redactParams: Set<string>): string {
+  const q = url.indexOf('?');
+  if (q === -1) return url;
+  const hashAt = url.indexOf('#', q);
+  const query = url.slice(q + 1, hashAt === -1 ? undefined : hashAt);
+  const hash = hashAt === -1 ? '' : url.slice(hashAt);
+  const cleaned = query
+    .split('&')
+    .map((pair) => {
+      const eq = pair.indexOf('=');
+      const rawKey = eq === -1 ? pair : pair.slice(0, eq);
+      const decoded = safeDecode(rawKey);
+      const bracket = decoded.indexOf('[');
+      const name = (bracket === -1 ? decoded : decoded.slice(0, bracket)).toLowerCase();
+      return redactParams.has(name) && eq !== -1 ? `${rawKey}=[REDACTED]` : pair;
+    })
+    .join('&');
+  return `${url.slice(0, q)}?${cleaned}${hash}`;
+}
 
 function sanitizeHeaders(
   headers: Record<string, string | string[] | undefined> | undefined,
@@ -106,6 +171,13 @@ function sanitizeHeaders(
   return out;
 }
 
+/** Fire-and-forget a logger call; a failing log must never become an unhandled rejection. */
+function fire(result: unknown): void {
+  if (result && typeof (result as Promise<unknown>).catch === 'function') {
+    (result as Promise<unknown>).catch(() => {});
+  }
+}
+
 function shortId(): string {
   // eslint-disable-next-line sonarjs/pseudo-random -- non-security request ID
   return Math.random().toString(36).slice(2, 10);
@@ -116,14 +188,13 @@ function buildBaseFields(
   traceId: string,
   options: HttpLoggerOptions
 ): Record<string, unknown> {
-  const redactSet = options.redactHeaders
-    ? new Set(options.redactHeaders.map((h) => h.toLowerCase()))
-    : DEFAULT_REDACT_HEADERS;
+  const redactSet = buildNameSet(DEFAULT_REDACT_HEADERS, options.redactHeaders);
+  const paramSet = buildNameSet(DEFAULT_REDACT_QUERY_PARAMS, options.redactQueryParams);
 
   const fields: Record<string, unknown> = {
     traceId,
     method: req.method?.toUpperCase() ?? 'UNKNOWN',
-    url: req.url ?? '/',
+    url: sanitizeUrl(req.url ?? '/', paramSet),
     ip: req.ip ?? req.socket?.remoteAddress ?? 'unknown',
     headers: sanitizeHeaders(req.headers, redactSet),
   };
@@ -171,10 +242,12 @@ export function createExpressMiddleware(
 
     // Log request start
     if (requestLevel !== 'silent') {
-      void logger.logLevel(requestLevel, 'request started', {
-        ...baseFields,
-        ...(logBody && req.body ? { body: truncateBody(req.body, bodyMaxBytes) } : {}),
-      });
+      fire(
+        logger.logLevel(requestLevel, 'request started', {
+          ...baseFields,
+          ...(logBody && req.body ? { body: truncateBody(req.body, bodyMaxBytes) } : {}),
+        })
+      );
     }
 
     // Hook into the response 'finish' event — fires after headers + body are sent.
@@ -193,19 +266,23 @@ export function createExpressMiddleware(
       const status = res.statusCode ?? 0;
       const level = status >= 500 ? errorLevel : responseLevel;
 
-      void logger.logLevel(level, 'request completed', {
-        ...baseFields,
-        statusCode: status,
-        duration,
-      });
-
-      if (duration > slowRequestThresholdMs) {
-        void logger.warn('slow request detected', {
+      fire(
+        logger.logLevel(level, 'request completed', {
           ...baseFields,
           statusCode: status,
           duration,
-          threshold: slowRequestThresholdMs,
-        });
+        })
+      );
+
+      if (duration > slowRequestThresholdMs) {
+        fire(
+          logger.warn('slow request detected', {
+            ...baseFields,
+            statusCode: status,
+            duration,
+            threshold: slowRequestThresholdMs,
+          })
+        );
       }
     };
 
@@ -255,10 +332,8 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
       req._logixiaId = traceId;
 
       if (requestLevel !== 'silent') {
-        void logger.logLevel(
-          requestLevel,
-          'request started',
-          buildBaseFields(req, traceId, options)
+        fire(
+          logger.logLevel(requestLevel, 'request started', buildBaseFields(req, traceId, options))
         );
       }
       hookDone();
@@ -276,21 +351,26 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
       const status = rep.statusCode ?? 0;
       const traceId = req._logixiaId ?? shortId();
       const level = status >= 500 ? errorLevel : responseLevel;
+      const baseFields = buildBaseFields(req, traceId, options);
 
-      void logger.logLevel(level, 'request completed', {
-        ...buildBaseFields(req, traceId, options),
-        statusCode: status,
-        duration,
-      });
+      fire(
+        logger.logLevel(level, 'request completed', {
+          ...baseFields,
+          statusCode: status,
+          duration,
+        })
+      );
 
       if (duration > slowRequestThresholdMs) {
-        void logger.warn('slow request detected', {
-          traceId,
-          url: req.url,
-          method: req.method,
-          duration,
-          threshold: slowRequestThresholdMs,
-        });
+        fire(
+          logger.warn('slow request detected', {
+            traceId,
+            url: baseFields.url,
+            method: req.method,
+            duration,
+            threshold: slowRequestThresholdMs,
+          })
+        );
       }
 
       hookDone();
@@ -307,15 +387,63 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
+/**
+ * Bound the captured body without turning it into a string, so the logger's
+ * path-based redaction still sees the original keys. Oversized structures are
+ * pruned (extra keys/items dropped, long strings cut) rather than serialized.
+ */
 function truncateBody(body: unknown, maxBytes = 4096): unknown {
   if (typeof body === 'string') {
     return body.length > maxBytes ? body.slice(0, maxBytes) + '…[truncated]' : body;
   }
   if (body && typeof body === 'object') {
     const str = stringifyForLog(body);
-    if (str.length > maxBytes) {
-      return str.slice(0, maxBytes) + '…[truncated]';
-    }
+    if (str.length <= maxBytes) return body;
+    return pruneValue(body, { left: maxBytes }, 0, new WeakSet());
   }
   return body;
+}
+
+const TRUNCATED = '…[truncated]';
+const MAX_PRUNE_DEPTH = 8;
+
+function pruneValue(
+  value: unknown,
+  budget: { left: number },
+  depth: number,
+  seen: WeakSet<object>
+): unknown {
+  if (typeof value === 'string') {
+    const cut = value.slice(0, Math.max(0, budget.left));
+    budget.left -= cut.length;
+    return cut.length < value.length ? cut + TRUNCATED : cut;
+  }
+  if (value === null || typeof value !== 'object') {
+    budget.left -= 8;
+    return value;
+  }
+  if (seen.has(value) || depth >= MAX_PRUNE_DEPTH) return TRUNCATED;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    const items: unknown[] = [];
+    for (const item of value) {
+      if (budget.left <= 0) {
+        items.push(TRUNCATED);
+        break;
+      }
+      items.push(pruneValue(item, budget, depth + 1, seen));
+    }
+    return items;
+  }
+  const record: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+    if (budget.left <= 0) {
+      record['…'] = TRUNCATED;
+      break;
+    }
+    budget.left -= k.length;
+    record[k] = pruneValue(v, budget, depth + 1, seen);
+  }
+  return record;
 }
