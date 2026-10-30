@@ -528,7 +528,7 @@ We welcome contributions! Areas we'd love help with:
 
 ## 📄 License
 
-MIT License - see [LICENSE](./LICENSE) for details
+MIT License - see [LICENSE](../LICENSE) for details
 
 ## 🙏 Acknowledgments
 
