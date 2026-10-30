@@ -9,7 +9,7 @@ npm run docs:dev       # dev server on http://localhost:5173/logixia/
 npm run docs:build     # production build; fails on dead links
 npm run docs:preview   # serve the production build
 npm run check:snippets # typecheck every ts code block in the markdown
-npm run og             # re-render public/og.png from scripts/og.svg
+npm run og             # re-render public/og.png from .github/assets/logixia-banner.png
 ```
 
 ## Authoring

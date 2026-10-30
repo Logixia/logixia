@@ -1,45 +1,188 @@
+/*
+ * logixia brand theme. Tokens come from the logixia brand board:
+ * mark chevron #A855F7, lines #C084FC, ok-line #4ADE80, type Geist 700 (-0.04em),
+ * ground #050505 / #0E0E12, surface #18181B, line #27272A, muted #71717A.
+ */
 :root {
-  --vp-c-brand-1: #4338ca;
-  --vp-c-brand-2: #4f46e5;
-  --vp-c-brand-3: #4f46e5;
-  --vp-c-brand-soft: rgba(79, 70, 229, 0.14);
-  --vp-home-hero-name-color: transparent;
-  --vp-home-hero-name-background: linear-gradient(120deg, #4f46e5 30%, #0ea5e9);
+  --lx-green: #4ade80;
+
+  --vp-font-family-base:
+    'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --vp-font-family-mono:
+    'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Light mode: darker violet so links and buttons meet WCAG AA on white */
+  --vp-c-brand-1: #7e22ce;
+  --vp-c-brand-2: #9333ea;
+  --vp-c-brand-3: #9333ea;
+  --vp-c-brand-soft: rgba(147, 51, 234, 0.12);
+
+  --vp-c-bg: #ffffff;
+  --vp-c-bg-alt: #fafafa;
+  --vp-c-bg-soft: #f4f4f5;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-divider: #e4e4e7;
+  --vp-c-border: #e4e4e7;
+  --vp-c-gutter: #f4f4f5;
+  --vp-c-text-1: #0a0a0a;
+  --vp-c-text-2: #52525b;
+  --vp-c-text-3: #71717a;
+
+  --vp-c-tip-1: #15803d;
+  --vp-c-tip-2: #16a34a;
+  --vp-c-tip-3: #16a34a;
+  --vp-c-tip-soft: rgba(22, 163, 74, 0.1);
+
+  --lx-card-bg: #ffffff;
+  --lx-card-border: #e4e4e7;
+  --lx-panel-bg: #fafafa;
+  --lx-code-str: #15803d;
+  --lx-code-num: #b45309;
+  --lx-code-err: #b91c1c;
 }
 
 .dark {
-  --vp-c-brand-1: #a5b4fc;
-  --vp-c-brand-2: #818cf8;
-  --vp-c-brand-3: #6366f1;
-  --vp-c-brand-soft: rgba(129, 140, 248, 0.16);
-  --vp-home-hero-name-background: linear-gradient(120deg, #a5b4fc 30%, #38bdf8);
+  --vp-c-brand-1: #c084fc;
+  --vp-c-brand-2: #a855f7;
+  --vp-c-brand-3: #9333ea;
+  --vp-c-brand-soft: rgba(168, 85, 247, 0.16);
+
+  --vp-c-bg: #0b0b0f;
+  --vp-c-bg-alt: #0e0e12;
+  --vp-c-bg-soft: #18181b;
+  --vp-c-bg-elv: #121216;
+  --vp-c-divider: #27272a;
+  --vp-c-border: #27272a;
+  --vp-c-gutter: #050505;
+  --vp-c-text-1: #fafafa;
+  --vp-c-text-2: #a1a1aa;
+  --vp-c-text-3: #71717a;
+  --vp-c-default-soft: #18181b;
+
+  --vp-c-tip-1: #4ade80;
+  --vp-c-tip-2: #22c55e;
+  --vp-c-tip-3: #16a34a;
+  --vp-c-tip-soft: rgba(74, 222, 128, 0.12);
+
+  --vp-code-block-bg: #0e0e12;
+  --vp-code-copy-code-bg: #18181b;
+  --vp-local-search-bg: #0e0e12;
+
+  --lx-card-bg: #0e0e12;
+  --lx-card-border: #27272a;
+  --lx-panel-bg: #0b0b0f;
+  --lx-code-str: #4ade80;
+  --lx-code-num: #fbbf24;
+  --lx-code-err: #f87171;
 }
 
-.VPHero .tagline {
-  max-width: 640px;
+/* ── Typography ─────────────────────────────────────────────────────────── */
+
+.vp-doc h1,
+.VPNavBarTitle .title {
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.vp-doc h2,
+.vp-doc h3 {
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.VPNavBarTitle .title {
+  font-size: 18px;
+}
+
+.VPNavBarTitle .logo {
+  height: 22px;
+}
+
+/* ── Home page ──────────────────────────────────────────────────────────── */
+
+.dark .VPHome {
+  background:
+    radial-gradient(820px 480px at 82% -60px, rgba(168, 85, 247, 0.12), transparent 70%),
+    radial-gradient(640px 420px at 100% 1100px, rgba(74, 222, 128, 0.04), transparent 70%);
 }
 
 .VPHome .vp-doc {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 24px;
+  max-width: none;
+  margin: 0;
+  padding: 0;
 }
 
-.VPHome .vp-doc h2 {
+.lx-section {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 24px 64px;
+}
+
+.lx-section > h2 {
+  margin-top: 88px;
+  padding-top: 0;
   border-top: 0;
-  margin-top: 56px;
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+.lx-section > p,
+.lx-section > table {
+  max-width: 760px;
 }
 
 .home-cta {
-  margin: 56px 0 24px;
-  padding: 32px 24px;
-  border-radius: 16px;
-  text-align: center;
-  background: var(--vp-c-brand-soft);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 32px;
+  margin: 96px 0 24px;
+  padding: 40px;
+  border: 1px solid var(--lx-card-border);
+  border-radius: 20px;
+  background:
+    radial-gradient(600px 220px at 50% 0, rgba(168, 85, 247, 0.16), transparent 70%),
+    var(--lx-card-bg);
+}
+
+.home-cta h2 {
+  grid-column: 1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
 }
 
 .home-cta p {
-  margin: 8px 0;
+  grid-column: 1;
+  margin: 8px 0 0;
+  color: var(--vp-c-text-2);
+}
+
+.home-cta p:last-child {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .home-cta {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 28px 20px;
+  }
+
+  .home-cta p:last-child {
+    grid-column: 1;
+    grid-row: auto;
+    margin-top: 16px;
+  }
+
+  .lx-section {
+    padding: 16px 16px 48px;
+  }
 }
 
 .home-cta a.cta-primary,
@@ -71,6 +214,25 @@
 
 .home-cta a.cta-secondary:hover {
   background-color: var(--vp-button-alt-hover-bg);
+}
+
+/* ── Docs pages ─────────────────────────────────────────────────────────── */
+
+.vp-doc a {
+  text-underline-offset: 3px;
+}
+
+.vp-doc :not(pre) > code {
+  border: 1px solid var(--vp-c-divider);
+}
+
+.vp-doc div[class*='language-'] {
+  border: 1px solid var(--vp-c-divider);
+}
+
+.dark .VPSidebar,
+.dark .VPNavScreen {
+  background-color: var(--vp-c-bg-alt);
 }
 
 @media (prefers-reduced-motion: reduce) {

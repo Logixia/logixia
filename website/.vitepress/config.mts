@@ -51,26 +51,27 @@ function breadcrumbs(relativePath: string, title: string) {
 
 export default defineConfig({
   lang: 'en-US',
-  title: 'Logixia',
-  titleTemplate: ':title | Logixia',
+  title: 'logixia',
+  titleTemplate: ':title | logixia',
   description: SITE_DESCRIPTION,
   base: BASE,
   cleanUrls: true,
+  appearance: 'dark',
   srcExclude: ['README.md'],
   lastUpdated: true,
   sitemap: { hostname: SITE },
 
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: `${BASE}favicon.svg` }],
-    ['meta', { name: 'theme-color', content: '#4f46e5' }],
-    ['meta', { name: 'author', content: 'Logixia contributors' }],
+    ['meta', { name: 'theme-color', content: '#0b0b0f' }],
+    ['meta', { name: 'author', content: 'logixia contributors' }],
   ],
 
   markdown: { theme: { light: 'github-light', dark: 'github-dark' } },
 
   themeConfig: {
-    logo: '/logo.svg',
-    siteTitle: 'Logixia',
+    logo: { src: '/logo.svg', alt: '' },
+    siteTitle: 'logixia',
     nav: [
       { text: 'Guide', link: '/guide/getting-started', activeMatch: '/guide/' },
       { text: 'Articles', link: '/articles/', activeMatch: '/articles/' },
@@ -93,7 +94,7 @@ export default defineConfig({
     outline: { level: [2, 3] },
     footer: {
       message: 'Released under the MIT License.',
-      copyright: 'Copyright © Logixia contributors',
+      copyright: 'Copyright © logixia contributors',
     },
   },
 
@@ -104,7 +105,7 @@ export default defineConfig({
     const url = pageUrl(relativePath);
     const isHome = relativePath === 'index.md';
     const isArticle = /^articles\/(?!index\.md$)/.test(relativePath);
-    const pageTitle = isHome ? String(title) : `${title} | Logixia`;
+    const pageTitle = isHome ? String(title) : `${title} | logixia`;
     const pageDescription = description || SITE_DESCRIPTION;
     const image = String(frontmatter['image'] ?? `${SITE}og.png`);
     const absImage = image.startsWith('http') ? image : SITE + image.replace(/^\//, '');
@@ -117,7 +118,7 @@ export default defineConfig({
 
     const head: HeadConfig[] = [
       ['link', { rel: 'canonical', href: url }],
-      ['meta', { property: 'og:site_name', content: 'Logixia' }],
+      ['meta', { property: 'og:site_name', content: 'logixia' }],
       ['meta', { property: 'og:type', content: isArticle ? 'article' : 'website' }],
       ['meta', { property: 'og:title', content: pageTitle }],
       ['meta', { property: 'og:description', content: pageDescription }],
@@ -145,19 +146,19 @@ export default defineConfig({
         jsonLd({
           '@context': 'https://schema.org',
           '@type': 'SoftwareSourceCode',
-          name: 'Logixia',
+          name: 'logixia',
           description: SITE_DESCRIPTION,
           url: SITE,
           codeRepository: REPO,
           programmingLanguage: 'TypeScript',
           runtimePlatform: 'Node.js',
           license: 'https://opensource.org/licenses/MIT',
-          author: { '@type': 'Organization', name: 'Logixia contributors' },
+          author: { '@type': 'Organization', name: 'logixia contributors' },
         }),
         jsonLd({
           '@context': 'https://schema.org',
           '@type': 'SoftwareApplication',
-          name: 'Logixia',
+          name: 'logixia',
           description: SITE_DESCRIPTION,
           url: SITE,
           applicationCategory: 'DeveloperApplication',
@@ -177,8 +178,8 @@ export default defineConfig({
           image: absImage,
           ...(published ? { datePublished: published } : {}),
           ...(dateModified ? { dateModified } : {}),
-          author: { '@type': 'Organization', name: 'Logixia contributors' },
-          publisher: { '@type': 'Organization', name: 'Logixia', url: SITE },
+          author: { '@type': 'Organization', name: 'logixia contributors' },
+          publisher: { '@type': 'Organization', name: 'logixia', url: SITE },
           ...(Array.isArray(frontmatter['tags'])
             ? { keywords: frontmatter['tags'].join(', ') }
             : {}),
