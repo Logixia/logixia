@@ -334,8 +334,7 @@ export interface IBaseLogger {
   close(): Promise<void>;
 
   // Plugin API (Feature 20)
-  // Typed as unknown to avoid a circular import between types/index.ts and plugin.ts.
-  // The concrete LogixiaLogger class constrains this to LogixiaPlugin.
+  // Type-only import of LogixiaPlugin: plugin.ts imports types back, but only as types.
   use(plugin: LogixiaPlugin): this;
   unuse(pluginName: string): this;
 }
