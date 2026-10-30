@@ -120,6 +120,34 @@ describe('PatternRecognitionEngine', () => {
       expect(timing!.pattern).toBe('Peak activity at hour 9');
     });
 
+    it('normalises UUIDs and hashes before numbers so they group together', async () => {
+      const engine = new PatternRecognitionEngine();
+      const uuids = [
+        '550e8400-e29b-41d4-a716-446655440000',
+        '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+        'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+      ];
+      const hashes = [
+        'd41d8cd98f00b204e9800998ecf8427e',
+        '0cc175b9c0f1b6a831c399e269772661',
+        '900150983cd24fb0d6963f7d28e17f72',
+      ];
+      const logs = [
+        ...uuids.map((u) => makeLog(`Session ${u} opened`)),
+        ...hashes.map((h) => makeLog(`Blob ${h} stored`)),
+      ];
+
+      const patterns = messagePatterns(await engine.analyzePatterns(logs)) as Array<{
+        pattern: string;
+        frequency: number;
+      }>;
+
+      expect(patterns.map((p) => [p.pattern, p.frequency]).sort()).toEqual([
+        ['Blob <HASH> stored', 3],
+        ['Session <UUID> opened', 3],
+      ]);
+    });
+
     it('returns an empty array for no logs', async () => {
       const engine = new PatternRecognitionEngine();
       expect(await engine.analyzePatterns([])).toEqual([]);
@@ -213,7 +241,10 @@ describe('PatternRecognitionEngine', () => {
     it('flags missing context, oversized payloads and stack traces in non-error logs', async () => {
       const engine = new PatternRecognitionEngine({ anomalyThreshold: 0.2 });
       const payload = Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`k${i}`, i]));
-      const odd = makeLog('crashed at line 4', { context: undefined, payload });
+      const odd = makeLog('crashed\n    at run (/app/job.js:10:5)', {
+        context: undefined,
+        payload,
+      });
 
       const [anomaly] = await engine.detectAnomalies([odd]);
 
@@ -224,6 +255,45 @@ describe('PatternRecognitionEngine', () => {
           'Stack trace in non-error log',
         ])
       );
+    });
+
+    it('does not flag prose containing "at " as a stack trace', async () => {
+      const engine = new PatternRecognitionEngine({ anomalyThreshold: 0.2 });
+      const logs = [
+        makeLog('chat started'),
+        makeLog('Retry scheduled at 5pm'),
+        makeLog('crashed at line 4'),
+      ];
+
+      const anomalies = await engine.detectAnomalies(logs);
+
+      expect(anomalies).toHaveLength(3);
+      for (const a of anomalies) {
+        expect(a.deviations).not.toContain('Stack trace in non-error log');
+      }
+    });
+
+    it('does not treat a frequent error as rare, only a one-off', async () => {
+      const engine = new PatternRecognitionEngine();
+      const frequent = [1, 2, 3, 4].map((n) => makeLog(`Disk ${n} full`, { level: 'error' }));
+      const oneOff = makeLog('Network unreachable', { level: 'error' });
+      const logs = [...frequent, oneOff];
+      await engine.analyzePatterns(logs);
+
+      const anomalies = await engine.detectAnomalies(logs);
+
+      expect(anomalies.map((a) => a.log)).toEqual([oneOff]);
+      expect(anomalies[0]!.reason).toContain('rare error type');
+    });
+
+    it('a frequent error scores zero and carries no rare-error reason', async () => {
+      const engine = new PatternRecognitionEngine({ anomalyThreshold: 0 });
+      const frequent = [1, 2, 3].map((n) => makeLog(`Disk ${n} full`, { level: 'error' }));
+      await engine.analyzePatterns(frequent);
+
+      const anomalies = await engine.detectAnomalies(frequent);
+
+      expect(anomalies).toEqual([]);
     });
   });
 });
