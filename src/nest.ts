@@ -10,16 +10,28 @@
  * export class AppModule {}
  */
 
-export { KafkaTraceInterceptor } from './core/kafka-trace.interceptor';
-export type { LogixiaAsyncOptions, LogixiaOptionsFactory } from './core/logitron-logger.module';
+import { DEFAULT_CONFIG } from './core/default-config';
+import { LogixiaLoggerService } from './core/logitron-nestjs.service';
+import type { LoggerConfig } from './types';
+
+// Everything NestJS-specific. These were exported from the root `logixia`
+// entry before 2.0.0; keep this list a superset of what the root used to export.
+export * from './core/logitron-logger.module';
+export * from './core/logitron-nestjs.service';
+export type { LogixiaExceptionFilterOptions, LogMethodOptions } from './core/nestjs-extras';
 export {
-  LOGIXIA_LOGGER_CONFIG,
-  LOGIXIA_LOGGER_PREFIX,
-  LogixiaLoggerModule,
-} from './core/logitron-logger.module';
-export type { LogixiaServiceWith, LogixiaServiceWithLevels } from './core/logitron-nestjs.service';
-export { LogixiaLoggerService } from './core/logitron-nestjs.service';
-export type { LogixiaExceptionFilterOptions } from './core/nestjs-extras';
-export { LOGIXIA_EXCEPTION_FILTER_OPTIONS, LogixiaExceptionFilter } from './core/nestjs-extras';
+  InjectLogger,
+  LOGIXIA_EXCEPTION_FILTER_OPTIONS,
+  LogixiaExceptionFilter,
+  LogMethod,
+} from './core/nestjs-extras';
 export { TraceMiddleware } from './core/trace.middleware';
-export { WebSocketTraceInterceptor } from './core/websocket-trace.interceptor';
+
+/**
+ * Create a new Logixia logger service for NestJS
+ * @param config - Logger configuration
+ * @returns LogixiaLoggerService instance
+ */
+export function createLoggerService(config?: Partial<LoggerConfig>): LogixiaLoggerService {
+  return new LogixiaLoggerService({ ...DEFAULT_CONFIG, ...config });
+}
