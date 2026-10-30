@@ -4,7 +4,7 @@ import type {
   IBatchTransport,
   TransportLogEntry,
 } from '../types/transport.types';
-import { internalError } from '../utils/internal-log';
+import { internalError, internalWarn } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
 
 /**
@@ -15,6 +15,18 @@ const POSTGRES_MAX_PARAMS = 65535;
 const POSTGRES_COLUMNS = 8;
 const POSTGRES_ROWS_PER_INSERT = Math.floor(POSTGRES_MAX_PARAMS / POSTGRES_COLUMNS);
 const MYSQL_ROWS_PER_INSERT = 5000;
+const DEFAULT_MAX_BUFFER_SIZE = 10_000;
+const DEFAULT_MAX_RETRIES = 3;
+const DROP_WARN_INTERVAL_MS = 5000;
+
+/** Postgres rejects NUL in TEXT and the \u0000 escape in JSONB, so remove both. */
+function stripNul(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  return value
+    .split('\u0000')
+    .join('')
+    .replace(/(?<!\\)((?:\\\\)*)\\u0000/g, '$1');
+}
 
 function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
@@ -64,10 +76,17 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
   private connection: any;
   private isConnected = false;
   private connectionPromise?: Promise<void> | undefined;
+  private readonly maxBufferSize: number;
+  private readonly maxRetries: number;
+  private failedFlushes = 0;
+  private dropped = 0;
+  private lastDropWarning = 0;
 
   constructor(private config: DatabaseTransportConfig) {
     this.batchSize = config.batchSize || 100;
     this.flushInterval = config.flushInterval || 5000; // 5 seconds
+    this.maxBufferSize = config.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE;
+    this.maxRetries = Math.max(1, config.maxRetries ?? DEFAULT_MAX_RETRIES);
     if (config.filter) this.filter = config.filter;
     // Validate table name early so misconfiguration fails at construction, not at first write
     if (config.table) {
@@ -90,6 +109,30 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
 
   addToBatch(entry: TransportLogEntry): void {
     this.batch.push(entry);
+    this.enforceBufferCap();
+  }
+
+  /** Drops the oldest entries beyond `maxBufferSize` and reports how many went. */
+  private enforceBufferCap(): void {
+    const excess = this.batch.length - this.maxBufferSize;
+    if (excess <= 0) return;
+    this.batch.splice(0, excess);
+    this.noteDropped(excess);
+  }
+
+  private noteDropped(count: number): void {
+    this.dropped += count;
+    this.reportDropped(DROP_WARN_INTERVAL_MS);
+  }
+
+  private reportDropped(minGapMs: number): void {
+    const now = Date.now();
+    if (this.dropped === 0 || now - this.lastDropWarning < minGapMs) return;
+    internalWarn(
+      `DatabaseTransport: dropped ${this.dropped} log entr${this.dropped === 1 ? 'y' : 'ies'} (buffer limit ${this.maxBufferSize}, or rejected by the database after ${this.maxRetries} attempts)`
+    );
+    this.dropped = 0;
+    this.lastDropWarning = now;
   }
 
   async flush(): Promise<void> {
@@ -123,29 +166,61 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       this.batch = [];
 
       try {
-        switch (this.config.type) {
-          case 'mongodb':
-            await this.flushToMongoDB(entriesToFlush);
-            break;
-          case 'postgresql':
-            await this.flushToPostgreSQL(entriesToFlush);
-            break;
-          case 'mysql':
-            await this.flushToMySQL(entriesToFlush);
-            break;
-          case 'sqlite':
-            await this.flushToSQLite(entriesToFlush);
-            break;
-          default:
-            throw new Error(`Unsupported database type: ${this.config.type}`);
-        }
+        await this.writeEntries(entriesToFlush);
+        this.failedFlushes = 0;
       } catch (error) {
         internalError('Database flush error', error);
-        // Restore failed entries to the front of the batch (ahead of anything
-        // appended while the write was in flight) so ordering is preserved and
-        // they retry on the next flush. Stop draining to avoid a tight retry loop.
-        this.batch.unshift(...entriesToFlush);
-        throw error;
+        this.failedFlushes += 1;
+        if (this.failedFlushes < this.maxRetries) {
+          // Restore failed entries to the front of the batch (ahead of anything
+          // appended while the write was in flight) so ordering is preserved and
+          // they retry on the next flush. Stop draining to avoid a tight retry loop.
+          this.batch.unshift(...entriesToFlush);
+          this.enforceBufferCap();
+          throw error;
+        }
+        this.failedFlushes = 0;
+        await this.isolateFailures(entriesToFlush);
+        this.reportDropped(0);
+      }
+    }
+  }
+
+  private async writeEntries(entries: TransportLogEntry[]): Promise<void> {
+    switch (this.config.type) {
+      case 'mongodb':
+        await this.flushToMongoDB(entries);
+        break;
+      case 'postgresql':
+        await this.flushToPostgreSQL(entries);
+        break;
+      case 'mysql':
+        await this.flushToMySQL(entries);
+        break;
+      case 'sqlite':
+        await this.flushToSQLite(entries);
+        break;
+      default:
+        throw new Error(`Unsupported database type: ${this.config.type}`);
+    }
+  }
+
+  /**
+   * Called for a batch that already failed `maxRetries` times. Splits it in half
+   * until the entries the database refuses are alone, writes everything else and
+   * drops the refused ones.
+   */
+  private async isolateFailures(entries: TransportLogEntry[]): Promise<void> {
+    if (entries.length === 1) {
+      this.noteDropped(1);
+      return;
+    }
+    const mid = Math.ceil(entries.length / 2);
+    for (const half of [entries.slice(0, mid), entries.slice(mid)]) {
+      try {
+        await this.writeEntries(half);
+      } catch {
+        await this.isolateFailures(half);
       }
     }
   }
@@ -316,16 +391,18 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
 
   private async flushToPostgreSQL(entries: TransportLogEntry[]): Promise<void> {
     const tableName = this.config.table || 'logs';
-    const values = entries.map((entry) => [
-      entry.timestamp,
-      entry.level,
-      entry.message,
-      stringifyForLog(entry.data || {}),
-      entry.context,
-      entry.traceId,
-      entry.appName,
-      entry.environment,
-    ]);
+    const values = entries.map((entry) =>
+      [
+        entry.timestamp,
+        entry.level,
+        entry.message,
+        stringifyForLog(entry.data || {}),
+        entry.context,
+        entry.traceId,
+        entry.appName,
+        entry.environment,
+      ].map(stripNul)
+    );
 
     const chunks = chunk(values, POSTGRES_ROWS_PER_INSERT);
     const insertChunk = async (rows: unknown[][]): Promise<void> => {
@@ -570,6 +647,8 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
         `Database transport closing with ${this.batch.length} unflushed log entr${this.batch.length === 1 ? 'y' : 'ies'} after ${MAX_CLOSE_FLUSH_ATTEMPTS} attempts`
       );
     }
+
+    this.reportDropped(0);
 
     // Close connection
     if (this.connection) {
