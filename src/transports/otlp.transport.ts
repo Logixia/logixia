@@ -61,6 +61,13 @@ export interface OtlpLogTransportConfig {
 }
 
 const HEX_32 = /^[0-9a-f]{32}$/;
+const HEX_16 = /^[0-9a-f]{16}$/;
+
+/** OTLP JSON wants a 16-char lowercase hex span id; anything else (or all zeros) returns undefined. */
+export function toOtlpSpanId(id: string): string | undefined {
+  const hex = id.toLowerCase();
+  return HEX_16.test(hex) && hex !== '0'.repeat(16) ? hex : undefined;
+}
 
 /**
  * OTLP JSON wants a 32-char lowercase hex trace id. Dashed UUIDs are
@@ -118,7 +125,9 @@ function toAnyValue(value: unknown): Record<string, unknown> {
 
 /** Build the OTLP KeyValue attribute list from a flat record. */
 function toAttributes(rec: Record<string, unknown>): Array<{ key: string; value: unknown }> {
-  return Object.entries(rec).map(([key, value]) => ({ key, value: toAnyValue(value) }));
+  return Object.entries(rec)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => ({ key, value: toAnyValue(value) }));
 }
 
 export class OtlpLogTransport implements IAsyncTransport {
@@ -177,6 +186,23 @@ export class OtlpLogTransport implements IAsyncTransport {
     const tsNanos = String(entry.timestamp.getTime() * 1_000_000);
 
     const attrs: Record<string, unknown> = { ...(entry.data ?? {}) };
+    // A payload traceId (the OTel bridge writes one) becomes the native field when
+    // the entry has none, and is not repeated as an attribute when it is the same id.
+    let nativeDataTraceId: string | undefined;
+    const payloadTraceId = attrs['traceId'];
+    if (typeof payloadTraceId === 'string') {
+      if (entry.traceId === undefined && toOtlpTraceId(payloadTraceId)) {
+        nativeDataTraceId = payloadTraceId;
+        delete attrs['traceId'];
+      } else if (payloadTraceId === entry.traceId) {
+        delete attrs['traceId'];
+      }
+    }
+    let nativeSpanId: string | undefined;
+    if (typeof attrs['spanId'] === 'string') {
+      nativeSpanId = toOtlpSpanId(attrs['spanId']);
+      if (nativeSpanId) delete attrs['spanId'];
+    }
     if (entry.context !== undefined) attrs['context'] = entry.context;
     if (entry.appName !== undefined) attrs['app.name'] = entry.appName;
     if (entry.environment !== undefined) attrs['deployment.environment'] = entry.environment;
@@ -190,13 +216,16 @@ export class OtlpLogTransport implements IAsyncTransport {
       attributes: toAttributes(attrs),
     };
 
-    if (entry.traceId) {
-      const traceId = toOtlpTraceId(entry.traceId);
+    if (nativeSpanId) record['spanId'] = nativeSpanId;
+
+    const traceSource = entry.traceId ?? nativeDataTraceId;
+    if (traceSource) {
+      const traceId = toOtlpTraceId(traceSource);
       if (traceId) record['traceId'] = traceId;
       else
         (record['attributes'] as unknown[]).push({
           key: 'trace_id',
-          value: { stringValue: entry.traceId },
+          value: { stringValue: traceSource },
         });
     }
 

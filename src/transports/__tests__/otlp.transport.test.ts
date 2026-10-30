@@ -157,4 +157,59 @@ describe('OtlpLogTransport', () => {
     await expect(t.flush()).resolves.toBeUndefined();
     await t.close();
   });
+
+  describe('trace and span correlation', () => {
+    type Rec = Record<string, unknown> & { attributes: Array<{ key: string; value: unknown }> };
+
+    async function record(over: Partial<TransportLogEntry>): Promise<Rec> {
+      const t = new OtlpLogTransport({
+        url: 'http://c/v1/logs',
+        batchSize: 1000,
+        flushIntervalMs: 999_999,
+      });
+      t.write(entry(1, over));
+      await t.flush();
+      await t.close();
+      const body = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+      return body.resourceLogs[0].scopeLogs[0].logRecords[0] as Rec;
+    }
+    const keys = (r: Rec) => r.attributes.map((a) => a.key);
+
+    it('omits an undefined traceId instead of emitting an empty attribute', async () => {
+      const rec = await record({ data: { traceId: undefined, orderId: 'o1' } });
+      expect(keys(rec)).not.toContain('traceId');
+      expect(keys(rec)).not.toContain('trace_id');
+      expect(rec['traceId']).toBeUndefined();
+      expect(keys(rec)).toContain('orderId');
+    });
+
+    it('puts valid hex span and trace ids into the native record fields', async () => {
+      const rec = await record({
+        data: { traceId: '0af7651916cd43dd8448eb211c80319c', spanId: 'b7ad6b7169203331' },
+      });
+      expect(rec['traceId']).toBe('0af7651916cd43dd8448eb211c80319c');
+      expect(rec['spanId']).toBe('b7ad6b7169203331');
+      expect(keys(rec)).not.toContain('traceId');
+      expect(keys(rec)).not.toContain('spanId');
+    });
+
+    it('does not repeat an entry traceId that the payload also carries', async () => {
+      const id = '0af7651916cd43dd8448eb211c80319c';
+      const rec = await record({ traceId: id, data: { traceId: id } });
+      expect(rec['traceId']).toBe(id);
+      expect(keys(rec)).not.toContain('traceId');
+    });
+
+    it('keeps non-hex span ids as attributes', async () => {
+      const rec = await record({ data: { spanId: 'span-1' } });
+      expect(rec['spanId']).toBeUndefined();
+      expect(keys(rec)).toContain('spanId');
+    });
+
+    it('keeps a non-hex entry traceId as a trace_id attribute', async () => {
+      const rec = await record({ traceId: 'req-1' });
+      expect(rec['traceId']).toBeUndefined();
+      expect(keys(rec)).toContain('trace_id');
+    });
+  });
 });
