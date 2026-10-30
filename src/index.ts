@@ -71,6 +71,10 @@ export {
 export type { OtlpLogTransportConfig } from './transports/otlp.transport';
 export { OtlpLogTransport, toOtelSeverity } from './transports/otlp.transport';
 
+// Chat webhook transports
+export type { SlackMessage, SlackTransportConfig } from './transports/slack.transport';
+export { SlackTransport } from './transports/slack.transport';
+
 // Search module exports
 export * from './search';
 
