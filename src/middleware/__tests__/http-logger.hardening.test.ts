@@ -96,3 +96,61 @@ describe('http-logger hardening', () => {
     expect(unhandled).not.toHaveBeenCalled();
   });
 });
+
+describe('http-logger body pruning', () => {
+  const bodyOf = (body: unknown) => {
+    const { calls, run } = setup({ logBody: true, bodyMaxBytes: 200 }, false);
+    run({ method: 'POST', url: '/', headers: {}, body });
+    return calls[0]!.data.body as Record<string, unknown>;
+  };
+  const pad = 'x'.repeat(400);
+
+  it('does not treat shared (non-circular) objects as cycles', () => {
+    const addr = { city: 'Paris' };
+    const body = bodyOf({ billing: addr, shipping: addr, pad });
+    expect(body.billing).toEqual({ city: 'Paris' });
+    expect(body.shipping).toEqual({ city: 'Paris' });
+  });
+
+  it('still cuts real cycles', () => {
+    const a: Record<string, unknown> = { pad };
+    a.self = a;
+    expect(() => bodyOf(a)).not.toThrow();
+  });
+
+  it('summarises Buffers and typed arrays', () => {
+    const body = bodyOf({ buf: Buffer.alloc(1000), pad });
+    expect(body.buf).toBe('[Buffer 1000 bytes]');
+  });
+
+  it('keeps Date, Map and Set content', () => {
+    const body = bodyOf({
+      d: new Date(0),
+      m: new Map([['k', 'v']]),
+      s: new Set(['a']),
+      pad,
+    });
+    expect(body.d).toBe('1970-01-01T00:00:00.000Z');
+    expect(body.m).toEqual([['k', 'v']]);
+    expect(body.s).toEqual(['a']);
+  });
+
+  it('uses toJSON() for non-plain objects', () => {
+    const body = bodyOf({ x: { toJSON: () => ({ a: 1 }) }, pad });
+    expect(body.x).toEqual({ a: 1 });
+  });
+
+  it('reports a failing logger call through the internal error reporter', async () => {
+    const spy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const logger = {
+      logLevel: () => Promise.reject(new Error('sink down')),
+      warn: () => Promise.resolve(),
+    } as unknown as IBaseLogger;
+    const mw = createExpressMiddleware(logger, { requestLevel: 'info' });
+    mw({ method: 'GET', url: '/', headers: {} }, { statusCode: 200 }, () => {});
+    await new Promise((r) => setTimeout(r, 20));
+    const written = spy.mock.calls.map((c) => String(c[0])).join('');
+    spy.mockRestore();
+    expect(written).toContain('log call failed');
+  });
+});

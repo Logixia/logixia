@@ -50,7 +50,7 @@ export const REDACTION_FAILED = '[RedactionFailed]';
 const PII_CONSERVATIVE_PATTERNS: readonly RegExp[] = [
   // JWT tokens (three base64url segments separated by dots); segment lengths are
   // bounded so scanning stays linear on adversarial input
-  /eyJ[A-Za-z0-9_-]{1,1024}\.[A-Za-z0-9_-]{1,8192}\.[A-Za-z0-9_-]{0,1024}/g,
+  /eyJ[A-Za-z0-9_-]{1,1024}\.[A-Za-z0-9_-]{1,16384}\.[A-Za-z0-9_-]{0,1024}/g,
   // Bearer / Token auth header values
   // eslint-disable-next-line sonarjs/duplicates-in-character-class
   /Bearer\s+[A-Za-z0-9._~+/-]+=*/gi,
@@ -61,7 +61,7 @@ const PII_CONSERVATIVE_PATTERNS: readonly RegExp[] = [
   /\bAKIA[0-9A-Z]{16}\b/g,
   // AWS secret access keys, recognised by the adjacent key name
   // eslint-disable-next-line sonarjs/duplicates-in-character-class
-  /\baws[A-Za-z_-]{0,30}(?:secret|key)[A-Za-z_-]{0,20}["'\s:=]{1,6}[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+])/gi,
+  /secret[_-]?(?:access[_-]?)?key["'\s:=]{1,6}[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+])/gi,
 ];
 
 /**
@@ -241,15 +241,36 @@ function matchesPath(fullPath: string, pattern: string): boolean {
   return re.test(fullPath);
 }
 
+function isTokenChar(code: number): boolean {
+  return (
+    (code >= 48 && code <= 57) || // 0-9
+    (code >= 65 && code <= 90) || // A-Z
+    (code >= 97 && code <= 122) || // a-z
+    code === 46 || // .
+    code === 95 || // _
+    code === 126 || // ~
+    code === 43 || // +
+    code === 47 || // /
+    code === 61 || // =
+    code === 45 // -
+  );
+}
+
 function applyPatterns(value: string, patterns: readonly RegExp[], censor: string): string {
   let redacted = value;
+  let suffix = '';
   if (redacted.length > MAX_SCAN_LENGTH) {
-    redacted = `${redacted.slice(0, MAX_SCAN_LENGTH)}…[truncated ${value.length - MAX_SCAN_LENGTH} unscanned chars]`;
+    // Drop the trailing run of token characters so a secret straddling the cut
+    // is removed whole rather than emitted as an unredactable prefix.
+    let end = MAX_SCAN_LENGTH;
+    while (end > 0 && isTokenChar(redacted.charCodeAt(end - 1))) end--;
+    suffix = `…[truncated ${value.length - end} unscanned chars]`;
+    redacted = redacted.slice(0, end);
   }
   for (const pattern of patterns) {
     redacted = redacted.replace(pattern, censor);
   }
-  return redacted;
+  return redacted + suffix;
 }
 
 const CIRCULAR = '[Circular]';

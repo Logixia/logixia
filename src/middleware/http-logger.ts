@@ -23,6 +23,7 @@
  */
 
 import type { IBaseLogger } from '../types';
+import { internalError } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
 
 // ── Shared types ─────────────────────────────────────────────────────────────
@@ -174,7 +175,9 @@ function sanitizeHeaders(
 /** Fire-and-forget a logger call; a failing log must never become an unhandled rejection. */
 function fire(result: unknown): void {
   if (result && typeof (result as Promise<unknown>).catch === 'function') {
-    (result as Promise<unknown>).catch(() => {});
+    (result as Promise<unknown>).catch((error: unknown) =>
+      internalError('http-logger: log call failed', error)
+    );
   }
 }
 
@@ -183,14 +186,24 @@ function shortId(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
+interface NameSets {
+  headers: Set<string>;
+  queryParams: Set<string>;
+}
+
+function resolveNameSets(options: HttpLoggerOptions): NameSets {
+  return {
+    headers: buildNameSet(DEFAULT_REDACT_HEADERS, options.redactHeaders),
+    queryParams: buildNameSet(DEFAULT_REDACT_QUERY_PARAMS, options.redactQueryParams),
+  };
+}
+
 function buildBaseFields(
   req: IncomingRequest,
   traceId: string,
-  options: HttpLoggerOptions
+  options: HttpLoggerOptions,
+  { headers: redactSet, queryParams: paramSet }: NameSets
 ): Record<string, unknown> {
-  const redactSet = buildNameSet(DEFAULT_REDACT_HEADERS, options.redactHeaders);
-  const paramSet = buildNameSet(DEFAULT_REDACT_QUERY_PARAMS, options.redactQueryParams);
-
   const fields: Record<string, unknown> = {
     traceId,
     method: req.method?.toUpperCase() ?? 'UNKNOWN',
@@ -225,6 +238,7 @@ export function createExpressMiddleware(
     errorLevel = 'error',
     slowRequestThresholdMs = 1000,
   } = options;
+  const nameSets = resolveNameSets(options);
 
   return function logixiaHttpMiddleware(
     req: IncomingRequest,
@@ -238,7 +252,7 @@ export function createExpressMiddleware(
 
     const traceId = (req.headers?.[traceIdHeader] as string | undefined) ?? shortId();
     const startMs = Date.now();
-    const baseFields = buildBaseFields(req, traceId, options);
+    const baseFields = buildBaseFields(req, traceId, options, nameSets);
 
     // Log request start
     if (requestLevel !== 'silent') {
@@ -318,6 +332,7 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
     errorLevel = 'error',
     slowRequestThresholdMs = 1000,
   } = options;
+  const nameSets = resolveNameSets(options);
 
   function logixiaFastifyPlugin(fastify: FastifyInstance, _opts: unknown, done: () => void): void {
     fastify.addHook('onRequest', (request: unknown, _reply: unknown, hookDone: () => void) => {
@@ -333,7 +348,11 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
 
       if (requestLevel !== 'silent') {
         fire(
-          logger.logLevel(requestLevel, 'request started', buildBaseFields(req, traceId, options))
+          logger.logLevel(
+            requestLevel,
+            'request started',
+            buildBaseFields(req, traceId, options, nameSets)
+          )
         );
       }
       hookDone();
@@ -351,7 +370,7 @@ export function createFastifyPlugin(logger: IBaseLogger, options: HttpLoggerOpti
       const status = rep.statusCode ?? 0;
       const traceId = req._logixiaId ?? shortId();
       const level = status >= 500 ? errorLevel : responseLevel;
-      const baseFields = buildBaseFields(req, traceId, options);
+      const baseFields = buildBaseFields(req, traceId, options, nameSets);
 
       fire(
         logger.logLevel(level, 'request completed', {
@@ -399,7 +418,7 @@ function truncateBody(body: unknown, maxBytes = 4096): unknown {
   if (body && typeof body === 'object') {
     const str = stringifyForLog(body);
     if (str.length <= maxBytes) return body;
-    return pruneValue(body, { left: maxBytes }, 0, new WeakSet());
+    return pruneValue(body, { left: maxBytes }, 0, new Set());
   }
   return body;
 }
@@ -411,7 +430,7 @@ function pruneValue(
   value: unknown,
   budget: { left: number },
   depth: number,
-  seen: WeakSet<object>
+  ancestors: Set<object>
 ): unknown {
   if (typeof value === 'string') {
     const cut = value.slice(0, Math.max(0, budget.left));
@@ -422,28 +441,48 @@ function pruneValue(
     budget.left -= 8;
     return value;
   }
-  if (seen.has(value) || depth >= MAX_PRUNE_DEPTH) return TRUNCATED;
-  seen.add(value);
-  if (Array.isArray(value)) {
-    const items: unknown[] = [];
-    for (const item of value) {
+  if (value instanceof Date) {
+    budget.left -= 24;
+    return Number.isNaN(value.getTime()) ? 'Invalid Date' : value.toISOString();
+  }
+  if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
+    budget.left -= 16;
+    return `[Buffer ${value.byteLength} bytes]`;
+  }
+  if (value instanceof Error) return value;
+  if (ancestors.has(value) || depth >= MAX_PRUNE_DEPTH) return TRUNCATED;
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value) || value instanceof Set || value instanceof Map) {
+      const items: unknown[] = [];
+      for (const item of value instanceof Map ? value.entries() : value) {
+        if (budget.left <= 0) {
+          items.push(TRUNCATED);
+          break;
+        }
+        items.push(pruneValue(item, budget, depth + 1, ancestors));
+      }
+      return items;
+    }
+    const toJSON = (value as { toJSON?: unknown }).toJSON;
+    if (typeof toJSON === 'function') {
+      const json: unknown = toJSON.call(value);
+      if (json !== value) return pruneValue(json, budget, depth + 1, ancestors);
+    }
+    const record: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
       if (budget.left <= 0) {
-        items.push(TRUNCATED);
+        record['…'] = TRUNCATED;
         break;
       }
-      items.push(pruneValue(item, budget, depth + 1, seen));
+      budget.left -= k.length;
+      record[k] = pruneValue(v, budget, depth + 1, ancestors);
     }
-    return items;
+    return record;
+  } catch {
+    return TRUNCATED;
+  } finally {
+    ancestors.delete(value);
   }
-  const record: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(value)) {
-    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
-    if (budget.left <= 0) {
-      record['…'] = TRUNCATED;
-      break;
-    }
-    budget.left -= k.length;
-    record[k] = pruneValue(v, budget, depth + 1, seen);
-  }
-  return record;
 }

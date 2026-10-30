@@ -144,3 +144,81 @@ describe('auto-detect paths', () => {
     expect(JSON.stringify(out)).not.toContain('SECRETVAL');
   });
 });
+
+describe('AWS secret and JWT pattern shapes', () => {
+  const secret = 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY';
+  it.each([
+    `PROD_AWS_SECRET_ACCESS_KEY=${secret}`,
+    `{"SecretAccessKey":"${secret}"}`,
+    `secretAccessKey: "${secret}"`,
+    `aws_secret_key = ${secret}`,
+    `AWS_SECRET_ACCESS_KEY: ${secret}`,
+  ])('redacts %s', (input) => {
+    const out = applyRedactionToString(input, { autoDetect: true });
+    expect(out).not.toContain(secret);
+  });
+
+  it('redacts a large JWT payload segment', () => {
+    const jwt = `eyJhbGciOiJIUzI1NiJ9.eyJ${'a'.repeat(12_000)}.sig`;
+    expect(applyRedactionToString(`t ${jwt}`, { autoDetect: true })).toBe('t [REDACTED]');
+  });
+
+  const shapes: [string, string][] = [
+    ['eyJa. repeat', 'eyJa.'.repeat(10_000)],
+    ['eyJ repeat', 'eyJ'.repeat(17_000)],
+    ['eyJa. + long run', 'eyJa.' + 'a'.repeat(16_000)],
+    ['secret key repeat', 'SecretKey: '.repeat(5_000)],
+    ['secret chars', 'secret_key=' + 'a/'.repeat(25_000)],
+  ];
+  it.each(shapes)('%s scans in under 100ms', (_n, input) => {
+    const start = process.hrtime.bigint();
+    applyRedaction({ v: input }, { autoDetect: 'aggressive' });
+    expect(Number(process.hrtime.bigint() - start) / 1e6).toBeLessThan(100);
+  });
+});
+
+describe('secrets straddling the scan cut', () => {
+  it('does not emit a prefix of a JWT or AWS key cut at the limit', () => {
+    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NSJ9.c2lnbmF0dXJl';
+    const akia = 'AKIAABCDEFGHIJKLMNOP';
+    for (const secret of [jwt, akia]) {
+      const padded = `${' '.repeat(16_384 - 10)}${secret}`;
+      const out = applyRedactionToString(padded, { autoDetect: true });
+      expect(out).not.toContain(secret.slice(0, 6));
+      expect(out).toContain('unscanned');
+    }
+  });
+});
+
+describe('class instances', () => {
+  class User {
+    constructor(
+      public name: string,
+      public password: string
+    ) {}
+  }
+  class Doc {
+    constructor(private readonly raw: { name: string; password: string }) {}
+    toJSON() {
+      return this.raw;
+    }
+  }
+
+  it('walks own enumerable props of class instances', () => {
+    const out = redactObject({ u: new User('bob', 'PW') }, PATHS) as { u: Record<string, string> };
+    expect(out.u.password).toBe('[REDACTED]');
+    expect(out.u.name).toBe('bob');
+  });
+
+  it('redacts via toJSON() for document-like instances', () => {
+    const out = redactObject({ d: new Doc({ name: 'bob', password: 'PW' }) }, PATHS);
+    expect(JSON.stringify(out)).not.toContain('PW"');
+    expect(JSON.stringify(out)).toContain('bob');
+  });
+
+  it('keeps the original instance when nothing changes', () => {
+    const user = new User('bob', 'PW');
+    const out = redactObject({ user }, { paths: ['nothing'] });
+    expect(out.user).toBe(user);
+  });
+});
