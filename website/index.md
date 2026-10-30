@@ -5,12 +5,12 @@ titleTemplate: false
 description: 'Structured logging, request tracing and multi-destination export for Node.js, NestJS and the edge, in one TypeScript-first library.'
 
 hero:
-  name: Logixia
-  text: Logging that follows the request
-  tagline: Structured logging, request tracing and multi-destination export for Node.js, NestJS and the edge, in one TypeScript-first library.
+  name: logixia
+  text: One install. Every transport.
+  tagline: Never blocks the event loop. Structured logging, request tracing, redaction and multi-destination export for Node.js, NestJS and the edge, in one TypeScript-first library.
   image:
     src: /logo.svg
-    alt: Logixia logo
+    alt: logixia logo
   actions:
     - theme: brand
       text: Get started

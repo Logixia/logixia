@@ -69,8 +69,8 @@ export default defineConfig({
   markdown: { theme: { light: 'github-light', dark: 'github-dark' } },
 
   themeConfig: {
-    logo: '/logo.svg',
-    siteTitle: 'Logixia',
+    logo: { src: '/logo.svg', alt: 'logixia' },
+    siteTitle: 'logixia',
     nav: [
       { text: 'Guide', link: '/guide/getting-started', activeMatch: '/guide/' },
       { text: 'Articles', link: '/articles/', activeMatch: '/articles/' },
