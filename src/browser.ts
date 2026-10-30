@@ -34,7 +34,7 @@
  * ```
  */
 
-import { internalError } from './utils/internal-log';
+import { internalError, internalLog } from './utils/internal-log';
 import { stringifyForLog } from './utils/safe-stringify';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -229,8 +229,32 @@ function byteLength(s: string): number {
   return new TextEncoder().encode(s).length;
 }
 
+const FAILURE_REPORT_INTERVAL_MS = 60_000;
+
+/** Error name/code plus host only: URLs (and any query credentials) are stripped. */
+function describeFailure(error: unknown, url: string): string {
+  let host = '[url]';
+  try {
+    host = new URL(url).host;
+  } catch {
+    // keep placeholder
+  }
+  // Duck-typed: errors from another realm (iframe, vm context) fail instanceof.
+  const e = error as { name?: unknown; message?: unknown; code?: unknown } | null;
+  if (!e || typeof e.message !== 'string') return `host ${host}`;
+  const code = e.code;
+  const name = typeof e.name === 'string' ? e.name : 'Error';
+  const message = e.message
+    .split(/\s+/)
+    .map((word) => (word.includes('://') ? '[url]' : word))
+    .join(' ');
+  const codeSuffix = typeof code === 'string' ? ` ${code}` : '';
+  return `${name}${codeSuffix}: ${message}, host ${host}`;
+}
+
 function isKeepaliveError(error: unknown): boolean {
-  return error instanceof Error && /keepalive/i.test(error.message);
+  const message = (error as { message?: unknown } | null)?.message;
+  return typeof message === 'string' && /keepalive/i.test(message);
 }
 
 /**
@@ -266,6 +290,11 @@ export class BrowserRemoteTransport implements IBrowserTransport {
   private lastFlushError: unknown;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private droppedEntries = 0;
+  private readonly silent: boolean;
+  private readonly onError: ((error: unknown) => void) | undefined;
+  private reporting = false;
+  private failing = false;
+  private lastReportAt = 0;
 
   constructor(options: {
     /** Endpoint URL to POST batched log entries to. */
@@ -286,7 +315,17 @@ export class BrowserRemoteTransport implements IBrowserTransport {
      */
     maxBufferSize?: number;
     level?: BrowserLogLevel;
+    /** Suppress the console report of failed flushes. `onError` still fires. @default false */
+    silent?: boolean;
+    /**
+     * Called on every failed flush (network error or non-OK HTTP status) with the
+     * raw error. Use it to route delivery failures somewhere that does not log
+     * through this transport.
+     */
+    onError?: (error: unknown) => void;
   }) {
+    this.silent = options.silent === true;
+    this.onError = options.onError;
     this.url = validateRemoteUrl(options.url);
     this.headers = options.headers ?? {};
     this.batchSize = options.batchSize ?? 100;
@@ -305,17 +344,24 @@ export class BrowserRemoteTransport implements IBrowserTransport {
     return this.droppedEntries;
   }
 
-  /** Number of flush attempts that failed with a network error and were re-buffered. */
+  /** Number of flush attempts that failed (network error or non-OK HTTP status). */
   get failedFlushes(): number {
     return this.failedFlushCount;
   }
 
-  /** The most recent network error from a failed flush, if any. */
+  /**
+   * The most recent failure from a flush, if any: the raw fetch error (which on
+   * some runtimes embeds the request URL, so do not log it blindly) or an
+   * `Error` carrying only the HTTP status.
+   */
   get lastError(): unknown {
     return this.lastFlushError;
   }
 
   write(entry: BrowserLogEntry): void {
+    // A failure report that an app routes back into the logger must not be
+    // queued here, or a down endpoint would feed itself.
+    if (this.reporting) return;
     this.batch.push(entry);
     // Enforce the buffer cap so a down endpoint cannot grow the buffer
     // without bound in the user's tab.
@@ -359,15 +405,18 @@ export class BrowserRemoteTransport implements IBrowserTransport {
         }
       }
       if (!res.ok) {
+        const failure = new Error(`HTTP ${res.status}`);
         if (res.status >= 500 || res.status === 429) {
           // Transient server error / rate limit — retry on a later flush.
-          this.batch.unshift(...entries);
+          this.recordFailure(entries, failure);
         } else {
           // Permanent client error — retrying won't help, drop the batch.
           this.droppedEntries += entries.length;
+          this.recordFailure([], failure);
         }
         return;
       }
+      this.reportRecovery();
     }
   }
 
@@ -384,7 +433,37 @@ export class BrowserRemoteTransport implements IBrowserTransport {
     this.batch.unshift(...entries);
     this.failedFlushCount += 1;
     this.lastFlushError = error;
-    internalError(`BrowserRemoteTransport flush failed; batch re-buffered`, error);
+    if (this.onError) {
+      try {
+        this.onError(error);
+      } catch {
+        // a throwing callback must not break flushing
+      }
+    }
+    const now = Date.now();
+    if (!this.failing || now - this.lastReportAt >= FAILURE_REPORT_INTERVAL_MS) {
+      this.failing = true;
+      this.lastReportAt = now;
+      this.report(() =>
+        internalError(`BrowserRemoteTransport flush failed (${describeFailure(error, this.url)})`)
+      );
+    }
+  }
+
+  private reportRecovery(): void {
+    if (!this.failing) return;
+    this.failing = false;
+    this.report(() => internalLog('BrowserRemoteTransport delivery recovered'));
+  }
+
+  private report(emit: () => void): void {
+    if (this.silent) return;
+    this.reporting = true;
+    try {
+      emit();
+    } finally {
+      this.reporting = false;
+    }
   }
 
   private scheduleFlush(): void {

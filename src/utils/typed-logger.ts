@@ -81,7 +81,9 @@ export function defineLogSchema<TFields extends Record<string, unknown>>(
   return {
     fields,
     validate(payload: Partial<TFields>): string[] {
-      if (typeof process !== 'undefined' && process.env?.['NODE_ENV'] === 'production') return [];
+      if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'production') {
+        return [];
+      }
 
       const warnings: string[] = [];
 

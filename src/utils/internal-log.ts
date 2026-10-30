@@ -17,18 +17,22 @@
  * behavior was previously unreliable because the value was frozen at load.
  */
 function isSilent(): boolean {
-  return typeof process !== 'undefined' && process.env?.LOGIXIA_SILENT_INTERNAL === '1';
+  if (typeof process !== 'undefined' && process.env?.LOGIXIA_SILENT_INTERNAL === '1') return true;
+  const flag = (globalThis as Record<string, unknown>)['LOGIXIA_SILENT_INTERNAL'];
+  return flag === '1' || flag === 1 || flag === true;
 }
 
+type ConsoleMethod = 'log' | 'warn' | 'error';
+
 /**
- * Write a line to stderr, falling back to console.error where `process` is
- * unavailable (browsers, Cloudflare Workers, Deno without Node compat).
+ * Write a line to stderr, falling back to the matching console method where
+ * `process` is unavailable (browsers, Cloudflare Workers, Deno without Node compat).
  */
-function writeLine(line: string): void {
+function writeLine(method: ConsoleMethod, line: string): void {
   if (typeof process !== 'undefined' && typeof process.stderr?.write === 'function') {
     process.stderr.write(`${line}\n`);
-  } else if (typeof console !== 'undefined' && typeof console.error === 'function') {
-    console.error(line);
+  } else if (typeof console !== 'undefined' && typeof console[method] === 'function') {
+    console[method](line);
   }
 }
 
@@ -39,7 +43,7 @@ function writeLine(line: string): void {
  */
 export function internalLog(message: string): void {
   if (!isSilent()) {
-    writeLine(`[logixia] ${message}`);
+    writeLine('log', `[logixia] ${message}`);
   }
 }
 
@@ -49,7 +53,7 @@ export function internalLog(message: string): void {
  */
 export function internalWarn(message: string): void {
   if (!isSilent()) {
-    writeLine(`[logixia:warn] ${message}`);
+    writeLine('warn', `[logixia:warn] ${message}`);
   }
 }
 
@@ -65,6 +69,6 @@ export function internalError(message: string, error?: unknown): void {
     } else if (error != null) {
       errStr = ` — ${String(error)}`;
     }
-    writeLine(`[logixia:error] ${message}${errStr}`);
+    writeLine('error', `[logixia:error] ${message}${errStr}`);
   }
 }

@@ -181,6 +181,16 @@ describe('BrowserRemoteTransport', () => {
     t.destroy();
   });
 
+  it('detects a keepalive rejection from another realm (not instanceof Error)', async () => {
+    fetchMock.mockRejectedValueOnce({ name: 'TypeError', message: 'keepalive is not supported' });
+    const t = new BrowserRemoteTransport({ url: 'https://logs.example/ingest', batchSize: 1000 });
+    t.write(makeEntry(1));
+    await t.flush();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(t.failedFlushes).toBe(0);
+    t.destroy();
+  });
+
   it('re-buffers and reports a network failure through failedFlushes / lastError', async () => {
     const boom = new TypeError('network down');
     fetchMock.mockRejectedValueOnce(boom);
@@ -194,6 +204,128 @@ describe('BrowserRemoteTransport', () => {
     await t.flush(); // the entry was re-buffered and now succeeds
     expect(fetchMock).toHaveBeenCalledTimes(2);
     t.destroy();
+  });
+
+  describe('failure reporting', () => {
+    let errSpy: jest.SpyInstance;
+    let logSpy: jest.SpyInstance;
+    let savedSilent: string | undefined;
+
+    beforeEach(() => {
+      savedSilent = process.env.LOGIXIA_SILENT_INTERNAL;
+      delete process.env.LOGIXIA_SILENT_INTERNAL;
+      errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      logSpy = errSpy;
+    });
+    afterEach(() => {
+      errSpy.mockRestore();
+      if (savedSilent === undefined) delete process.env.LOGIXIA_SILENT_INTERNAL;
+      else process.env.LOGIXIA_SILENT_INTERNAL = savedSilent;
+      jest.restoreAllMocks();
+    });
+
+    const make = (extra: Record<string, unknown> = {}) =>
+      new BrowserRemoteTransport({
+        url: 'https://logs.example/ingest?api_key=SECRET',
+        batchSize: 1000,
+        flushIntervalMs: 0,
+        ...extra,
+      });
+    const output = () => logSpy.mock.calls.map((c) => String(c[0])).join('');
+
+    it('never leaks the URL or query credentials, keeping the raw error in lastError', async () => {
+      const raw = new TypeError(
+        'error sending request for url (https://logs.example/ingest?api_key=SECRET)'
+      );
+      fetchMock.mockRejectedValueOnce(raw);
+      const t = make();
+      t.write(makeEntry(1));
+      await t.flush();
+      const out = output();
+      expect(out).toContain('TypeError');
+      expect(out).toContain('logs.example');
+      expect(out).not.toContain('SECRET');
+      expect(out).not.toContain('api_key');
+      expect(t.lastError).toBe(raw);
+    });
+
+    it('throttles repeated failures and reports recovery', async () => {
+      const now = jest.spyOn(Date, 'now');
+      now.mockReturnValue(1_000_000);
+      fetchMock.mockRejectedValue(new TypeError('down'));
+      const t = make();
+      t.write(makeEntry(1));
+      await t.flush();
+      await t.flush();
+      await t.flush();
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      expect(t.failedFlushes).toBe(3);
+
+      now.mockReturnValue(1_000_000 + 61_000);
+      await t.flush();
+      expect(logSpy).toHaveBeenCalledTimes(2);
+
+      fetchMock.mockReset().mockResolvedValue({ ok: true });
+      await t.flush();
+      expect(output()).toContain('recovered');
+      expect(logSpy).toHaveBeenCalledTimes(3);
+      t.destroy();
+    });
+
+    it('silent suppresses the console report but onError still fires', async () => {
+      const onError = jest.fn();
+      const boom = new TypeError('down');
+      fetchMock.mockRejectedValueOnce(boom);
+      const t = make({ silent: true, onError });
+      t.write(makeEntry(1));
+      await t.flush();
+      expect(logSpy).not.toHaveBeenCalled();
+      expect(onError).toHaveBeenCalledWith(boom);
+      expect(t.failedFlushes).toBe(1);
+    });
+
+    it('a throwing onError does not break flushing', async () => {
+      fetchMock.mockRejectedValueOnce(new TypeError('down'));
+      const t = make({
+        silent: true,
+        onError: () => {
+          throw new Error('cb');
+        },
+      });
+      t.write(makeEntry(1));
+      await expect(t.flush()).resolves.toBeUndefined();
+    });
+
+    it('does not queue entries written while reporting (no feedback loop)', async () => {
+      const t = make();
+      errSpy.mockImplementation(() => {
+        t.write(makeEntry(99)); // app routes console.error back into the logger
+        return true;
+      });
+      fetchMock.mockRejectedValueOnce(new TypeError('down'));
+      t.write(makeEntry(1));
+      await t.flush();
+      fetchMock.mockClear();
+      await t.flush();
+      const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string) as BrowserLogEntry[];
+      expect(body.map((e) => e.message)).toEqual(['b-1']);
+      t.destroy();
+    });
+
+    it.each([500, 429, 401, 403])(
+      'counts HTTP %i as a failure with a status-only message',
+      async (status) => {
+        fetchMock.mockResolvedValueOnce({ ok: false, status, text: async () => 'SECRET-BODY' });
+        const t = make();
+        t.write(makeEntry(1));
+        await t.flush();
+        expect(t.failedFlushes).toBe(1);
+        expect((t.lastError as Error).message).toBe(`HTTP ${status}`);
+        expect(output()).toContain(`HTTP ${status}`);
+        expect(output()).not.toContain('SECRET');
+        t.destroy();
+      }
+    );
   });
 
   it('disables keepalive for bodies at the 64KB limit', async () => {

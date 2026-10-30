@@ -15,49 +15,73 @@ function withoutProcess<T>(fn: () => T): T {
 }
 
 describe('Node-global guards (edge runtimes)', () => {
-  it('internal-log falls back to console.error when process is missing', () => {
-    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  let savedSilent: string | undefined;
+  let savedNodeEnv: string | undefined;
+  const spies: jest.SpyInstance[] = [];
+
+  beforeEach(() => {
+    savedSilent = process.env.LOGIXIA_SILENT_INTERNAL;
+    savedNodeEnv = process.env.NODE_ENV;
+    delete process.env.LOGIXIA_SILENT_INTERNAL;
+  });
+
+  afterEach(() => {
+    for (const spy of spies.splice(0)) spy.mockRestore();
+    delete (globalThis as G)['LOGIXIA_SILENT_INTERNAL'];
+    if (savedSilent === undefined) delete process.env.LOGIXIA_SILENT_INTERNAL;
+    else process.env.LOGIXIA_SILENT_INTERNAL = savedSilent;
+    if (savedNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = savedNodeEnv;
+  });
+
+  const spyConsole = () => ({
+    log: jest.spyOn(console, 'log').mockImplementation(() => {}),
+    warn: jest.spyOn(console, 'warn').mockImplementation(() => {}),
+    error: jest.spyOn(console, 'error').mockImplementation(() => {}),
+  });
+
+  it('internal-log uses the console method matching the level when process is missing', () => {
+    const c = spyConsole();
+    spies.push(c.log, c.warn, c.error);
     withoutProcess(() => {
       internalLog('hello');
       internalWarn('careful');
       internalError('broke', new Error('boom'));
     });
-    expect(spy.mock.calls.map((c) => c[0])).toEqual([
-      '[logixia] hello',
-      '[logixia:warn] careful',
-      '[logixia:error] broke — boom',
-    ]);
-    spy.mockRestore();
+    expect(c.log).toHaveBeenCalledWith('[logixia] hello');
+    expect(c.warn).toHaveBeenCalledWith('[logixia:warn] careful');
+    expect(c.error).toHaveBeenCalledWith('[logixia:error] broke — boom');
   });
 
-  it('internal-log falls back to console.error when process.stderr is missing', () => {
-    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  it('internal-log falls back to console when process.stderr is missing', () => {
+    const c = spyConsole();
+    spies.push(c.log, c.warn, c.error);
     const originalStderr = Object.getOwnPropertyDescriptor(process, 'stderr')!;
     Object.defineProperty(process, 'stderr', { value: undefined, configurable: true });
-    const prev = process.env.LOGIXIA_SILENT_INTERNAL;
-    delete process.env.LOGIXIA_SILENT_INTERNAL;
     try {
       internalWarn('no stderr');
     } finally {
       Object.defineProperty(process, 'stderr', originalStderr);
-      if (prev !== undefined) process.env.LOGIXIA_SILENT_INTERNAL = prev;
     }
-    expect(spy).toHaveBeenCalledWith('[logixia:warn] no stderr');
-    spy.mockRestore();
+    expect(c.warn).toHaveBeenCalledWith('[logixia:warn] no stderr');
   });
 
   it('internal-log stays silent with LOGIXIA_SILENT_INTERNAL=1', () => {
-    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    const prev = process.env.LOGIXIA_SILENT_INTERNAL;
+    const c = spyConsole();
+    spies.push(c.log, c.warn, c.error);
     process.env.LOGIXIA_SILENT_INTERNAL = '1';
-    try {
-      internalLog('x');
-    } finally {
-      if (prev === undefined) delete process.env.LOGIXIA_SILENT_INTERNAL;
-      else process.env.LOGIXIA_SILENT_INTERNAL = prev;
-    }
-    expect(spy).not.toHaveBeenCalled();
-    spy.mockRestore();
+    internalLog('x');
+    internalError('x');
+    expect(c.log).not.toHaveBeenCalled();
+    expect(c.error).not.toHaveBeenCalled();
+  });
+
+  it('internal-log honors globalThis.LOGIXIA_SILENT_INTERNAL when process is missing', () => {
+    const c = spyConsole();
+    spies.push(c.log, c.warn, c.error);
+    (globalThis as G)['LOGIXIA_SILENT_INTERNAL'] = '1';
+    withoutProcess(() => internalError('x'));
+    expect(c.error).not.toHaveBeenCalled();
   });
 
   it('defineLogSchema().validate works without process', () => {
@@ -68,12 +92,7 @@ describe('Node-global guards (edge runtimes)', () => {
 
   it('defineLogSchema().validate skips checks in production', () => {
     const schema = defineLogSchema<{ id: string }>({ id: { type: 'string', required: true } });
-    const prev = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
-    try {
-      expect(schema.validate({})).toEqual([]);
-    } finally {
-      process.env.NODE_ENV = prev;
-    }
+    expect(schema.validate({})).toEqual([]);
   });
 });
