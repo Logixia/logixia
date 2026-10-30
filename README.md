@@ -984,12 +984,17 @@ const incomingTraceId = extractTraceId(req, {
 ```typescript
 import { createExpressContextMiddleware, createFastifyContextHook } from 'logixia';
 
-// Express: reads x-trace-id (sanitised), falls back to a generated ID, and runs
-// the rest of the request in a context. Every log line carries it as its trace ID.
-app.use(createExpressContextMiddleware());
+// Express: trace ID = first present header of traceIdHeader (default
+// DEFAULT_TRACE_HEADERS: traceparent, x-trace-id, x-request-id, x-correlation-id,
+// trace-id; traceparent is parsed to its 32-hex trace id), else request.id, else a
+// generated UUID. The ID is available via getCurrentTraceId() and is the logger's
+// top-level traceId for everything inside the request. No response header is set
+// unless you ask for one with responseHeader.
+app.use(createExpressContextMiddleware({ responseHeader: 'X-Trace-Id' }));
 
-// Fastify: register as an onRequest hook (no casts needed, no fastify import in logixia).
-// Reuses x-trace-id, then request.id, and shares the ID with createFastifyPlugin().
+// Fastify: same resolution; fastify's default counter ids ('req-1', ...) are never
+// used as trace IDs. Also shared with createFastifyPlugin() from 'logixia/middleware'.
+// traceIdHeader accepts a single name or a list; responseHeader works as above.
 fastify.addHook('onRequest', createFastifyContextHook());
 
 // Prefer full control? Wrap the request yourself:

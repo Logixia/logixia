@@ -884,33 +884,29 @@ export class LogixiaLogger<
     deregisterFromShutdown(this);
   }
 
-  /**
-   * Active trace ID: TraceContext first, then the traceId carried by an active
-   * LogixiaContext scope. Both are plain ALS reads, so no extra per-call storage.
-   */
-  private activeTraceId(): string | undefined {
-    const fromTrace = TraceContext.instance.getCurrentTraceId();
-    if (fromTrace !== undefined) return fromTrace;
-    const fromContext = LogixiaContext.get()?.traceId;
-    return typeof fromContext === 'string' ? fromContext : undefined;
-  }
-
   // ── Core log method ──────────────────────────────────────────────────────────
 
   private async log(level: string, message: string, data?: Record<string, unknown>): Promise<void> {
     if (this.config.silent) return;
     if (!this.shouldLog(level)) return;
 
-    // ── Feature 8: Sampling ───────────────────────────────────────────────────
-    if (this._sampler) {
-      const traceId = this.config.traceId ? this.activeTraceId() : undefined;
-      if (!this._sampler.shouldEmit(level, traceId)) return;
+    // One read of each ALS store per call. TraceContext is the source of truth for
+    // the trace ID; a traceId on a bare LogixiaContext scope is only a fallback.
+    const alsContext = LogixiaContext.get();
+    let activeTraceId: string | undefined;
+    if (this.config.traceId) {
+      const ctxTraceId = alsContext?.traceId;
+      activeTraceId =
+        TraceContext.instance.getCurrentTraceId() ??
+        (typeof ctxTraceId === 'string' ? ctxTraceId : undefined);
     }
+
+    // ── Feature 8: Sampling ───────────────────────────────────────────────────
+    if (this._sampler && !this._sampler.shouldEmit(level, activeTraceId)) return;
 
     // ── Feature 6: AsyncLocalStorage context auto-merge ───────────────────────
     // Merge ALS-stored fields (requestId, userId, …) into the payload so every
     // log call inside a LogixiaContext.run() scope automatically carries them.
-    const alsContext = LogixiaContext.get();
     const hasAls = alsContext !== undefined && Object.keys(alsContext).length > 0;
     // ── Feature 14: OTel auto trace-log correlation ────────────────────────────
     // Only touch the OTel bridge when it has actually been initialised — skipping
@@ -948,9 +944,7 @@ export class LogixiaLogger<
 
     // Use a monomorphic LogEntry shape — always the same fields, some may be undefined.
     // Consistent shape lets V8 inline-cache property accesses across calls.
-    const traceId = this.config.traceId
-      ? (this.activeTraceId() ?? this.fallbackTraceId)
-      : undefined;
+    const traceId = this.config.traceId ? (activeTraceId ?? this.fallbackTraceId) : undefined;
     // Pattern-based redaction also applies to the message string — a secret
     // interpolated into the message (e.g. `Auth: Bearer ${token}`) would
     // otherwise bypass redaction entirely and leak in plaintext. Path rules
