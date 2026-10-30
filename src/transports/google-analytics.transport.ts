@@ -51,6 +51,20 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
     // Google Analytics doesn't require explicit cleanup
   }
 
+  protected override reservedKeys(): readonly string[] {
+    return [
+      'event_category',
+      'event_label',
+      'log_level',
+      'log_message',
+      'trace_id',
+      'app_name',
+      'custom_dimension_1',
+      'custom_dimension_2',
+      'custom_dimension_3',
+    ];
+  }
+
   private transformToGAEvent(entry: TransportLogEntry): Record<string, unknown> {
     const transformed = this.transformEntry(entry);
 
@@ -60,6 +74,7 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
     return {
       name: 'log_event',
       params: {
+        ...this.flattenData(transformed),
         event_category: eventCategory,
         event_label: entry.message,
         log_level: entry.level,
@@ -69,7 +84,6 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
         ...(entry.traceId && { trace_id: entry.traceId }),
         ...(entry.appName && { app_name: entry.appName }),
         ...(entry.environment && { environment: entry.environment }),
-        ...this.flattenData(transformed),
         // Add custom dimensions
         custom_dimension_1: entry.level,
         custom_dimension_2: entry.context || 'default',

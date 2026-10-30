@@ -16,6 +16,7 @@ function makeTransport(type: string, connection: unknown, batchSize = 1000000) {
     table: 'logs',
     batchSize,
     flushInterval: 60000,
+    maxBufferSize: 1_000_000,
   } as unknown as DatabaseTransportConfig);
   const internals = transport as unknown as { connection: unknown; isConnected: boolean };
   internals.connection = connection;

@@ -14,6 +14,8 @@ import type {
 import { safeToString } from '../utils/coerce.utils';
 import { internalError, internalWarn } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
+import { stripControlChars } from '../utils/sanitize.utils';
+import { mergeCoreFields } from './entry-fields';
 
 const appendFile = promisify(fs.appendFile);
 const rename = promisify(fs.rename);
@@ -29,6 +31,13 @@ interface FlushWaiter {
 }
 
 const DROP_WARN_INTERVAL_MS = 5000;
+const DEFAULT_MAX_QUEUE = 10_000;
+const DEFAULT_FILE_MODE = 0o600;
+const DEFAULT_DIR_MODE = 0o700;
+
+function csvField(value: unknown): string {
+  return `"${stripControlChars(safeToString(value)).replace(/"/g, '""')}"`;
+}
 
 const SIZE_UNITS: Record<string, number> = {
   '': 1,
@@ -76,6 +85,10 @@ export function formatDatePattern(date: Date, pattern: string): string {
  * rotated files are renamed beside it (`app-2026-10-22T09-30-00-000.log`).
  * With a `rotation` block every file, the live one included, is timestamped.
  *
+ * Files are created with mode 0o600 and directories with 0o700; override with
+ * `fileMode` and `dirMode`. At most `maxQueue` (default 10000) entries wait in
+ * memory; the rest are dropped per `queuePolicy` and counted in a warning.
+ *
  * @example
  * transports: { file: { filename: 'app.log', dirname: './logs', maxSize: '50MB' } }
  */
@@ -114,7 +127,9 @@ export class FileTransport implements ITransport, IBatchTransport {
   private enqueued = 0;
   private settled = 0;
   private flushWaiters: FlushWaiter[] = [];
-  private readonly maxQueue: number | undefined;
+  private readonly maxQueue: number;
+  private readonly fileMode: number;
+  private readonly dirMode: number;
   private readonly queuePolicy: 'drop-oldest' | 'drop-newest' | 'block';
   private spaceWaiters: Array<() => void> = [];
   private inFlight = 0;
@@ -146,11 +161,15 @@ export class FileTransport implements ITransport, IBatchTransport {
     const maxQueue = config.maxQueue;
     if (maxQueue !== undefined && !(Number.isInteger(maxQueue) && maxQueue > 0)) {
       internalWarn(
-        `FileTransport: maxQueue ${String(maxQueue)} is not a positive integer; ignored`
+        `FileTransport: maxQueue ${String(maxQueue)} is not a positive integer; using ${DEFAULT_MAX_QUEUE}`
       );
-    } else {
-      this.maxQueue = maxQueue;
     }
+    this.maxQueue =
+      maxQueue !== undefined && Number.isInteger(maxQueue) && maxQueue > 0
+        ? maxQueue
+        : DEFAULT_MAX_QUEUE;
+    this.fileMode = config.fileMode ?? DEFAULT_FILE_MODE;
+    this.dirMode = config.dirMode ?? DEFAULT_DIR_MODE;
     this.queuePolicy = config.queuePolicy ?? 'drop-oldest';
     this.maxFiles = rotation?.maxFiles ?? config.maxFiles;
     this.compress = rotation?.compress ?? config.zippedArchive ?? false;
@@ -161,7 +180,7 @@ export class FileTransport implements ITransport, IBatchTransport {
     this.ext = path.extname(config.filename);
     this.base = path.basename(config.filename, this.ext);
     try {
-      fs.mkdirSync(this.dir, { recursive: true });
+      fs.mkdirSync(this.dir, { recursive: true, mode: this.dirMode });
     } catch (error) {
       internalError(`FileTransport could not create ${this.dir}`, error);
     }
@@ -247,7 +266,7 @@ export class FileTransport implements ITransport, IBatchTransport {
   }
 
   private queueFull(): boolean {
-    return this.maxQueue !== undefined && this.batch.length + this.inFlight >= this.maxQueue;
+    return this.batch.length + this.inFlight >= this.maxQueue;
   }
 
   private roomAvailable(): Promise<void> {
@@ -342,29 +361,32 @@ export class FileTransport implements ITransport, IBatchTransport {
   private formatEntry(entry: TransportLogEntry): string {
     switch (this.config.format) {
       case 'json':
-        return stringifyForLog({
-          timestamp: entry.timestamp.toISOString(),
-          level: entry.level,
-          message: entry.message,
-          ...(entry.data || {}),
-        });
+        return stringifyForLog(
+          mergeCoreFields(
+            {
+              timestamp: entry.timestamp.toISOString(),
+              level: entry.level,
+              message: entry.message,
+            },
+            entry.data
+          )
+        );
 
       case 'csv': {
-        const safeMessage = safeToString(entry.message);
         const fields = [
           entry.timestamp.toISOString(),
-          entry.level,
-          `"${safeMessage.replace(/"/g, '""')}"`,
-          safeToString(entry.context),
-          safeToString(entry.traceId),
-          stringifyForLog(entry.data || {}),
+          csvField(entry.level),
+          csvField(entry.message),
+          csvField(entry.context),
+          csvField(entry.traceId),
+          csvField(stringifyForLog(entry.data || {})),
         ];
         return fields.join(',');
       }
 
       case 'text':
       default:
-        return `${entry.timestamp.toISOString()} [${entry.level.toUpperCase()}] ${safeToString(entry.message)}${entry.data ? ' ' + stringifyForLog(entry.data) : ''}`;
+        return `${entry.timestamp.toISOString()} [${stripControlChars(safeToString(entry.level)).toUpperCase()}] ${stripControlChars(safeToString(entry.message))}${entry.data ? ' ' + stringifyForLog(entry.data) : ''}`;
     }
   }
 
@@ -374,7 +396,7 @@ export class FileTransport implements ITransport, IBatchTransport {
     // While a drain is running it picks this entry up by itself. Starting a flush
     // per entry here used to park one pending promise per log call until traffic
     // paused, which under steady load grew the heap by ~600 bytes a line.
-    const threshold = Math.min(this.config.batchSize || 100, this.maxQueue ?? Infinity);
+    const threshold = Math.min(this.config.batchSize || 100, this.maxQueue);
     if (this.batch.length >= threshold && !this.draining) {
       // Cancel any pending interval flush — the threshold flush supersedes it, and
       // a leftover timer would fire a redundant flush after the batch is already gone.
@@ -425,7 +447,7 @@ export class FileTransport implements ITransport, IBatchTransport {
   }
 
   private async append(content: string, bytes = Buffer.byteLength(content)): Promise<void> {
-    await appendFile(this.currentFilePath, content);
+    await appendFile(this.currentFilePath, content, { mode: this.fileMode });
     this.bytesWritten += bytes;
   }
 
@@ -548,7 +570,11 @@ export class FileTransport implements ITransport, IBatchTransport {
   private async compressFile(filePath: string): Promise<void> {
     const gzPath = `${filePath}.gz`;
     try {
-      await pipeline(fs.createReadStream(filePath), createGzip(), fs.createWriteStream(gzPath));
+      await pipeline(
+        fs.createReadStream(filePath),
+        createGzip(),
+        fs.createWriteStream(gzPath, { mode: this.fileMode })
+      );
       // Only delete the source once the compressed copy is fully written.
       await unlink(filePath);
     } catch (error) {

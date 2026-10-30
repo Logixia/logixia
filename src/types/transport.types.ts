@@ -51,6 +51,10 @@ export interface FileTransportConfig {
   datePattern?: string;
   /** Gzip rotated files. */
   zippedArchive?: boolean;
+  /** Permission bits for log files, rotated and gzipped ones included. Default 0o600. */
+  fileMode?: number;
+  /** Permission bits for directories the transport creates. Default 0o700. */
+  dirMode?: number;
   format?: 'json' | 'text' | 'csv';
   level?: string;
   batchSize?: number;
@@ -58,7 +62,8 @@ export interface FileTransportConfig {
   rotation?: RotationConfig;
   /**
    * Cap on entries held in memory that are not on disk yet, the batch being
-   * written included. Unset means no cap.
+   * written included. Default 10000; entries past it are handled per `queuePolicy`
+   * and counted in the drop warning.
    */
   maxQueue?: number;
   /**
@@ -85,6 +90,11 @@ export interface DatabaseTransportConfig {
   batchSize?: number;
   flushInterval?: number;
   filter?: (entry: TransportLogEntry) => boolean;
+  /**
+   * Most entries buffered in memory while the database is unreachable; past it
+   * the oldest are dropped. Default 10000, never below `batchSize`.
+   */
+  maxBufferSize?: number;
 }
 
 export interface ConsoleTransportConfig {
@@ -110,6 +120,11 @@ export interface AnalyticsTransportConfig {
   flushInterval?: number;
   enableUserTracking?: boolean;
   enableEventTracking?: boolean;
+  /**
+   * Most entries held in memory while the provider is unreachable. Past it the
+   * oldest entries are dropped and counted. Default 10000.
+   */
+  maxBufferSize?: number;
   customProperties?: Record<string, unknown>;
   filter?: (entry: TransportLogEntry) => boolean;
 }
@@ -143,6 +158,8 @@ export interface GoogleAnalyticsTransportConfig extends AnalyticsTransportConfig
 export interface SegmentTransportConfig extends AnalyticsTransportConfig {
   writeKey: string;
   dataPlaneUrl?: string;
+  /** Payload field read as the Segment userId. Default 'userId'; only string values are used. */
+  userIdField?: string;
   enableBatching?: boolean;
   maxBatchSize?: number;
   flushAt?: number;

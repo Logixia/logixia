@@ -6,30 +6,22 @@ on:
   pull_request:
     branches: [main, develop]
 
+# Deny everything by default; each job grants only what it needs.
+permissions: {}
+
 # PRs: cancel the old run when you push more changes (saves CI minutes).
 # main / develop pushes: never cancel — the release job lives inside this run,
 # so cancelling it mid-flight would abort a release in progress.
+# PRs share a group per branch (newer pushes cancel older runs); pushes to main
+# get one group per commit so a publish waiting for approval never blocks or
+# cancels CI for later commits.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # ─────────────────────────────────────────────────────────
-  # 1. Quality — auto-fix → lint · typecheck
-  #
-  # Strategy:
-  #   a) Auto-fix  — run format + lint:fix so trivial style drift never
-  #                  blocks a PR.
-  #   b) Commit-back — ONLY on pull_request events (not on push to main).
-  #                  Committing back on a direct push to main would advance
-  #                  origin/main PAST github.sha, causing the release job's
-  #                  checkout to be stale → semantic-release "local branch
-  #                  is behind remote" → skipped release.
-  #                  On fork PRs the commit step gracefully no-ops anyway
-  #                  (no write access to forks).
-  #   c) Hard gate — lint:check catches errors that can't be auto-fixed
-  #                  (real code issues), typecheck catches type errors.
-  #                  These still fail the build as intended.
+  # 1. Quality — format · lint · typecheck (check only, never commit back)
   # ─────────────────────────────────────────────────────────
   quality:
     name: Quality (lint · typecheck · format)
@@ -38,18 +30,19 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
-          # No cache: package-lock.json is intentionally excluded from the repo
-          # (library project; lockfile causes CI failures across ARM/x64 platforms
-          # due to platform-specific rolldown native bindings).
+          cache: npm
 
+      # Lockfile install, no dependency lifecycle scripts.
       - name: Install dependencies
-        run: npm install
+        run: npm ci --ignore-scripts
 
       # Check only, never commit back: a bot commit wouldn't trigger CI, so
       # required checks would never report on it. Fix locally with
@@ -65,12 +58,13 @@ jobs:
 
   # ─────────────────────────────────────────────────────────
   # 2. Tests — Node 18 / 20 / 22 matrix
-  # (logixia uses jest, so Node 18 is still supported)
   # ─────────────────────────────────────────────────────────
   test:
     name: Test (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     needs: quality
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -78,22 +72,25 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node-version }}
+          cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci --ignore-scripts
 
       - name: Run tests with coverage
         run: npm run test:coverage
 
       - name: Upload coverage to Codecov
         if: matrix.node-version == '22'
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
@@ -105,17 +102,22 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     needs: quality
+    permissions:
+      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
+          cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci --ignore-scripts
 
       - name: Build
         run: npm run build
@@ -126,81 +128,170 @@ jobs:
           test -f dist/index.mjs || (echo "dist/index.mjs missing" && exit 1)
           # tsdown emits .d.ts for CJS-primary packages, .d.mts for ESM-primary;
           # accept either so the check stays green regardless of future tsdown behaviour.
-          (test -f dist/index.d.ts || test -f dist/index.d.mts) \
-            || (echo "dist/index.d.ts (or .d.mts) missing" && exit 1)
+          test -f dist/index.d.ts || test -f dist/index.d.mts \
+            || { echo "dist/index.d.ts (or .d.mts) missing"; exit 1; }
           echo "All dist artifacts present"
 
       - name: Check package exports
         run: npm run check:exports
 
       - name: Upload dist artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist
           path: dist/
           retention-days: 3
 
   # ─────────────────────────────────────────────────────────
-  # 4. Release — only on direct push to main
+  # 4. Release — only on direct push to main. Does NOT publish to npm.
   #
-  # Why "local branch is behind remote" used to happen so often:
+  # Runs semantic-release from the lockfile (npm ci --ignore-scripts) to
+  # compute the version, write it to package.json, create the git tag and the
+  # GitHub release, and pack the npm tarball (npmPublish: false + tarballDir in
+  # .releaserc.json). The tarball is handed to the `publish` job as an artifact.
   #
-  #   semantic-release checks that local HEAD == origin HEAD before it
-  #   will publish.  Any commit pushed to main AFTER github.sha (the SHA
-  #   this run was triggered by) but BEFORE the release step executes
-  #   causes the check to fail.  Sources include:
-  #     • bot/dependabot commits
-  #     • concurrent CI runs from quick successive pushes
-  #   The "Sync with remote" step below eliminates all of these by
-  #   fast-forwarding local to the current tip of origin/main right
-  #   before semantic-release runs.  semantic-release then sees
-  #   local == remote and proceeds normally.
+  # This job installs dependencies, so it must never hold `id-token: write`:
+  # a compromised dev dependency could otherwise mint an npm publish token.
+  #
+  # The checkout is github.sha (the commit that passed test + build). If main
+  # moved on since, semantic-release refuses to release ("branch is behind")
+  # and the newer push's run releases instead.
   # ─────────────────────────────────────────────────────────
   release:
-    name: Semantic Release
+    name: Semantic Release (version · tag · pack)
     runs-on: ubuntu-latest
     needs: [test, build]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    concurrency:
+      group: release-${{ github.ref }}
+      cancel-in-progress: false
     permissions:
-      contents: write # push release tag + chore(release) commit
+      contents: write # push release tag, create the GitHub release
       issues: write # comment on released issues
       pull-requests: write # comment on released PRs
-      id-token: write # npm provenance attestation
+    outputs:
+      released: ${{ steps.pack.outputs.released }}
+      version: ${{ steps.pack.outputs.version }}
+      tarball: ${{ steps.pack.outputs.tarball }}
+      sha256: ${{ steps.pack.outputs.sha256 }}
 
     steps:
       - name: Checkout (full history)
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
 
-      # Fast-forward local main to the current tip of origin/main.
-      # Eliminates "local branch is behind the remote" skips caused by
-      # any commit pushed to main after github.sha was captured.
-      - name: Sync with remote
-        run: git fetch origin && git reset --hard origin/main
-
       - name: Install dependencies
-        env:
-          HUSKY: 0 # skip husky install in CI — no local git hooks needed
-        run: npm install
+        run: npm ci --ignore-scripts
 
       - name: Build
         run: npm run build
 
-      - name: Release
+      - name: Semantic release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # No NPM_TOKEN — npm publish uses OIDC trusted publishing.
-          # @semantic-release/npm auto-detects the GitHub Actions OIDC token
-          # when id-token: write is granted (see permissions above) and no
-          # NPM_TOKEN is set, so no secret is needed. Requires a trusted
-          # publisher to be configured for this package on npmjs.com.
-          NPM_CONFIG_PROVENANCE: true
-          HUSKY: 0 # skip commit-msg / pre-commit hooks on the auto-generated release commit
-        run: npx --yes -p semantic-release@25 -p conventional-changelog-conventionalcommits@8 semantic-release
+          NPM_CONFIG_IGNORE_SCRIPTS: 'true' # `npm version` / `npm pack` run no lifecycle scripts
+          HUSKY: 0
+        run: npx semantic-release
+
+      # Runs even if semantic-release failed after pushing the tag (e.g. a
+      # GitHub comment/label call in the success step), so the tagged version
+      # still reaches npm. A tarball without a pushed tag is never published.
+      - name: Locate tarball
+        id: pack
+        if: ${{ !cancelled() }}
+        run: |
+          shopt -s nullglob
+          files=(release/*.tgz)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No release was created."
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${#files[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one tarball in release/, found ${#files[@]}"
+            exit 1
+          fi
+          version=$(node -p "require('./package.json').version")
+          if ! git ls-remote --exit-code --tags origin "refs/tags/v${version}" > /dev/null; then
+            echo "::error::Tag v${version} was not pushed; refusing to publish"
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          {
+            echo "released=true"
+            echo "version=$version"
+            echo "tarball=$(basename "${files[0]}")"
+            echo "sha256=$(sha256sum "${files[0]}" | cut -d' ' -f1)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload npm tarball
+        if: ${{ !cancelled() && steps.pack.outputs.released == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: npm-tarball
+          path: release/*.tgz
+          if-no-files-found: error
+          retention-days: 14
+
+  # ─────────────────────────────────────────────────────────
+  # 5. Publish — the only job with `id-token: write`.
+  #
+  # Installs nothing from the registry except Node itself (setup-node): it
+  # downloads the tarball built by `release`, checks its SHA-256, and runs
+  # `npm publish` with --ignore-scripts (no prepublishOnly). Authentication is
+  # npm trusted publishing (OIDC); no npm token exists.
+  #
+  # Runs in the `npm` GitHub Environment so a required reviewer can gate it.
+  # Failed publish? Re-run just this job: the tag and GitHub release already
+  # exist and the tarball artifact is kept for 14 days.
+  # ─────────────────────────────────────────────────────────
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    needs: release
+    if: ${{ !cancelled() && needs.release.outputs.released == 'true' }}
+    environment: npm
+    permissions:
+      id-token: write # npm trusted publishing + provenance
+      contents: read
+
+    steps:
+      - name: Download npm tarball
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: npm-tarball
+          path: release
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          # Node 24 bundles npm 11 (trusted publishing needs npm >= 11.5.1).
+          node-version: '24.22.2'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Verify npm version and tarball
+        env:
+          TARBALL: ${{ needs.release.outputs.tarball }}
+          EXPECTED_SHA256: ${{ needs.release.outputs.sha256 }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          npm_version=$(npm --version)
+          if [ "$(printf '%s\n' "11.5.1" "$npm_version" | sort -V | head -n1)" != "11.5.1" ]; then
+            echo "::error::npm $npm_version is too old for trusted publishing (need >= 11.5.1)"
+            exit 1
+          fi
+          case "$TARBALL" in */*|'') echo "::error::Bad tarball name"; exit 1 ;; esac
+          echo "$EXPECTED_SHA256  release/$TARBALL" | sha256sum --check -
+          case "$VERSION" in *-*) echo "::error::Prerelease versions are not published from this workflow"; exit 1 ;; esac
+
+      - name: Publish
+        env:
+          TARBALL: ${{ needs.release.outputs.tarball }}
+        run: npm publish "release/$TARBALL" --provenance --access public --ignore-scripts

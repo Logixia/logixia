@@ -306,11 +306,11 @@ describe('redactObject — special value pass-through', () => {
     expect(result.createdAt).toBe(date);
   });
 
-  it('passes Error objects through without modification', () => {
+  it('serializes Error objects instead of passing them through', () => {
     const err = new Error('oops');
     const obj = { lastError: err };
     const result = redactObject(obj, { paths: ['something.else'] });
-    expect(result.lastError).toBe(err);
+    expect(result.lastError).toMatchObject({ name: 'Error', message: 'oops' });
   });
 
   it('passes null values through', () => {

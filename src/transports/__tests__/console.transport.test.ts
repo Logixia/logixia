@@ -80,6 +80,20 @@ describe('ConsoleTransport — CWE-117 sanitization', () => {
     expect(line).not.toContain('\x07');
     expect(line).toContain('KAFKA');
   });
+
+  it('escapes CR and LF so a message cannot forge a second line', async () => {
+    const cap = capture();
+    const t = new ConsoleTransport({ format: 'text', colorize: false, timestamp: false });
+    await t.write(makeEntry({ message: 'a\nERROR forged\r\tb\x1b[0m\x7f', context: 'c\nd' }));
+    cap.restore();
+
+    const out = cap.out.join('');
+    expect(out.split('\n').filter(Boolean)).toHaveLength(1);
+    expect(out).toContain('a\\nERROR forged\\r\tb[0m');
+    expect(out).toContain('[c\\nd]');
+    expect(out).not.toContain('\x1b');
+    expect(out).not.toContain('\x7f');
+  });
 });
 
 describe('ConsoleTransport — stream routing', () => {
