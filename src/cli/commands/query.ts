@@ -668,11 +668,15 @@ export const queryCommand = new Command('query')
       orderBy: opts.orderBy,
     });
 
+    // Keep stdout parseable for machine formats; status text goes to stderr.
+    const machineFormat = opts.format === 'json' || opts.format === 'ndjson';
+    const status = machineFormat ? console.error : console.log;
+
     if (aggregationOutput !== null) {
-      console.log(pc.bold('\nAggregation result:'));
+      status(pc.bold('\nAggregation result:'));
       console.log(aggregationOutput);
     } else {
-      console.log(
+      status(
         pc.bold(
           `\nFound ${pc.cyan(String(results.length))} match${results.length === 1 ? '' : 'es'}`
         )
@@ -684,7 +688,7 @@ export const queryCommand = new Command('query')
 
     // ── Live tail mode ─────────────────────────────────────────────────────
     if (opts.follow) {
-      console.log(pc.dim('\n--- following (ctrl-c to exit) ---'));
+      status(pc.dim('\n--- following (ctrl-c to exit) ---'));
       let pos = fs.statSync(full).size;
       let buffer = '';
 

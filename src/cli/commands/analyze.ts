@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { Command } from 'commander';
 
+import { csvField } from '../../utils/csv.utils';
 import { formatAsTable, safeParseLogs, sanitizeForTerminal } from '../utils';
 
 function parseDurationToMs(input?: string) {
@@ -59,6 +60,14 @@ export async function analyzeFileContents(raw: string, opts: any = {}) {
 
   if (opts.format === 'json') {
     return { total: filtered.length, byLevel };
+  }
+
+  if (opts.format === 'csv') {
+    const lines = [
+      'level,count',
+      ...Object.keys(byLevel).map((k) => `${csvField(k)},${byLevel[k]}`),
+    ];
+    return lines.join('\n');
   }
 
   const rows = Object.keys(byLevel).map((k) => ({ level: k, count: byLevel[k] }));
