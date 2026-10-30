@@ -37,9 +37,10 @@ describe('SearchManager CSV export', () => {
 
 describe('public exports', () => {
   it('exposes the new exception filter and metrics API', () => {
-    expect(root.LOGIXIA_EXCEPTION_FILTER_OPTIONS).toBe('LOGIXIA_EXCEPTION_FILTER_OPTIONS');
     expect(nest.LOGIXIA_EXCEPTION_FILTER_OPTIONS).toBe('LOGIXIA_EXCEPTION_FILTER_OPTIONS');
-    expect(nest.LogixiaExceptionFilter).toBe(root.LogixiaExceptionFilter);
+    expect(root).not.toHaveProperty('LogixiaExceptionFilter');
+    expect(root).not.toHaveProperty('LogixiaLoggerModule');
+    expect(root).not.toHaveProperty('LogixiaLoggerService');
     expect(root.OVERFLOW_LABEL_VALUE).toBe('__overflow__');
   });
 });

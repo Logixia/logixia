@@ -135,6 +135,9 @@ jobs:
       - name: Check package exports
         run: npm run check:exports
 
+      - name: Check entries load without optional peers
+        run: npm run check:optional-peers
+
       - name: Upload dist artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

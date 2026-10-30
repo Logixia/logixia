@@ -12,21 +12,10 @@
  * - Pattern recognition and anomaly detection
  */
 
+import { DEFAULT_CONFIG } from './core/default-config';
 import { createLogger as createLoggerFromCore, LogixiaLogger } from './core/logitron-logger';
-import { LogixiaLoggerService } from './core/logitron-nestjs.service';
-import type { Environment, LogColor, LoggerConfig } from './types';
-import { LogLevel } from './types';
 
 // Type exports
-export * from './core/logitron-logger.module';
-export * from './core/logitron-nestjs.service';
-export type { LogixiaExceptionFilterOptions, LogMethodOptions } from './core/nestjs-extras';
-export {
-  InjectLogger,
-  LOGIXIA_EXCEPTION_FILTER_OPTIONS,
-  LogixiaExceptionFilter,
-  LogMethod,
-} from './core/nestjs-extras';
 export * from './formatters';
 export * from './types';
 export * from './utils/error.utils';
@@ -116,51 +105,7 @@ export type { MetricsPluginOptions } from './metrics';
 export { createMetricsPlugin, MetricsPlugin, OVERFLOW_LABEL_VALUE } from './metrics';
 
 // Core exports
-export { DEFAULT_CONFIG, LogixiaLogger, LogixiaLoggerService };
-
-/**
- * Default configuration for Logixia logger
- */
-const DEFAULT_CONFIG = {
-  appName: 'App',
-  environment: 'development' as Environment,
-  traceId: true,
-  format: {
-    timestamp: true,
-    colorize: true,
-    json: false,
-  },
-  silent: false,
-  levelOptions: {
-    level: LogLevel.INFO,
-    levels: {
-      [LogLevel.ERROR]: 0,
-      [LogLevel.WARN]: 1,
-      [LogLevel.INFO]: 2,
-      [LogLevel.DEBUG]: 3,
-      [LogLevel.TRACE]: 4,
-      [LogLevel.VERBOSE]: 5,
-    },
-    colors: {
-      [LogLevel.ERROR]: 'red',
-      [LogLevel.WARN]: 'yellow',
-      [LogLevel.INFO]: 'blue',
-      [LogLevel.DEBUG]: 'green',
-      [LogLevel.TRACE]: 'gray',
-      [LogLevel.VERBOSE]: 'cyan',
-    } as Record<string, LogColor>,
-  },
-  fields: {
-    timestamp: true,
-    level: true,
-    appName: true,
-    traceId: true,
-    message: true,
-    payload: true,
-    timeTaken: true,
-  },
-  outputs: ['console'],
-};
+export { DEFAULT_CONFIG, LogixiaLogger };
 
 /**
  * Create a new Logixia logger instance with TypeScript support for custom levels
@@ -168,15 +113,6 @@ const DEFAULT_CONFIG = {
  * @returns Typed logger instance
  */
 export const createLogger = createLoggerFromCore;
-
-/**
- * Create a new Logixia logger service for NestJS
- * @param config - Logger configuration
- * @returns LogixiaLoggerService instance
- */
-export function createLoggerService(config?: Partial<LoggerConfig>): LogixiaLoggerService {
-  return new LogixiaLoggerService({ ...DEFAULT_CONFIG, ...config });
-}
 
 /**
  * Default logger instance

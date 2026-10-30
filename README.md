@@ -1060,6 +1060,11 @@ export class EventsGateway {
 
 ## NestJS integration
 
+> **Upgrading from 1.x:** since 2.0.0, everything NestJS-specific lives in `logixia/nest` only.
+> Change `import { LogixiaLoggerModule, LogixiaLoggerService, LogixiaExceptionFilter, InjectLogger, LogMethod } from 'logixia'`
+> to `... from 'logixia/nest'`. The root `logixia` entry no longer loads `@nestjs/common`, so plain Node, Express and Fastify apps
+> work without NestJS installed.
+
 Drop-in module with zero boilerplate. Registers `TraceMiddleware` for all routes, provides `LogixiaLoggerService`, `KafkaTraceInterceptor`, and `WebSocketTraceInterceptor` via the global DI container.
 
 > **Full working example** — see [`examples/nestjs-app/`](./examples/nestjs-app/) for a complete NestJS app with Docker Compose (Postgres, MongoDB, Kafka, Kafdrop) that exercises every feature: `LogixiaLoggerModule`, `TraceMiddleware`, `LogixiaExceptionFilter`, `HttpLoggingInterceptor`, `WebSocketTraceInterceptor`, `KafkaTraceInterceptor`, `@LogMethod`, `child()` loggers, `timeAsync`, real Kafka producer + consumer.
@@ -1074,7 +1079,7 @@ Drop-in module with zero boilerplate. Registers `TraceMiddleware` for all routes
 ```typescript
 // app.module.ts
 import { Module } from '@nestjs/common';
-import { LogixiaLoggerModule } from 'logixia';
+import { LogixiaLoggerModule } from 'logixia/nest';
 
 @Module({
   imports: [
@@ -1120,7 +1125,7 @@ LogixiaLoggerModule.forRootAsync({
 ```typescript
 // orders.service.ts
 import { Injectable } from '@nestjs/common';
-import { LogixiaLoggerService } from 'logixia';
+import { LogixiaLoggerService } from 'logixia/nest';
 
 @Injectable()
 export class OrdersService {
@@ -1138,7 +1143,7 @@ export class OrdersService {
 ```typescript
 // orders.module.ts
 import { Module } from '@nestjs/common';
-import { LogixiaLoggerModule } from 'logixia';
+import { LogixiaLoggerModule } from 'logixia/nest';
 import { OrdersService } from './orders.service';
 
 @Module({
@@ -1151,7 +1156,7 @@ export class OrdersModule {}
 ```typescript
 // orders.service.ts — inject the feature-scoped token
 import { Inject, Injectable } from '@nestjs/common';
-import { LOGIXIA_LOGGER_PREFIX, LogixiaLoggerService } from 'logixia';
+import { LOGIXIA_LOGGER_PREFIX, LogixiaLoggerService } from 'logixia/nest';
 
 @Injectable()
 export class OrdersService {
@@ -1206,7 +1211,7 @@ Automatically logs method entry, exit, duration, and errors — no manual `try/c
 
 ```typescript
 import { Injectable } from '@nestjs/common';
-import { LogixiaLoggerService, LogMethod } from 'logixia';
+import { LogixiaLoggerService, LogMethod } from 'logixia/nest';
 
 @Injectable()
 export class PaymentService {
@@ -1243,7 +1248,7 @@ A global NestJS exception filter that automatically logs unhandled exceptions �
 ```typescript
 // main.ts
 import { NestFactory } from '@nestjs/core';
-import { LogixiaExceptionFilter } from 'logixia';
+import { LogixiaExceptionFilter } from 'logixia/nest';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -1258,7 +1263,7 @@ With `LogixiaLoggerModule` set up, inject the service directly so it logs to you
 
 ```typescript
 import { APP_FILTER } from '@nestjs/core';
-import { LogixiaExceptionFilter, LogixiaLoggerService } from 'logixia';
+import { LogixiaExceptionFilter, LogixiaLoggerService } from 'logixia/nest';
 
 // In AppModule providers:
 {
