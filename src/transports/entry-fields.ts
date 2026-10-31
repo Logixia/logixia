@@ -1,5 +1,6 @@
+import { isProtoKey } from '../utils/own-property';
+
 const PAYLOAD_PREFIX = 'data_';
-const UNSAFE_KEYS = new Set(['__proto__']);
 
 /**
  * Copies `core` and then the user payload into one object. The core fields stay
@@ -23,7 +24,7 @@ export function mergeCoreFields(
   const reserved = new Set([...Object.keys(core), ...extraReserved]);
   const payloadKeys = new Set(Object.keys(data));
   for (const key of payloadKeys) {
-    if (UNSAFE_KEYS.has(key)) continue;
+    if (isProtoKey(key)) continue;
     if (key === 'traceId' && core['traceId'] !== undefined && data[key] === core['traceId'])
       continue;
     let target = key;

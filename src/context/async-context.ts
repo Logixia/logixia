@@ -26,6 +26,7 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 
+import { assignOwn } from '../utils/own-property';
 import {
   type ContextRequestLike,
   resolveRequestTraceId,
@@ -90,8 +91,7 @@ export const LogixiaContext = {
       return;
     }
     for (const key of Object.keys(fields)) {
-      if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
-      store[key] = fields[key];
+      assignOwn(store, key, fields[key]);
     }
   },
 

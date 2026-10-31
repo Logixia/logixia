@@ -9,6 +9,7 @@
  */
 
 import type { ErrorSerializationOptions } from '../types';
+import { assignOwn } from './own-property';
 
 // Well-known extra fields to always capture when present on an error
 const EXTRA_FIELDS = [
@@ -114,11 +115,10 @@ function _serializeError(
 
   for (const key of Object.getOwnPropertyNames(error)) {
     if (skip.has(key)) continue;
-    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
     try {
-      serialized[key] = serializeValue(errorRecord[key], maxDepth - depth - 1, seen);
+      assignOwn(serialized, key, serializeValue(errorRecord[key], maxDepth - depth - 1, seen));
     } catch {
-      serialized[key] = '[Unserializable]';
+      assignOwn(serialized, key, '[Unserializable]');
     }
   }
 
@@ -161,11 +161,10 @@ function serializeValue(value: unknown, remainingDepth: number, seen: WeakSet<ob
     seen.add(value);
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
       try {
-        out[k] = serializeValue(v, remainingDepth - 1, seen);
+        assignOwn(out, k, serializeValue(v, remainingDepth - 1, seen));
       } catch {
-        out[k] = '[Unserializable]';
+        assignOwn(out, k, '[Unserializable]');
       }
     }
     return out;
