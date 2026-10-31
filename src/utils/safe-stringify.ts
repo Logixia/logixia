@@ -1,3 +1,4 @@
+import { setOwnProperty } from './own-property';
 /**
  * logixia — robust JSON serialization for log payloads.
  *
@@ -80,7 +81,7 @@ export function safeStringify(value: unknown, options: SafeStringifyOptions = {}
       const obj: Record<string, unknown> = {};
       for (const k of keys) {
         if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
-        obj[k] = transform(rec[k]);
+        setOwnProperty(obj, k, transform(rec[k]));
       }
       out = obj;
     }
@@ -117,7 +118,7 @@ export function decycleValue(value: unknown, bigint: 'string' | 'number' = 'stri
     const obj: Record<string, unknown> = {};
     for (const k of Object.keys(rec)) {
       if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
-      obj[k] = walk(rec[k], [...path, k]);
+      setOwnProperty(obj, k, walk(rec[k], [...path, k]));
     }
     return obj;
   };

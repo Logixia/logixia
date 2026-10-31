@@ -25,6 +25,7 @@
 import type { IBaseLogger } from '../types';
 import type { HttpRequestShape, HttpResponseShape } from '../types/http-shapes';
 import { internalError } from '../utils/internal-log';
+import { setOwnProperty } from '../utils/own-property';
 import { resolveRequestTraceId, resolveTraceHeaders } from '../utils/request-trace';
 import { stringifyForLog } from '../utils/safe-stringify';
 import {
@@ -411,7 +412,7 @@ function pruneValue(
         break;
       }
       budget.left -= k.length;
-      record[k] = pruneValue(v, budget, depth + 1, ancestors);
+      setOwnProperty(record, k, pruneValue(v, budget, depth + 1, ancestors));
     }
     return record;
   } catch {
