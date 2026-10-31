@@ -11,7 +11,7 @@ Logs are a common place for secrets and attacker-controlled text to end up. This
 ## Keep secrets out of log data
 
 - **Redact at the logger.** `redact.paths`, `patterns` and `autoDetect` mask values before any transport or plugin sees them, and fail closed if redaction throws. See [Redaction](/guide/redaction).
-- **HTTP middleware** redacts sensitive headers (`authorization`, `cookie`, `x-api-key` and more) and query parameters (`token`, `access_token`, `password`, `signature` and more) by default. See [HTTP logging](/guide/http-logging).
+- **HTTP middleware** redacts sensitive headers (`authorization`, `cookie`, `x-api-key` and more) and query parameters (`token`, `access_token`, `password`, `signature`, presigned-URL signatures and more) by default. `redact.queryParams` adds names for the NestJS exception filter and trace middleware. See [HTTP logging](/guide/http-logging).
 - **Bodies** are only logged when you turn on `logBody`, and pass through your redaction rules.
 - Do not log secrets on purpose. Redaction is a safety net that works by names and patterns; it cannot know that an arbitrary string is sensitive.
 

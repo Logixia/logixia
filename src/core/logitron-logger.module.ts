@@ -135,7 +135,10 @@ export class LogixiaLoggerModule implements NestModule {
       };
     }
 
-    const middleware = new TraceMiddleware(resolvedTraceConfig);
+    const middleware = new TraceMiddleware(
+      resolvedTraceConfig,
+      LogixiaLoggerModule.loggerConfig.redact?.queryParams
+    );
     const middlewareConfig = (req: Request, res: Response, next: NextFunction) =>
       middleware.use(req, res, next);
 

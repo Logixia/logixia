@@ -37,8 +37,18 @@ import { Catch, Inject, Optional } from '@nestjs/common';
 
 import { ErrorResponseBuilder } from '../exceptions/builder';
 import { isLogixiaException } from '../exceptions/exception';
+import type { LogixiaErrorResponse } from '../exceptions/types';
 import type { LoggerConfig, LogLevelString, TraceIdConfig } from '../types';
+import { serializeError } from '../utils/error.utils';
 import { internalError, internalWarn } from '../utils/internal-log';
+import { assignOwn } from '../utils/own-property';
+import {
+  buildNameSet,
+  DEFAULT_REDACT_QUERY_PARAMS,
+  redactUrlQuery,
+  sanitizeText,
+  sensitiveQueryValues,
+} from '../utils/sensitive-names';
 import { sanitizeIncomingId, TraceContext } from '../utils/trace.utils';
 import {
   LOGIXIA_LOGGER_CONFIG,
@@ -273,16 +283,124 @@ export interface LogixiaExceptionFilterOptions {
    * @default false
    */
   exposeCause?: boolean;
+  /**
+   * Extra query parameter names whose values are replaced with `[REDACTED]` in the
+   * logged `url`, the response `path`, and any copy of those values inside the error
+   * message, stack or details. Merged with the defaults (`token`, `code`, `password`,
+   * `api_key`, …) and `LoggerConfig.redact.queryParams`.
+   */
+  redactQueryParams?: readonly string[];
 }
 
 /** Injection token for {@link LogixiaExceptionFilterOptions}. */
 export const LOGIXIA_EXCEPTION_FILTER_OPTIONS = 'LOGIXIA_EXCEPTION_FILTER_OPTIONS';
+
+const MAX_SCRUB_DEPTH = 8;
+
+/** Copy `value` with every string passed through `clean`; the input is never modified. */
+function cleanDeep(value: unknown, clean: (text: string) => string, depth = 0): unknown {
+  if (typeof value === 'string') return clean(value);
+  if (value === null || typeof value !== 'object' || depth >= MAX_SCRUB_DEPTH) return value;
+  if (Array.isArray(value)) return value.map((item) => cleanDeep(item, clean, depth + 1));
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) out[key] = cleanDeep(item, clean, depth + 1);
+  return out;
+}
+
+function scrubErrorResponse(
+  response: LogixiaErrorResponse,
+  clean: (text: string) => string
+): LogixiaErrorResponse {
+  const { error, debug } = response;
+  return {
+    ...response,
+    error: cleanDeep(error, clean) as LogixiaErrorResponse['error'],
+    ...(debug !== undefined ? { debug: cleanDeep(debug, clean) as typeof debug } : {}),
+  };
+}
+
+const MAX_ERROR_DEPTH = 6;
+
+/** Scrub string VALUES of an already serialized tree; keys stay so key-based redaction still applies. */
+function scrubSerialized(
+  value: unknown,
+  clean: (text: string) => string,
+  depth: number,
+  seen: WeakSet<object>
+): unknown {
+  if (typeof value === 'string') return clean(value);
+  if (value === null || typeof value !== 'object') {
+    return typeof value === 'function' || typeof value === 'symbol' ? '[Unserializable]' : value;
+  }
+  if (seen.has(value)) return '[Circular]';
+  if (depth >= MAX_ERROR_DEPTH) return '[MaxDepth]';
+  seen.add(value);
+  try {
+    if (Array.isArray(value))
+      return value.map((item) => scrubSerialized(item, clean, depth + 1, seen));
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      assignOwn(out, key, scrubSerialized(item, clean, depth + 1, seen));
+    }
+    return out;
+  } finally {
+    seen.delete(value);
+  }
+}
+
+/** Minimal copy used when the full sanitize step fails; never throws. */
+function fallbackError(exception: unknown, clean: (text: string) => string): Error {
+  let name = 'Error';
+  let message = '[Unserializable]';
+  try {
+    if (exception instanceof Error) {
+      name = exception.name;
+      message = clean(exception.message);
+    }
+  } catch {
+    /* hostile getter or revoked proxy: keep the placeholders */
+  }
+  const copy = new Error(message);
+  copy.name = name;
+  assignOwn(copy, 'serialization', '[Unserializable]');
+  return copy;
+}
+
+/**
+ * A fresh Error safe to log. Built from `serializeError` (class instances walked by key,
+ * so the logger's key-based redaction still sees `authorization`, `x-api-key`, ...), with
+ * string values scrubbed. Keeps name, message, stack, cause and custom properties.
+ * The original is untouched and this never throws.
+ */
+function sanitizedError(exception: unknown, clean: (text: string) => string): Error {
+  try {
+    if (!(exception instanceof Error)) return new Error(clean(String(exception)));
+    const serialized = serializeError(exception);
+    const scrubbed = scrubSerialized(serialized, clean, 0, new WeakSet()) as Record<
+      string,
+      unknown
+    >;
+    const copy = new Error(String(scrubbed['message'] ?? ''));
+    for (const [key, value] of Object.entries(scrubbed)) {
+      if (key === 'message') continue;
+      if (key === 'stack' || key === 'name') {
+        Object.defineProperty(copy, key, { value, writable: true, configurable: true });
+      } else {
+        assignOwn(copy, key, value);
+      }
+    }
+    return copy;
+  } catch {
+    return fallbackError(exception, clean);
+  }
+}
 
 @Catch()
 export class LogixiaExceptionFilter implements ExceptionFilter {
   private readonly _logger: LogixiaLoggerService | undefined;
   private readonly _traceConfig: TraceIdConfig | undefined;
   private readonly _options: LogixiaExceptionFilterOptions;
+  private readonly _redactParams: ReadonlySet<string>;
 
   constructor(
     @Optional()
@@ -296,6 +414,10 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
     options?: LogixiaExceptionFilterOptions
   ) {
     this._options = options ?? {};
+    this._redactParams = buildNameSet(DEFAULT_REDACT_QUERY_PARAMS, [
+      ...(loggerConfig?.redact?.queryParams ?? []),
+      ...(this._options.redactQueryParams ?? []),
+    ]);
     // Prefer the injected logger; fall back to the global module logger so
     // `new LogixiaExceptionFilter()` (registered in main.ts before DI resolves)
     // still logs without needing an explicit logger argument.
@@ -312,6 +434,7 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
     const request = ctx.getRequest<{
       method?: string;
       url?: string;
+      originalUrl?: string;
       id?: string;
       startTime?: number;
       headers?: Record<string, string | string[] | undefined>;
@@ -332,20 +455,45 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
       sanitizeIncomingId(request.id) ??
       undefined;
 
-    const { response: errorResponse, httpStatus } = ErrorResponseBuilder.build({
-      exception,
-      traceId,
-      path: request.url ?? '/',
-      startTime: request.startTime,
-      exposeDebug: this._options.exposeDebug === true,
-      exposeCause: this._options.exposeCause === true,
-    });
+    // Query values like ?token=… must not reach logs or the echoed response path.
+    // `originalUrl` keeps mount prefixes and matches the HTTP logger / wide events.
+    const rawUrl = request.originalUrl ?? request.url ?? '';
+    const url = redactUrlQuery(rawUrl, this._redactParams);
+    // Nest's own 404 puts the full URL in the message, so scrub it from every text field.
+    const secrets = sensitiveQueryValues(rawUrl, this._redactParams);
+    const clean = (text: string): string => sanitizeText(text, this._redactParams, secrets);
+
+    const buildFor = (input: unknown) => {
+      const { response: built, httpStatus: status } = ErrorResponseBuilder.build({
+        exception: input,
+        traceId,
+        path: url || '/',
+        startTime: request.startTime,
+        exposeDebug: this._options.exposeDebug === true,
+        exposeCause: this._options.exposeCause === true,
+      });
+      return { errorResponse: scrubErrorResponse(built, clean), httpStatus: status };
+    };
+    // A hostile exception (throwing getter, revoked proxy) must never lose the response.
+    let result: ReturnType<typeof buildFor>;
+    try {
+      result = buildFor(exception);
+    } catch {
+      result = buildFor(fallbackError(exception, clean));
+    }
+    const { errorResponse, httpStatus } = result;
+    let logixiaException = false;
+    try {
+      logixiaException = isLogixiaException(exception);
+    } catch {
+      /* not inspectable: treat as a plain error */
+    }
 
     // ── Logging ──────────────────────────────────────────────────────────────
     if (this._logger) {
       const requestMeta: Record<string, unknown> = {
         method: request.method ?? '',
-        url: request.url ?? '',
+        url,
         status: httpStatus,
         // Only include trace_id when it exists — keeps log records honest when
         // tracing is disabled (instead of writing `trace_id: undefined`).
@@ -364,9 +512,8 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
 
       let logPromise: Promise<void> | void;
       if (httpStatus >= 500) {
-        const err = exception instanceof Error ? exception : new Error(String(exception));
-        logPromise = this._logger.error(err, requestMeta);
-      } else if (isLogixiaException(exception)) {
+        logPromise = this._logger.error(sanitizedError(exception, clean), requestMeta);
+      } else if (logixiaException) {
         logPromise = this._logger.warn(
           `[${errorResponse.error.code}] ${errorResponse.error.message}`,
           requestMeta

@@ -91,6 +91,14 @@ export interface RedactConfig {
    */
   paths?: string[];
   /**
+   * Extra URL query parameter names whose values are replaced with `[REDACTED]`
+   * wherever logixia logs a request URL (exception filter, trace context, and the
+   * NestJS trace middleware). Merged with the defaults (`token`, `code`, `password`,
+   * `api_key`, `x-amz-signature`, …). Names are matched case-insensitively.
+   * @example `['invite', 'magic']`
+   */
+  queryParams?: string[];
+  /**
    * Dot-notation field paths exempt from `patterns` / `autoDetect` value-pattern
    * scanning. Use this for internal identifiers whose *value* happens to look
    * like PII to a pattern (e.g. a vendor reference id embedding an epoch

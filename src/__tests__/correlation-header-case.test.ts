@@ -64,3 +64,27 @@ describe('childFromRequest header lookup', () => {
     expect(childCtx[0]?.['correlationId']).toBe('incoming-abc-123');
   });
 });
+
+describe('childFromRequest url redaction', () => {
+  const capture = (req: Record<string, unknown>, options = {}) => {
+    const childCtx: Record<string, unknown>[] = [];
+    const logger: FakeLogger = {
+      child(ctx) {
+        childCtx.push(ctx);
+        return logger;
+      },
+    };
+    childFromRequest(req, logger, options);
+    return childCtx[0];
+  };
+
+  it('redacts sensitive query values and prefers originalUrl', () => {
+    const ctx = capture({ url: '/r?token=abc123', originalUrl: '/api/r?token=abc123&page=2' });
+    expect(ctx?.['url']).toBe('/api/r?token=[REDACTED]&page=2');
+  });
+
+  it('honours redactQueryParams', () => {
+    const ctx = capture({ url: '/j?invite=magic77' }, { redactQueryParams: ['invite'] });
+    expect(ctx?.['url']).toBe('/j?invite=[REDACTED]');
+  });
+});
