@@ -4,7 +4,7 @@
  */
 
 import { LogixiaLogger } from '../src/core/logitron-logger';
-import { LoggerConfig, LogColor } from '../src/types';
+import { LoggerConfig } from '../src/types';
 
 // Example 1: Basic field configuration
 const basicConfig: LoggerConfig = {
