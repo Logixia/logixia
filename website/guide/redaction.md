@@ -96,7 +96,7 @@ If a field matches both `paths` and `excludePaths`, `paths` wins.
 - Nested objects and arrays, class instances, `toJSON()` results and nested `Error` objects (name, message, stack and `cause` chain are serialized and then scanned).
 - Circular references become `[Circular]`. The original object is never modified.
 - The log message string, for `patterns` and `autoDetect` patterns.
-- HTTP request headers and query parameters have their own lists in the [HTTP logging](/guide/http-logging) middleware.
+- HTTP request headers and query parameters have their own lists in the [HTTP logging](/guide/http-logging) middleware. Set `redact.queryParams` (for example `['invite']`) to add query parameter names that the NestJS exception filter and trace middleware redact in logged URLs and error messages.
 
 ## Limits and failure behaviour
 

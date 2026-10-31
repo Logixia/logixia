@@ -55,6 +55,7 @@ import { randomUUID } from 'node:crypto';
 
 import { LogixiaContext } from './context/async-context';
 import type { HttpRequestShape, HttpResponseShape } from './types/http-shapes';
+import { buildNameSet, DEFAULT_REDACT_QUERY_PARAMS, redactUrlQuery } from './utils/sensitive-names';
 import { sanitizeIncomingId } from './utils/trace.utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -359,6 +360,12 @@ export interface ChildFromRequestOptions {
    * logger gets `child(fields)`.
    */
   childContext?: string;
+  /**
+   * Extra query parameter names redacted in the bound `url` field, on top of the
+   * defaults (`token`, `code`, `password`, `api_key`, …). A bare logger exposes no
+   * `redact.queryParams`, so pass the same list you gave `LoggerConfig.redact`.
+   */
+  redactQueryParams?: readonly string[];
 }
 
 /**
@@ -400,7 +407,14 @@ export function childFromRequest<TLogger extends { child(...args: never[]): TLog
     generateCorrelationId();
 
   const method = req.method;
-  const url = req.url ?? req.originalUrl;
+  const rawUrl = req.originalUrl ?? req.url;
+  const url =
+    rawUrl === undefined
+      ? undefined
+      : redactUrlQuery(
+          rawUrl,
+          buildNameSet(DEFAULT_REDACT_QUERY_PARAMS, options.redactQueryParams)
+        );
   const rawUserAgent = headers['user-agent'];
   const userAgent =
     typeof rawUserAgent === 'string' ? rawUserAgent.slice(0, MAX_USER_AGENT_LENGTH) : undefined;

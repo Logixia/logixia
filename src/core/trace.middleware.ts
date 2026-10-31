@@ -3,11 +3,16 @@
  */
 
 import type { NestMiddleware } from '@nestjs/common';
-import { Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
 
 import type { TraceIdConfig } from '../types';
 import { internalWarn } from '../utils/internal-log';
+import {
+  buildNameSet,
+  DEFAULT_REDACT_QUERY_PARAMS,
+  redactUrlQuery,
+} from '../utils/sensitive-names';
 import { DEFAULT_TRACE_HEADERS, extractTraceId, TraceContext } from '../utils/trace.utils';
 
 /** Default response header used to echo the resolved traceId back to the caller. */
@@ -56,11 +61,30 @@ declare global {
 }
 /* eslint-enable @typescript-eslint/no-namespace */
 
+/** Injection token for extra query parameter names redacted in the trace context `url`. */
+export const LOGIXIA_TRACE_REDACT_QUERY_PARAMS = 'LOGIXIA_TRACE_REDACT_QUERY_PARAMS';
+
+/** The request URL as stored in the trace context: `originalUrl`, sensitive query values redacted. */
+function traceUrl(
+  req: { originalUrl?: string; url?: string },
+  names: ReadonlySet<string>
+): string | undefined {
+  const raw = req.originalUrl ?? req.url;
+  return raw === undefined ? undefined : redactUrlQuery(raw, names);
+}
+
 @Injectable()
 export class TraceMiddleware implements NestMiddleware {
   private readonly ctx = TraceContext.instance;
+  private readonly redactParams: ReadonlySet<string>;
 
-  constructor(@Optional() private readonly config?: TraceIdConfig) {
+  constructor(
+    @Optional() private readonly config?: TraceIdConfig,
+    @Optional()
+    @Inject(LOGIXIA_TRACE_REDACT_QUERY_PARAMS)
+    redactQueryParams?: readonly string[]
+  ) {
+    this.redactParams = buildNameSet(DEFAULT_REDACT_QUERY_PARAMS, redactQueryParams);
     const defaultExtractor = {
       header: DEFAULT_TRACE_HEADERS,
       query: ['traceId', 'trace_id'],
@@ -116,7 +140,7 @@ export class TraceMiddleware implements NestMiddleware {
 
     this.ctx.run(traceId, () => next(), {
       method: req.method,
-      url: req.url,
+      url: traceUrl(req, this.redactParams),
       userAgent: req.get('User-Agent'),
       ip: req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress,
     });
@@ -126,14 +150,18 @@ export class TraceMiddleware implements NestMiddleware {
 /**
  * Factory function to create trace middleware with configuration
  */
-export function createTraceMiddleware(config?: TraceIdConfig): TraceMiddleware {
-  return new TraceMiddleware(config);
+export function createTraceMiddleware(
+  config?: TraceIdConfig,
+  redactQueryParams?: readonly string[]
+): TraceMiddleware {
+  return new TraceMiddleware(config, redactQueryParams);
 }
 
 /**
  * Functional middleware for Express-style usage
  */
-export function traceMiddleware(config?: TraceIdConfig) {
+export function traceMiddleware(config?: TraceIdConfig, redactQueryParams?: readonly string[]) {
+  const redactParams = buildNameSet(DEFAULT_REDACT_QUERY_PARAMS, redactQueryParams);
   const ctx = TraceContext.instance;
   const defaultExtractor = {
     header: DEFAULT_TRACE_HEADERS,
@@ -185,7 +213,7 @@ export function traceMiddleware(config?: TraceIdConfig) {
 
     ctx.run(traceId, () => next(), {
       method: req.method,
-      url: req.url,
+      url: traceUrl(req, redactParams),
       userAgent: req.get('User-Agent'),
       ip: req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress,
     });

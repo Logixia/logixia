@@ -79,6 +79,25 @@ export const DEFAULT_REDACT_QUERY_PARAMS: readonly string[] = [
   'signature',
   'sig',
   'auth',
+  'accesstoken',
+  'refreshtoken',
+  'id_token',
+  'idtoken',
+  'client_secret',
+  'clientsecret',
+  'session',
+  'sessionid',
+  'session_id',
+  'jwt',
+  'auth_token',
+  'authtoken',
+  'api-key',
+  'x-api-key',
+  'x-amz-signature',
+  'x-amz-credential',
+  'x-amz-security-token',
+  'x-goog-signature',
+  'x-goog-credential',
 ];
 
 function safeDecode(value: string): string {
@@ -116,4 +135,84 @@ export function buildNameSet(
   extra: readonly string[] | undefined
 ): Set<string> {
   return new Set([...defaults, ...(extra ?? [])].map((n) => n.toLowerCase()));
+}
+
+const REDACTED = '[REDACTED]';
+const MIN_SCRUB_LENGTH = 3;
+
+function queryNameOf(rawKey: string): string {
+  const decoded = safeDecode(rawKey);
+  const bracket = decoded.indexOf('[');
+  return (bracket === -1 ? decoded : decoded.slice(0, bracket)).toLowerCase();
+}
+
+/**
+ * Raw and decoded values of sensitive query parameters present in this URL.
+ * Values shorter than 3 characters or already `[REDACTED]` are ignored.
+ */
+export function sensitiveQueryValues(url: string, names: ReadonlySet<string>): string[] {
+  const q = url.indexOf('?');
+  if (q === -1) return [];
+  const hashAt = url.indexOf('#', q);
+  const query = url.slice(q + 1, hashAt === -1 ? undefined : hashAt);
+  const found = new Set<string>();
+  for (const pair of query.split('&')) {
+    const eq = pair.indexOf('=');
+    if (eq === -1 || !names.has(queryNameOf(pair.slice(0, eq)))) continue;
+    const raw = pair.slice(eq + 1);
+    for (const value of [raw, safeDecode(raw)]) {
+      if (value.length >= MIN_SCRUB_LENGTH && value !== REDACTED) found.add(value);
+    }
+  }
+  return [...found];
+}
+
+/** Replace every literal occurrence of `values` in `text` with `[REDACTED]`. */
+export function scrubValues(text: string, values: readonly string[]): string {
+  if (values.length === 0 || text.length === 0) return text;
+  let out = text;
+  for (const value of [...values].sort((a, b) => b.length - a.length)) {
+    if (value.length > 0 && out.includes(value)) out = out.split(value).join(REDACTED);
+  }
+  return out;
+}
+
+function isUrlTerminator(ch: string): boolean {
+  return (
+    ch === ' ' ||
+    ch === '\n' ||
+    ch === '\r' ||
+    ch === '\t' ||
+    ch === '"' ||
+    ch === "'" ||
+    ch === '`'
+  );
+}
+
+/**
+ * Redact sensitive query values in every `?query` found inside free text (an
+ * error message, a stack line). Scans for `?` and cuts at whitespace or a quote.
+ */
+export function redactUrlsInText(text: string, names: ReadonlySet<string>): string {
+  let q = text.indexOf('?');
+  if (q === -1) return text;
+  let out = '';
+  let cursor = 0;
+  while (q !== -1) {
+    let end = q + 1;
+    while (end < text.length && !isUrlTerminator(text.charAt(end))) end++;
+    out += text.slice(cursor, q) + redactUrlQuery(text.slice(q, end), names);
+    cursor = end;
+    q = text.indexOf('?', end);
+  }
+  return out + text.slice(cursor);
+}
+
+/** Shape-preserving URL redaction plus literal scrubbing of this request's secret values. */
+export function sanitizeText(
+  text: string,
+  names: ReadonlySet<string>,
+  values: readonly string[]
+): string {
+  return scrubValues(redactUrlsInText(text, names), values);
 }
