@@ -172,12 +172,15 @@ It handles, in order: a `LogixiaException`, a NestJS `HttpException`, and anythi
 
 Options:
 
-| Option        | Default | Description                                                           |
-| ------------- | ------- | --------------------------------------------------------------------- |
-| `exposeDebug` | `false` | Include the `debug` block (stack, service, duration) in the response. |
-| `exposeCause` | `false` | Also include `debug.cause`. Needs `exposeDebug`.                      |
+| Option              | Default | Description                                                           |
+| ------------------- | ------- | --------------------------------------------------------------------- |
+| `exposeDebug`       | `false` | Include the `debug` block (stack, service, duration) in the response. |
+| `exposeCause`       | `false` | Also include `debug.cause`. Needs `exposeDebug`.                      |
+| `redactQueryParams` | `[]`    | Extra query parameter names to redact, on top of the defaults.        |
 
 Debug output is off by default in every environment; enable it only for local development, because stacks and causes can reveal internals such as connection strings.
+
+The logged `url` and the response `meta.path` have sensitive query values replaced with `[REDACTED]` (for example `/reset?token=[REDACTED]&page=2`), using the same default parameter list as the [HTTP logger](/guide/http-logging) (`token`, `access_token`, `code`, `password`, `api_key` and similar).
 
 The response body:
 

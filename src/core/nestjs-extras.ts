@@ -39,6 +39,11 @@ import { ErrorResponseBuilder } from '../exceptions/builder';
 import { isLogixiaException } from '../exceptions/exception';
 import type { LoggerConfig, LogLevelString, TraceIdConfig } from '../types';
 import { internalError, internalWarn } from '../utils/internal-log';
+import {
+  buildNameSet,
+  DEFAULT_REDACT_QUERY_PARAMS,
+  redactUrlQuery,
+} from '../utils/sensitive-names';
 import { sanitizeIncomingId, TraceContext } from '../utils/trace.utils';
 import {
   LOGIXIA_LOGGER_CONFIG,
@@ -273,6 +278,12 @@ export interface LogixiaExceptionFilterOptions {
    * @default false
    */
   exposeCause?: boolean;
+  /**
+   * Extra query parameter names whose values are replaced with `[REDACTED]` in the
+   * logged `url` and the response `path`. Merged with the defaults (`token`, `code`,
+   * `password`, `api_key`, …), the same list the HTTP logger uses.
+   */
+  redactQueryParams?: readonly string[];
 }
 
 /** Injection token for {@link LogixiaExceptionFilterOptions}. */
@@ -283,6 +294,7 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
   private readonly _logger: LogixiaLoggerService | undefined;
   private readonly _traceConfig: TraceIdConfig | undefined;
   private readonly _options: LogixiaExceptionFilterOptions;
+  private readonly _redactParams: ReadonlySet<string>;
 
   constructor(
     @Optional()
@@ -296,6 +308,7 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
     options?: LogixiaExceptionFilterOptions
   ) {
     this._options = options ?? {};
+    this._redactParams = buildNameSet(DEFAULT_REDACT_QUERY_PARAMS, this._options.redactQueryParams);
     // Prefer the injected logger; fall back to the global module logger so
     // `new LogixiaExceptionFilter()` (registered in main.ts before DI resolves)
     // still logs without needing an explicit logger argument.
@@ -332,10 +345,13 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
       sanitizeIncomingId(request.id) ??
       undefined;
 
+    // Query values like ?token=… must not reach logs or the echoed response path.
+    const url = redactUrlQuery(request.url ?? '', this._redactParams);
+
     const { response: errorResponse, httpStatus } = ErrorResponseBuilder.build({
       exception,
       traceId,
-      path: request.url ?? '/',
+      path: url || '/',
       startTime: request.startTime,
       exposeDebug: this._options.exposeDebug === true,
       exposeCause: this._options.exposeCause === true,
@@ -345,7 +361,7 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
     if (this._logger) {
       const requestMeta: Record<string, unknown> = {
         method: request.method ?? '',
-        url: request.url ?? '',
+        url,
         status: httpStatus,
         // Only include trace_id when it exists — keeps log records honest when
         // tracing is disabled (instead of writing `trace_id: undefined`).
