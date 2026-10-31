@@ -32,6 +32,18 @@ describe('http-logger hardening', () => {
     expect(JSON.stringify(body).length).toBeLessThan(400);
   });
 
+  it('keeps constructor fields and an own __proto__ key when pruning a body', () => {
+    const { calls, run } = setup({ logBody: true, bodyMaxBytes: 100 }, false);
+    const body = JSON.parse(
+      '{"constructor":"UserService","__proto__":{"x":1},"pad":"' + 'x'.repeat(500) + '"}'
+    ) as unknown;
+    run({ method: 'POST', url: '/', headers: {}, body });
+    const out = calls[0]!.data.body as Record<string, unknown>;
+    expect(out['constructor']).toBe('UserService');
+    expect(Object.prototype.hasOwnProperty.call(out, '__proto__')).toBe(true);
+    expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
+  });
+
   it('bounds deeply nested bodies', () => {
     const { calls, run } = setup({ logBody: true, bodyMaxBytes: 100 });
     const body = JSON.parse('['.repeat(5000) + ']'.repeat(5000)) as unknown;

@@ -21,6 +21,8 @@
  * ```
  */
 
+import { assignOwn } from './own-property';
+
 export interface SafeStringifyOptions {
   /** Indentation passed to JSON.stringify (number of spaces or a string). */
   indent?: number | string;
@@ -79,8 +81,7 @@ export function safeStringify(value: unknown, options: SafeStringifyOptions = {}
       const keys = deterministic ? Object.keys(rec).sort() : Object.keys(rec);
       const obj: Record<string, unknown> = {};
       for (const k of keys) {
-        if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
-        obj[k] = transform(rec[k]);
+        assignOwn(obj, k, transform(rec[k]));
       }
       out = obj;
     }
@@ -116,8 +117,7 @@ export function decycleValue(value: unknown, bigint: 'string' | 'number' = 'stri
     const rec = val as Record<string, unknown>;
     const obj: Record<string, unknown> = {};
     for (const k of Object.keys(rec)) {
-      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
-      obj[k] = walk(rec[k], [...path, k]);
+      assignOwn(obj, k, walk(rec[k], [...path, k]));
     }
     return obj;
   };
@@ -132,6 +132,7 @@ export function decycleValue(value: unknown, bigint: 'string' | 'number' = 'stri
 export function retrocycle<T>(root: T): T {
   const refRe = /^\$(?:\[(?:\d+|"(?:[^"\\]|\\.)*")\])*$/;
 
+  const UNRESOLVED = Symbol('unresolved');
   const resolve = (path: string): unknown => {
     // Parse the JSONPath segments back out.
     const segs: Array<string | number> = [];
@@ -143,6 +144,8 @@ export function retrocycle<T>(root: T): T {
     }
     let node: unknown = root;
     for (const s of segs) {
+      if (node === null || typeof node !== 'object') return UNRESOLVED;
+      if (!Object.prototype.hasOwnProperty.call(node, s)) return UNRESOLVED;
       node = (node as Record<string | number, unknown>)[s];
     }
     return node;
@@ -159,7 +162,9 @@ export function retrocycle<T>(root: T): T {
         typeof (child as { $ref?: unknown }).$ref === 'string' &&
         refRe.test((child as { $ref: string }).$ref)
       ) {
-        rec[k] = resolve((child as { $ref: string }).$ref);
+        const target = resolve((child as { $ref: string }).$ref);
+        if (target === UNRESOLVED) walk(child);
+        else assignOwn(rec, k, target);
       } else {
         walk(child);
       }

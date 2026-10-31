@@ -25,6 +25,7 @@
 import type { IBaseLogger } from '../types';
 import type { HttpRequestShape, HttpResponseShape } from '../types/http-shapes';
 import { internalError } from '../utils/internal-log';
+import { assignOwn } from '../utils/own-property';
 import { resolveRequestTraceId, resolveTraceHeaders } from '../utils/request-trace';
 import { stringifyForLog } from '../utils/safe-stringify';
 import {
@@ -104,8 +105,7 @@ function sanitizeHeaders(
   if (!headers) return {};
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(headers)) {
-    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
-    out[k] = redactSet.has(k.toLowerCase()) ? '[REDACTED]' : v;
+    assignOwn(out, k, redactSet.has(k.toLowerCase()) ? '[REDACTED]' : v);
   }
   return out;
 }
@@ -405,13 +405,12 @@ function pruneValue(
     }
     const record: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) {
-      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
       if (budget.left <= 0) {
         record['…'] = TRUNCATED;
         break;
       }
       budget.left -= k.length;
-      record[k] = pruneValue(v, budget, depth + 1, ancestors);
+      assignOwn(record, k, pruneValue(v, budget, depth + 1, ancestors));
     }
     return record;
   } catch {

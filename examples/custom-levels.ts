@@ -12,7 +12,7 @@
  *   npx ts-node examples/custom-levels.ts
  */
 
-import { createLogger, LogixiaLogger } from '../src/core/logitron-logger';
+import { createLogger } from '../src/core/logitron-logger';
 import { LogixiaLoggerService }         from '../src/core/logitron-nestjs.service';
 import { LogLevel }                     from '../src/types';
 

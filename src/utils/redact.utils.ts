@@ -22,6 +22,7 @@
 import type { RedactConfig } from '../types';
 import { safeToString } from './coerce.utils';
 import { serializeError } from './error.utils';
+import { assignOwn } from './own-property';
 import { SENSITIVE_KEY_NAMES } from './sensitive-names';
 
 export type { RedactConfig };
@@ -355,16 +356,11 @@ function walkRecord(
   let result: Record<string, unknown> | undefined;
   const entries = Object.entries(obj);
   for (const [index, [key, value]] of entries.entries()) {
-    // Prototype pollution guard: skip forbidden keys that could mutate
-    // Object.prototype when assigned via bracket notation on a literal object.
-    const forbidden = key === '__proto__' || key === 'constructor' || key === 'prototype';
-    const next = forbidden
-      ? undefined
-      : walkValue(value, state, joinPath(fullPath, key), joinPath(bare, key), depth);
-    if ((forbidden || next !== value) && !result) {
+    const next = walkValue(value, state, joinPath(fullPath, key), joinPath(bare, key), depth);
+    if (next !== value && !result) {
       result = Object.fromEntries(entries.slice(0, index));
     }
-    if (result && !forbidden) result[key] = next;
+    if (result) assignOwn(result, key, next);
   }
   return result ?? obj;
 }

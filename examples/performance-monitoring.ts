@@ -216,7 +216,7 @@ async function performanceExample() {
   
   // Batch processing
   const userIds = ['1', '2', '3', '4', '5'];
-  const batchResults = await apiService.batchProcessUsers(userIds);
+  await apiService.batchProcessUsers(userIds);
   
   // Record some custom metrics
   for (let i = 0; i < 10; i++) {

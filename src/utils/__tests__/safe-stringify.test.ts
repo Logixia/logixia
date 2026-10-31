@@ -46,10 +46,12 @@ describe('safeStringify', () => {
     expect(out.s).toContain('Symbol');
   });
 
-  it('ignores prototype-pollution keys', () => {
+  it('keeps a parsed __proto__ key as data without touching the prototype', () => {
     const out = JSON.parse(safeStringify(JSON.parse('{"__proto__":{"x":1},"ok":2}')));
     expect(out.ok).toBe(2);
-    expect(out.__proto__).not.toEqual({ x: 1 });
+    expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
+    expect(Object.prototype.hasOwnProperty.call(out, '__proto__')).toBe(true);
+    expect(out.x).toBeUndefined();
   });
 });
 

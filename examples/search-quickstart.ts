@@ -4,7 +4,6 @@
  * Simple examples to get started with log search
  */
 
-import { createLogger } from '../src';
 import { SearchManager } from '../src/search';
 import { LogEntry } from '../src/types';
 

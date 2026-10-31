@@ -4,6 +4,7 @@
 
 import type { ILogFormatter, LogEntry } from '../types';
 import { serializeError } from '../utils/error.utils';
+import { assignOwn } from '../utils/own-property';
 
 /**
  * Build a JSON.stringify replacer that replaces circular references with the
@@ -109,23 +110,22 @@ export class JsonFormatter implements ILogFormatter {
     const serialized: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(payload)) {
-      if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
       try {
         if (value instanceof Error) {
-          serialized[key] = serializeError(value);
+          assignOwn(serialized, key, serializeError(value));
         } else if (value instanceof Date) {
-          serialized[key] = value.toISOString();
+          assignOwn(serialized, key, value.toISOString());
         } else if (typeof value === 'function') {
-          serialized[key] = '[Function]';
+          assignOwn(serialized, key, '[Function]');
         } else if (typeof value === 'symbol') {
-          serialized[key] = value.toString();
+          assignOwn(serialized, key, value.toString());
         } else if (value === undefined) {
-          serialized[key] = null;
+          assignOwn(serialized, key, null);
         } else {
-          serialized[key] = value;
+          assignOwn(serialized, key, value);
         }
       } catch {
-        serialized[key] = '[Unserializable]';
+        assignOwn(serialized, key, '[Unserializable]');
       }
     }
 

@@ -9,6 +9,7 @@
  * userinfo, query and fragment. No Node imports, so browser bundles can use it.
  */
 
+import { assignOwn } from '../utils/own-property';
 import {
   DEFAULT_REDACT_QUERY_PARAMS,
   SENSITIVE_KEY_NAMES,
@@ -90,9 +91,9 @@ export function redactConfig(value: unknown, depth = 0, key = ''): unknown {
     return `[${value.constructor?.name ?? 'Object'}]`;
   const out: Record<string, unknown> = {};
   for (const [name, inner] of Object.entries(value)) {
-    if (isSecretKey(name)) out[name] = inner === undefined ? undefined : REDACTED;
-    else if (name.toLowerCase() === 'headers') out[name] = redactHeaders(inner);
-    else out[name] = redactConfig(inner, depth + 1, name);
+    if (isSecretKey(name)) assignOwn(out, name, inner === undefined ? undefined : REDACTED);
+    else if (name.toLowerCase() === 'headers') assignOwn(out, name, redactHeaders(inner));
+    else assignOwn(out, name, redactConfig(inner, depth + 1, name));
   }
   return out;
 }
