@@ -40,6 +40,7 @@ import { isLogixiaException } from '../exceptions/exception';
 import type { LogixiaErrorResponse } from '../exceptions/types';
 import type { LoggerConfig, LogLevelString, TraceIdConfig } from '../types';
 import { internalError, internalWarn } from '../utils/internal-log';
+import { assignOwn } from '../utils/own-property';
 import {
   buildNameSet,
   DEFAULT_REDACT_QUERY_PARAMS,
@@ -317,18 +318,78 @@ function scrubErrorResponse(
   };
 }
 
-/** A fresh Error safe to log: name, message, stack and cause scrubbed, the original untouched. */
+const MAX_ERROR_DEPTH = 5;
+
+function isPlainObject(value: object): boolean {
+  const proto = Object.getPrototypeOf(value) as unknown;
+  return proto === Object.prototype || proto === null;
+}
+
+function copyOwnScrubbed(
+  source: object,
+  target: object,
+  skip: ReadonlySet<string>,
+  clean: (text: string) => string,
+  depth: number,
+  seen: WeakSet<object>
+): void {
+  for (const key of Object.keys(source)) {
+    if (skip.has(key)) continue;
+    assignOwn(target, key, scrubWalk((source as Record<string, unknown>)[key], clean, depth, seen));
+  }
+}
+
+/** Bounded, cycle-safe copy of `value` with every string scrubbed; the input is never modified. */
+function scrubWalk(
+  value: unknown,
+  clean: (text: string) => string,
+  depth: number,
+  seen: WeakSet<object>
+): unknown {
+  if (typeof value === 'string') return clean(value);
+  if (value === null || value === undefined) return value;
+  if (typeof value === 'function' || typeof value === 'symbol') return String(value);
+  if (typeof value !== 'object') return value;
+  if (seen.has(value)) return '[Circular]';
+  if (depth >= MAX_ERROR_DEPTH) return '[MaxDepth]';
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) return value.map((item) => scrubWalk(item, clean, depth + 1, seen));
+    if (value instanceof Error) return copyError(value, clean, depth + 1, seen);
+    if (!isPlainObject(value)) return clean(String(value));
+    const out: Record<string, unknown> = {};
+    copyOwnScrubbed(value, out, new Set(), clean, depth + 1, seen);
+    return out;
+  } finally {
+    seen.delete(value);
+  }
+}
+
+function copyError(
+  error: Error,
+  clean: (text: string) => string,
+  depth: number,
+  seen: WeakSet<object>
+): Error {
+  const copy = new Error(clean(error.message));
+  copy.name = error.name;
+  if (error.stack !== undefined) copy.stack = clean(error.stack);
+  const cause = (error as Error & { cause?: unknown }).cause;
+  if (cause !== undefined && cause !== null) {
+    (copy as Error & { cause?: unknown }).cause = scrubWalk(cause, clean, depth, seen);
+  }
+  copyOwnScrubbed(error, copy, new Set(['name', 'message', 'stack', 'cause']), clean, depth, seen);
+  return copy;
+}
+
+/**
+ * A fresh Error safe to log: name, message, stack, cause and own enumerable
+ * properties (`errorCode`, `details`, ...) kept with strings scrubbed; the original is untouched.
+ */
 function sanitizedError(exception: unknown, clean: (text: string) => string): Error {
   if (!(exception instanceof Error)) return new Error(clean(String(exception)));
-  const copy = new Error(clean(exception.message));
-  copy.name = exception.name;
-  if (exception.stack !== undefined) copy.stack = clean(exception.stack);
-  const cause = (exception as Error & { cause?: unknown }).cause;
-  if (cause !== undefined && cause !== null) {
-    const text = cause instanceof Error ? (cause.stack ?? cause.message) : String(cause);
-    (copy as Error & { cause?: unknown }).cause = clean(text);
-  }
-  return copy;
+  const seen = new WeakSet<object>([exception]);
+  return copyError(exception, clean, 0, seen);
 }
 
 @Catch()

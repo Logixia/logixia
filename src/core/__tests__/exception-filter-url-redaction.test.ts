@@ -179,4 +179,39 @@ describe('LogixiaExceptionFilter URL redaction', () => {
     );
     expect(calls[0]!['url']).toBe('/join?invite=[REDACTED]&page=2');
   });
+
+  it('keeps custom error properties on 5xx while scrubbing their strings', () => {
+    const { logger, messages } = makeLogger();
+    const { host } = makeHost('/x?token=abc123');
+    const original = Object.assign(new Error('upstream failed'), {
+      errorCode: 'E_UP',
+      status: 502,
+      details: { url: '/x?token=abc123', tries: [1, 2], when: new Date(0) },
+    });
+    new LogixiaExceptionFilter(logger).catch(original, host);
+
+    const logged = messages[0] as Error & Record<string, unknown>;
+    expect(logged).toBeInstanceOf(Error);
+    expect(logged['errorCode']).toBe('E_UP');
+    expect(logged['status']).toBe(502);
+    const details = logged['details'] as Record<string, unknown>;
+    expect(details['url']).toBe('/x?token=[REDACTED]');
+    expect(details['tries']).toEqual([1, 2]);
+    expect(typeof details['when']).toBe('string');
+    expect(JSON.stringify(details)).not.toContain('abc123');
+    expect((original as unknown as { details: { url: string } }).details.url).toBe(
+      '/x?token=abc123'
+    );
+  });
+
+  it('survives cycles in error properties', () => {
+    const { logger, messages } = makeLogger();
+    const { host } = makeHost('/x?token=abc123');
+    const err = new Error('loop abc123') as Error & { self?: unknown };
+    err.self = err;
+    new LogixiaExceptionFilter(logger).catch(err, host);
+    const logged = messages[0] as Error & { self?: unknown };
+    expect(logged.message).toBe('loop [REDACTED]');
+    expect(logged.self).toBe('[Circular]');
+  });
 });
