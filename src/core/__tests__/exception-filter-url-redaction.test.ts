@@ -1,6 +1,7 @@
 import type { ArgumentsHost } from '@nestjs/common';
 import { NotFoundException } from '@nestjs/common';
 
+import { createLogger } from '../../index';
 import type { LogixiaLoggerService } from '../logitron-nestjs.service';
 import { LogixiaExceptionFilter } from '../nestjs-extras';
 
@@ -212,6 +213,77 @@ describe('LogixiaExceptionFilter URL redaction', () => {
     new LogixiaExceptionFilter(logger).catch(err, host);
     const logged = messages[0] as Error & { self?: unknown };
     expect(logged.message).toBe('loop [REDACTED]');
-    expect(logged.self).toBe('[Circular]');
+    expect(JSON.stringify(logged.self)).not.toContain('abc123');
+    expect(logged.self).toEqual(expect.objectContaining({ _circular: true }));
+  });
+
+  describe('5xx copy keeps keys so logger redaction applies', () => {
+    class FakeHeaders {
+      Authorization = 'Basic dXNlcjpwYXNz';
+      'X-Api-Key' = 'live_supersecret';
+      toString(): string {
+        return `Authorization: ${this.Authorization}\nX-Api-Key: ${this['X-Api-Key']}`;
+      }
+    }
+
+    function realLogger() {
+      const entries: string[] = [];
+      const logger = createLogger({
+        appName: 'test',
+        redact: { autoDetect: true },
+        transports: {
+          custom: [{ name: 'cap', write: (e: unknown) => void entries.push(JSON.stringify(e)) }],
+        },
+      } as never);
+      return { logger: logger as unknown as LogixiaLoggerService, entries };
+    }
+
+    it('redacts AxiosHeaders-like values by key and leaves no free-text secret', async () => {
+      const { logger, entries } = realLogger();
+      const { host } = makeHost('/x');
+      const err = Object.assign(new Error('Request failed'), {
+        config: { headers: new FakeHeaders() },
+        response: { headers: new FakeHeaders(), data: { q: new URLSearchParams('token=abc123') } },
+      });
+      new LogixiaExceptionFilter(logger).catch(err, host);
+      await new Promise((r) => setTimeout(r, 50));
+      const all = entries.join('\n');
+      expect(all).toContain('[REDACTED]');
+      expect(all).not.toContain('dXNlcjpwYXNz');
+      expect(all).not.toContain('live_supersecret');
+    });
+
+    it('scrubs a URLSearchParams value carrying a request secret', () => {
+      const { logger, messages } = makeLogger();
+      const { host } = makeHost('/x?token=abc123');
+      const err = Object.assign(new Error('boom'), { params: new URLSearchParams('token=abc123') });
+      new LogixiaExceptionFilter(logger).catch(err, host);
+      expect(JSON.stringify(messages[0])).not.toContain('abc123');
+    });
+
+    it('still responds when a property getter throws', () => {
+      const { logger, messages } = makeLogger();
+      const { host, json } = makeHost('/x?token=abc123');
+      const err = new Error('boom abc123');
+      Object.defineProperty(err, 'bad', {
+        enumerable: true,
+        get() {
+          throw new Error('getter exploded');
+        },
+      });
+      expect(() => new LogixiaExceptionFilter(logger).catch(err, host)).not.toThrow();
+      expect(json).toHaveBeenCalledTimes(1);
+      expect((messages[0] as Error).message).not.toContain('abc123');
+    });
+
+    it('falls back to a minimal error for a revoked proxy', () => {
+      const { logger, messages } = makeLogger();
+      const { host, json } = makeHost('/x');
+      const { proxy, revoke } = Proxy.revocable(new Error('x'), {});
+      revoke();
+      expect(() => new LogixiaExceptionFilter(logger).catch(proxy, host)).not.toThrow();
+      expect(json).toHaveBeenCalledTimes(1);
+      expect(messages[0]).toBeInstanceOf(Error);
+    });
   });
 });

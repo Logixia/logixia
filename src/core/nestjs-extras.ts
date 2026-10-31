@@ -39,6 +39,7 @@ import { ErrorResponseBuilder } from '../exceptions/builder';
 import { isLogixiaException } from '../exceptions/exception';
 import type { LogixiaErrorResponse } from '../exceptions/types';
 import type { LoggerConfig, LogLevelString, TraceIdConfig } from '../types';
+import { serializeError } from '../utils/error.utils';
 import { internalError, internalWarn } from '../utils/internal-log';
 import { assignOwn } from '../utils/own-property';
 import {
@@ -318,78 +319,80 @@ function scrubErrorResponse(
   };
 }
 
-const MAX_ERROR_DEPTH = 5;
+const MAX_ERROR_DEPTH = 6;
 
-function isPlainObject(value: object): boolean {
-  const proto = Object.getPrototypeOf(value) as unknown;
-  return proto === Object.prototype || proto === null;
-}
-
-function copyOwnScrubbed(
-  source: object,
-  target: object,
-  skip: ReadonlySet<string>,
-  clean: (text: string) => string,
-  depth: number,
-  seen: WeakSet<object>
-): void {
-  for (const key of Object.keys(source)) {
-    if (skip.has(key)) continue;
-    assignOwn(target, key, scrubWalk((source as Record<string, unknown>)[key], clean, depth, seen));
-  }
-}
-
-/** Bounded, cycle-safe copy of `value` with every string scrubbed; the input is never modified. */
-function scrubWalk(
+/** Scrub string VALUES of an already serialized tree; keys stay so key-based redaction still applies. */
+function scrubSerialized(
   value: unknown,
   clean: (text: string) => string,
   depth: number,
   seen: WeakSet<object>
 ): unknown {
   if (typeof value === 'string') return clean(value);
-  if (value === null || value === undefined) return value;
-  if (typeof value === 'function' || typeof value === 'symbol') return String(value);
-  if (typeof value !== 'object') return value;
+  if (value === null || typeof value !== 'object') {
+    return typeof value === 'function' || typeof value === 'symbol' ? '[Unserializable]' : value;
+  }
   if (seen.has(value)) return '[Circular]';
   if (depth >= MAX_ERROR_DEPTH) return '[MaxDepth]';
   seen.add(value);
   try {
-    if (Array.isArray(value)) return value.map((item) => scrubWalk(item, clean, depth + 1, seen));
-    if (value instanceof Error) return copyError(value, clean, depth + 1, seen);
-    if (!isPlainObject(value)) return clean(String(value));
+    if (Array.isArray(value))
+      return value.map((item) => scrubSerialized(item, clean, depth + 1, seen));
     const out: Record<string, unknown> = {};
-    copyOwnScrubbed(value, out, new Set(), clean, depth + 1, seen);
+    for (const [key, item] of Object.entries(value)) {
+      assignOwn(out, key, scrubSerialized(item, clean, depth + 1, seen));
+    }
     return out;
   } finally {
     seen.delete(value);
   }
 }
 
-function copyError(
-  error: Error,
-  clean: (text: string) => string,
-  depth: number,
-  seen: WeakSet<object>
-): Error {
-  const copy = new Error(clean(error.message));
-  copy.name = error.name;
-  if (error.stack !== undefined) copy.stack = clean(error.stack);
-  const cause = (error as Error & { cause?: unknown }).cause;
-  if (cause !== undefined && cause !== null) {
-    (copy as Error & { cause?: unknown }).cause = scrubWalk(cause, clean, depth, seen);
+/** Minimal copy used when the full sanitize step fails; never throws. */
+function fallbackError(exception: unknown, clean: (text: string) => string): Error {
+  let name = 'Error';
+  let message = '[Unserializable]';
+  try {
+    if (exception instanceof Error) {
+      name = exception.name;
+      message = clean(exception.message);
+    }
+  } catch {
+    /* hostile getter or revoked proxy: keep the placeholders */
   }
-  copyOwnScrubbed(error, copy, new Set(['name', 'message', 'stack', 'cause']), clean, depth, seen);
+  const copy = new Error(message);
+  copy.name = name;
+  assignOwn(copy, 'serialization', '[Unserializable]');
   return copy;
 }
 
 /**
- * A fresh Error safe to log: name, message, stack, cause and own enumerable
- * properties (`errorCode`, `details`, ...) kept with strings scrubbed; the original is untouched.
+ * A fresh Error safe to log. Built from `serializeError` (class instances walked by key,
+ * so the logger's key-based redaction still sees `authorization`, `x-api-key`, ...), with
+ * string values scrubbed. Keeps name, message, stack, cause and custom properties.
+ * The original is untouched and this never throws.
  */
 function sanitizedError(exception: unknown, clean: (text: string) => string): Error {
-  if (!(exception instanceof Error)) return new Error(clean(String(exception)));
-  const seen = new WeakSet<object>([exception]);
-  return copyError(exception, clean, 0, seen);
+  try {
+    if (!(exception instanceof Error)) return new Error(clean(String(exception)));
+    const serialized = serializeError(exception);
+    const scrubbed = scrubSerialized(serialized, clean, 0, new WeakSet()) as Record<
+      string,
+      unknown
+    >;
+    const copy = new Error(String(scrubbed['message'] ?? ''));
+    for (const [key, value] of Object.entries(scrubbed)) {
+      if (key === 'message') continue;
+      if (key === 'stack' || key === 'name') {
+        Object.defineProperty(copy, key, { value, writable: true, configurable: true });
+      } else {
+        assignOwn(copy, key, value);
+      }
+    }
+    return copy;
+  } catch {
+    return fallbackError(exception, clean);
+  }
 }
 
 @Catch()
@@ -460,15 +463,31 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
     const secrets = sensitiveQueryValues(rawUrl, this._redactParams);
     const clean = (text: string): string => sanitizeText(text, this._redactParams, secrets);
 
-    const { response: built, httpStatus } = ErrorResponseBuilder.build({
-      exception,
-      traceId,
-      path: url || '/',
-      startTime: request.startTime,
-      exposeDebug: this._options.exposeDebug === true,
-      exposeCause: this._options.exposeCause === true,
-    });
-    const errorResponse = scrubErrorResponse(built, clean);
+    const buildFor = (input: unknown) => {
+      const { response: built, httpStatus: status } = ErrorResponseBuilder.build({
+        exception: input,
+        traceId,
+        path: url || '/',
+        startTime: request.startTime,
+        exposeDebug: this._options.exposeDebug === true,
+        exposeCause: this._options.exposeCause === true,
+      });
+      return { errorResponse: scrubErrorResponse(built, clean), httpStatus: status };
+    };
+    // A hostile exception (throwing getter, revoked proxy) must never lose the response.
+    let result: ReturnType<typeof buildFor>;
+    try {
+      result = buildFor(exception);
+    } catch {
+      result = buildFor(fallbackError(exception, clean));
+    }
+    const { errorResponse, httpStatus } = result;
+    let logixiaException = false;
+    try {
+      logixiaException = isLogixiaException(exception);
+    } catch {
+      /* not inspectable: treat as a plain error */
+    }
 
     // ── Logging ──────────────────────────────────────────────────────────────
     if (this._logger) {
@@ -494,7 +513,7 @@ export class LogixiaExceptionFilter implements ExceptionFilter {
       let logPromise: Promise<void> | void;
       if (httpStatus >= 500) {
         logPromise = this._logger.error(sanitizedError(exception, clean), requestMeta);
-      } else if (isLogixiaException(exception)) {
+      } else if (logixiaException) {
         logPromise = this._logger.warn(
           `[${errorResponse.error.code}] ${errorResponse.error.message}`,
           requestMeta

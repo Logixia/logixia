@@ -98,6 +98,11 @@ export const DEFAULT_REDACT_QUERY_PARAMS: readonly string[] = [
   'x-amz-security-token',
   'x-goog-signature',
   'x-goog-credential',
+  'access-token',
+  'x-access-token',
+  'x-auth-token',
+  'apitoken',
+  'api_token',
 ];
 
 function safeDecode(value: string): string {

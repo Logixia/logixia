@@ -83,7 +83,7 @@ Header values listed below are replaced with `[REDACTED]` (case-insensitive). Yo
 
 In the logged URL, the values of these query parameters are replaced with `[REDACTED]` (names are matched case-insensitively, and `name[]` style keys are recognised). Your `redactQueryParams` are added:
 
-`token`, `access_token`, `accesstoken`, `refresh_token`, `refreshtoken`, `id_token`, `idtoken`, `auth_token`, `authtoken`, `jwt`, `code`, `password`, `secret`, `client_secret`, `clientsecret`, `session`, `session_id`, `sessionid`, `api_key`, `apikey`, `api-key`, `x-api-key`, `key`, `signature`, `sig`, `auth`, plus the presigned-URL parameters `x-amz-signature`, `x-amz-credential`, `x-amz-security-token`, `x-goog-signature` and `x-goog-credential`.
+`token`, `access_token`, `accesstoken`, `refresh_token`, `refreshtoken`, `id_token`, `idtoken`, `auth_token`, `authtoken`, `jwt`, `code`, `password`, `secret`, `client_secret`, `clientsecret`, `session`, `session_id`, `sessionid`, `api_key`, `apikey`, `api-key`, `x-api-key`, `apitoken`, `api_token`, `access-token`, `x-access-token`, `x-auth-token`, `key`, `signature`, `sig`, `auth`, plus the presigned-URL parameters `x-amz-signature`, `x-amz-credential`, `x-amz-security-token`, `x-goog-signature` and `x-goog-credential`.
 
 The same list is used by the [NestJS exception filter](/guide/nestjs#exception-filter), the trace context URL, `childFromRequest` and wide events. Set `redact.queryParams` on the logger config to extend it for the filter and the NestJS trace middleware; the HTTP logger, wide events and `childFromRequest` take their own `redactQueryParams` option.
 
