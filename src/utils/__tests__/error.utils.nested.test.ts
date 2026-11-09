@@ -45,10 +45,51 @@ describe('serializeNestedErrors', () => {
     expect(result.inner).not.toBe(inner);
   });
 
-  it('copes with cycles', () => {
+  it('does not unroll a cycle into repeated errors', () => {
     const data: Record<string, unknown> = { error: new Error('x') };
     data.self = data;
-    expect(serializeNestedErrors(data).error).toMatchObject({ message: 'x' });
+    const result = serializeNestedErrors(data);
+    expect(result.error).toMatchObject({ message: 'x' });
+    expect(result.self).toBe(data);
+  });
+
+  it('treats an object with name and message as data', () => {
+    const contact = { name: 'Bob', message: 'hi', email: 'b@x.com' };
+    const data = { contact };
+    expect(serializeNestedErrors(data)).toBe(data);
+    class Ticket {
+      name = 'n';
+      message = 'm';
+      secretNote = 'private';
+    }
+    const values = { ticket: new Ticket() };
+    expect(serializeNestedErrors(values)).toBe(values);
+  });
+
+  it('leaves an Error with its own toJSON alone', () => {
+    const error = Object.assign(new Error('x'), { toJSON: () => ({ safe: true }) });
+    expect(serializeNestedErrors({ error }).error).toBe(error);
+  });
+
+  it('skips a throwing getter and still serializes the error beside it', () => {
+    const meta = Object.defineProperty({}, 'boom', {
+      enumerable: true,
+      get() {
+        throw new Error('hostile');
+      },
+    });
+    expect(serializeNestedErrors({ error: new Error('real'), meta }).error).toMatchObject({
+      message: 'real',
+    });
+  });
+
+  it('stops walking after its node budget on a huge payload', () => {
+    const late = { failure: new Error('past the budget') };
+    const rows: unknown[] = Array.from({ length: 5000 }, () => ({ a: {} }));
+    rows.push(late);
+    const data = { rows };
+    expect(serializeNestedErrors(data)).toBe(data);
+    expect(late.failure).toBeInstanceOf(Error);
   });
 
   it('leaves dates, maps and class instances alone', () => {

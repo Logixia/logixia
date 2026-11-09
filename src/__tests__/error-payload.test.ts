@@ -69,6 +69,22 @@ describe('errors in a log payload', () => {
     expect(lines.at(-1)).not.toContain('hide me');
   });
 
+  it('still redacts by path when a payload looks like an error', async () => {
+    const logger = loggerWith({ paths: ['email', 'ssn'] });
+    await logger.info('contact', { name: 'Bob', message: 'hi', email: 'b@x.com', ssn: '123' });
+    const line = lines.at(-1) ?? '';
+    expect(line).not.toContain('b@x.com');
+    expect(line).not.toContain('123');
+    expect(lastEntry().payload.name).toBe('Bob');
+  });
+
+  it('keeps an Error passed as the second argument inside a context', async () => {
+    const child = loggerWith().child('svc', { tenant: 't1' });
+    const data = new Error('in child') as unknown as Record<string, unknown>;
+    await child.error('failed', data);
+    expect(lastEntry().payload).toMatchObject({ tenant: 't1', error: { message: 'in child' } });
+  });
+
   it('never rejects on a hostile getter, with or without redaction', async () => {
     const hostile = Object.defineProperty({}, 'boom', {
       enumerable: true,

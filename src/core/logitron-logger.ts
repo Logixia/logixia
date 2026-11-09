@@ -912,9 +912,15 @@ export class LogixiaLogger<
 
   // ── Core log method ──────────────────────────────────────────────────────────
 
-  private async log(level: string, message: string, data?: Record<string, unknown>): Promise<void> {
+  private async log(
+    level: string,
+    message: string,
+    rawData?: Record<string, unknown>
+  ): Promise<void> {
     if (this.config.silent) return;
     if (!this.shouldLog(level)) return;
+    // Before the merges below, because spreading an Error drops its message and stack.
+    const data = rawData instanceof Error ? { error: serializeError(rawData) } : rawData;
 
     // One read of each ALS store per call. TraceContext is the source of truth for
     // the trace ID; a traceId on a bare LogixiaContext scope is only a fallback.
@@ -955,15 +961,15 @@ export class LogixiaLogger<
 
     // ── Feature 2: Redaction ─────────────────────────────────────────────────
     // Avoid spread allocation when contextData is empty (the common case)
-    const combined = this._hasContextData ? { ...this.contextData, ...mergedData } : mergedData;
     // Before redaction, so patterns and paths also apply to an error's message and stack.
-    let rawPayload = combined;
-    try {
-      if (isError(combined)) rawPayload = { error: serializeError(combined) };
-      else if (combined) rawPayload = serializeNestedErrors(combined);
-    } catch (error) {
-      // A hostile getter must never reach the caller. Redaction below still fails closed.
-      internalError('Error serialization failed', error);
+    let rawPayload = this._hasContextData ? { ...this.contextData, ...mergedData } : mergedData;
+    if (rawPayload) {
+      try {
+        rawPayload = serializeNestedErrors(rawPayload);
+      } catch (error) {
+        // A hostile proxy must not reject the log call. Redaction below still fails closed.
+        internalError('Error serialization failed', error);
+      }
     }
     // _hasRedact is pre-computed in _buildPerfCaches() — skips the entire redaction
     // code path when no redact config is present (fast path for the common case).

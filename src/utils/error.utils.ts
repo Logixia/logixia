@@ -187,52 +187,66 @@ export function isError(value: unknown): value is Error {
 }
 
 const MAX_ERROR_SEARCH_DEPTH = 3;
-
-function serializeErrorsWithin(value: unknown, depth: number): unknown {
-  if (value === null || typeof value !== 'object') return value;
-
-  if (Array.isArray(value)) {
-    if (depth === 0) return value;
-    let items: unknown[] | undefined;
-    for (let i = 0; i < value.length; i++) {
-      const item: unknown = value[i];
-      if (item === null || typeof item !== 'object') continue;
-      const next = serializeErrorsWithin(item, depth - 1);
-      if (next !== item) {
-        items ??= value.slice();
-        items[i] = next;
-      }
-    }
-    return items ?? value;
-  }
-
-  const proto: unknown = Object.getPrototypeOf(value);
-  if (proto !== Object.prototype && proto !== null)
-    return isError(value) ? serializeError(value) : value;
-  if (depth === 0) return value;
-
-  let copy: Record<string, unknown> | undefined;
-  const record = value as Record<string, unknown>;
-  for (const key of Object.keys(record)) {
-    const item = record[key];
-    if (item === null || typeof item !== 'object') continue;
-    const next = serializeErrorsWithin(item, depth - 1);
-    if (next !== item) {
-      copy ??= { ...record };
-      assignOwn(copy, key, next);
-    }
-  }
-  return copy ?? record;
-}
+const MAX_ERROR_SEARCH_NODES = 2000;
 
 /**
- * Replaces Error values inside a log payload with their serialized form, because
- * JSON output drops an Error's non-enumerable `message` and `stack`. Runs on every
- * log call, so it allocates nothing until it finds an Error, and the depth limit
- * also bounds cycles. The caller's objects are never mutated.
+ * Replaces real Error instances inside a log payload with their serialized form,
+ * because JSON output drops an Error's non-enumerable `message` and `stack`. Runs on
+ * every log call, so its work is capped and it copies nothing until it finds one.
+ * Duck-typed objects are data, and an Error with its own toJSON has already chosen
+ * what to show. The caller's objects are never mutated.
  */
 export function serializeNestedErrors(data: Record<string, unknown>): Record<string, unknown> {
-  return serializeErrorsWithin(data, MAX_ERROR_SEARCH_DEPTH) as Record<string, unknown>;
+  const ancestors: object[] = [];
+  let nodes = 0;
+
+  const walk = (value: object, depth: number): unknown => {
+    if (value instanceof Error) {
+      return typeof (value as { toJSON?: unknown }).toJSON === 'function'
+        ? value
+        : serializeError(value);
+    }
+    if (depth === 0 || ++nodes > MAX_ERROR_SEARCH_NODES || ancestors.includes(value)) return value;
+
+    ancestors.push(value);
+    let copy: unknown;
+    if (Array.isArray(value)) {
+      for (let i = 0; i < value.length; i++) {
+        const item: unknown = value[i];
+        if (item === null || typeof item !== 'object') continue;
+        const next = walk(item, depth - 1);
+        if (next !== item) {
+          copy ??= value.slice();
+          (copy as unknown[])[i] = next;
+        }
+      }
+    } else {
+      const proto: unknown = Object.getPrototypeOf(value);
+      if (proto !== Object.prototype && proto !== null) {
+        ancestors.pop();
+        return value;
+      }
+      const record = value as Record<string, unknown>;
+      for (const key of Object.keys(record)) {
+        let item: unknown;
+        try {
+          item = record[key];
+        } catch {
+          continue;
+        }
+        if (item === null || typeof item !== 'object') continue;
+        const next = walk(item, depth - 1);
+        if (next !== item) {
+          copy ??= { ...record };
+          assignOwn(copy as Record<string, unknown>, key, next);
+        }
+      }
+    }
+    ancestors.pop();
+    return copy ?? value;
+  };
+
+  return walk(data, MAX_ERROR_SEARCH_DEPTH) as Record<string, unknown>;
 }
 
 /**
