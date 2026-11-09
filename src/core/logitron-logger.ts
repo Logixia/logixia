@@ -47,7 +47,7 @@ import type {
 } from '../types';
 import { LogLevel } from '../types';
 import { safeToString } from '../utils/coerce.utils';
-import { isError, serializeError } from '../utils/error.utils';
+import { isError, serializeError, serializeNestedErrors } from '../utils/error.utils';
 import { internalError, internalLog, internalWarn } from '../utils/internal-log';
 import { _getOtelPayloadIfEnabled, _isOtelBridgeEnabled } from '../utils/otel';
 import { applyRedaction, applyRedactionToString, REDACTION_FAILED } from '../utils/redact.utils';
@@ -955,7 +955,16 @@ export class LogixiaLogger<
 
     // ── Feature 2: Redaction ─────────────────────────────────────────────────
     // Avoid spread allocation when contextData is empty (the common case)
-    const rawPayload = this._hasContextData ? { ...this.contextData, ...mergedData } : mergedData;
+    const combined = this._hasContextData ? { ...this.contextData, ...mergedData } : mergedData;
+    // Before redaction, so patterns and paths also apply to an error's message and stack.
+    let rawPayload = combined;
+    try {
+      if (isError(combined)) rawPayload = { error: serializeError(combined) };
+      else if (combined) rawPayload = serializeNestedErrors(combined);
+    } catch (error) {
+      // A hostile getter must never reach the caller. Redaction below still fails closed.
+      internalError('Error serialization failed', error);
+    }
     // _hasRedact is pre-computed in _buildPerfCaches() — skips the entire redaction
     // code path when no redact config is present (fast path for the common case).
     let payload: Record<string, unknown> | undefined;

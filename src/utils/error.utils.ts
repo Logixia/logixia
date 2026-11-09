@@ -186,6 +186,55 @@ export function isError(value: unknown): value is Error {
   );
 }
 
+const MAX_ERROR_SEARCH_DEPTH = 3;
+
+function serializeErrorsWithin(value: unknown, depth: number): unknown {
+  if (value === null || typeof value !== 'object') return value;
+
+  if (Array.isArray(value)) {
+    if (depth === 0) return value;
+    let items: unknown[] | undefined;
+    for (let i = 0; i < value.length; i++) {
+      const item: unknown = value[i];
+      if (item === null || typeof item !== 'object') continue;
+      const next = serializeErrorsWithin(item, depth - 1);
+      if (next !== item) {
+        items ??= value.slice();
+        items[i] = next;
+      }
+    }
+    return items ?? value;
+  }
+
+  const proto: unknown = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null)
+    return isError(value) ? serializeError(value) : value;
+  if (depth === 0) return value;
+
+  let copy: Record<string, unknown> | undefined;
+  const record = value as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    const item = record[key];
+    if (item === null || typeof item !== 'object') continue;
+    const next = serializeErrorsWithin(item, depth - 1);
+    if (next !== item) {
+      copy ??= { ...record };
+      assignOwn(copy, key, next);
+    }
+  }
+  return copy ?? record;
+}
+
+/**
+ * Replaces Error values inside a log payload with their serialized form, because
+ * JSON output drops an Error's non-enumerable `message` and `stack`. Runs on every
+ * log call, so it allocates nothing until it finds an Error, and the depth limit
+ * also bounds cycles. The caller's objects are never mutated.
+ */
+export function serializeNestedErrors(data: Record<string, unknown>): Record<string, unknown> {
+  return serializeErrorsWithin(data, MAX_ERROR_SEARCH_DEPTH) as Record<string, unknown>;
+}
+
 /**
  * Coerce any thrown value into a proper Error instance.
  */
