@@ -14,7 +14,7 @@ import type { LoggerConfig, TraceIdConfig } from '../types';
 import { internalWarn } from '../utils/internal-log';
 import { TraceContext } from '../utils/trace.utils';
 import { KafkaTraceInterceptor } from './kafka-trace.interceptor';
-import { LogixiaLoggerService } from './logitron-nestjs.service';
+import { LogixiaLoggerService } from './logixia-nestjs.service';
 import { TraceMiddleware } from './trace.middleware';
 import { WebSocketTraceInterceptor } from './websocket-trace.interceptor';
 
@@ -27,7 +27,7 @@ export const LOGIXIA_LOGGER_PREFIX = 'LOGIXIA_LOGGER_';
 
 // Export the service and interceptors for external use
 export { KafkaTraceInterceptor } from './kafka-trace.interceptor';
-export { LogixiaLoggerService } from './logitron-nestjs.service';
+export { LogixiaLoggerService } from './logixia-nestjs.service';
 export { WebSocketTraceInterceptor } from './websocket-trace.interceptor';
 
 // Interface for module configuration

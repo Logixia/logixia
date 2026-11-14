@@ -7,7 +7,7 @@ import type { AddressInfo } from 'node:net';
  * signal cycler, and the HTTP admin handler (GET reads, POST sets, bad input
  * rejected).
  */
-import { LogixiaLogger } from '../../core/logitron-logger';
+import { LogixiaLogger } from '../../core/logixia-logger';
 import type { LogLevelString, NamespaceLevels } from '../../types';
 import {
   createLevelControlHandler,

@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 
 import { createFastifyContextHook } from '../../context/async-context';
-import { createLogger } from '../../core/logitron-logger';
+import { createLogger } from '../../core/logixia-logger';
 import { _shutdownRegistrySize } from '../../utils/shutdown.utils';
 import { extractTraceId, generateTraceId } from '../../utils/trace.utils';
 import { createFastifyLogger } from '../pino-facade';

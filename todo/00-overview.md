@@ -35,7 +35,7 @@
 ## Blocker Checklist (fix before next release)
 
 - [ ] 🔴 Remove `"logixia": "^1.0.3"` self-reference from `dependencies` in `package.json`
-- [ ] 🔴 Fix private `log()` method call inside `createLogger` factory (`logitron-logger.ts:597`)
+- [ ] 🔴 Fix private `log()` method call inside `createLogger` factory (`logixia-logger.ts:597`)
 - [ ] 🟠 Replace all `console.log` / `console.error` inside library source with proper fallback logging
 - [ ] 🟠 Replace all silent `.catch(console.error)` in `LogixiaLoggerService` with structured handling
 - [ ] 🟠 Type `DatabaseTransport.connection` — remove the `: any`

@@ -11,7 +11,7 @@
  * spin up a full logger just to drive the cache.
  */
 
-import { _nsCacheInternal } from '../logitron-logger';
+import { _nsCacheInternal } from '../logixia-logger';
 
 // We also need to trigger `matchesNamespacePattern` indirectly — easiest way
 // is to reach into the same module via a LogixiaLogger instance with a

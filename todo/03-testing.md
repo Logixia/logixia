@@ -342,7 +342,7 @@ describe('Error Utilities', () => {
 
 ### SUITE 8: NestJS Integration
 
-**File:** `src/core/__tests__/logitron-nestjs.service.test.ts`
+**File:** `src/core/__tests__/logixia-nestjs.service.test.ts`
 
 ```
 describe('LogixiaLoggerService', () => {

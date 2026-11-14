@@ -4,7 +4,7 @@ import * as path from 'path';
 
 import { TransportManager } from '../../transports/transport.manager';
 import { _shutdownRegistrySize, resetShutdownHandlers } from '../../utils/shutdown.utils';
-import { LogixiaLogger } from '../logitron-logger';
+import { LogixiaLogger } from '../logixia-logger';
 
 function makeLogger(filename: string, extra: Record<string, unknown> = {}) {
   return new LogixiaLogger({

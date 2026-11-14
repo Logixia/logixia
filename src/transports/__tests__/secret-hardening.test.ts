@@ -12,7 +12,7 @@ import * as path from 'node:path';
 import * as util from 'node:util';
 
 import { BrowserRemoteTransport } from '../../browser';
-import { LogixiaLoggerService } from '../../core/logitron-nestjs.service';
+import { LogixiaLoggerService } from '../../core/logixia-nestjs.service';
 import type { TransportLogEntry } from '../../types/transport.types';
 import { redactObject } from '../../utils/redact.utils';
 import { DEFAULT_REDACT_QUERY_PARAMS, SENSITIVE_KEY_NAMES } from '../../utils/sensitive-names';

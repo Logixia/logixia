@@ -1,6 +1,6 @@
 import { Injectable, Inject, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ClientKafka } from '@nestjs/microservices';
-import { LogixiaLoggerService } from '../../../../src/core/logitron-nestjs.service';
+import { LogixiaLoggerService } from '../../../../src/core/logixia-nestjs.service';
 import { getCurrentTraceId } from '../../../../src/utils/trace.utils';
 
 /**

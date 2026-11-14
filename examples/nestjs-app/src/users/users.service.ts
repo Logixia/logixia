@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { LogixiaLoggerService } from '../../../../src/core/logitron-nestjs.service';
+import { LogixiaLoggerService } from '../../../../src/core/logixia-nestjs.service';
 import { LogMethod } from '../../../../src/core/nestjs-extras';
 import { LogixiaException } from '../../../../src/exceptions/exception';
 

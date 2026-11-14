@@ -17,8 +17,8 @@
 
 import { LogixiaContext } from '../../context/async-context';
 import { resetShutdownHandlers } from '../../utils/shutdown.utils';
-import { createLogger, LogixiaLogger } from '../logitron-logger';
-import { LogixiaLoggerService } from '../logitron-nestjs.service';
+import { createLogger, LogixiaLogger } from '../logixia-logger';
+import { LogixiaLoggerService } from '../logixia-nestjs.service';
 
 const BASE_CONFIG = {
   appName: 'TestApp',

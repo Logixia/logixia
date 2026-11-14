@@ -11,7 +11,7 @@
  *  - Logger.use() and Logger.unuse()
  */
 
-import { LogixiaLogger } from '../core/logitron-logger';
+import { LogixiaLogger } from '../core/logixia-logger';
 import type { LogixiaPlugin } from '../plugin';
 import { globalPluginRegistry, PluginRegistry, usePlugin } from '../plugin';
 import type { LogEntry } from '../types';

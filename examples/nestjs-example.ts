@@ -13,7 +13,7 @@
  *   npx ts-node examples/nestjs-example.ts
  */
 
-import { LogixiaLoggerService } from '../src/core/logitron-nestjs.service';
+import { LogixiaLoggerService } from '../src/core/logixia-nestjs.service';
 import { LogixiaContext } from '../src/context/async-context';
 import { LogLevel } from '../src/types';
 

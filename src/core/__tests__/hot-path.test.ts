@@ -14,7 +14,7 @@
 import { LogixiaContext } from '../../context/async-context';
 import type { ITransport, TransportLogEntry } from '../../types/transport.types';
 import { resetShutdownHandlers } from '../../utils/shutdown.utils';
-import { LogixiaLogger } from '../logitron-logger';
+import { LogixiaLogger } from '../logixia-logger';
 
 const BASE = {
   appName: 'TestApp',

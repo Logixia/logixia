@@ -1,7 +1,7 @@
 import { Controller, UseInterceptors } from '@nestjs/common';
 import { EventPattern, Payload, Ctx, KafkaContext } from '@nestjs/microservices';
 import { KafkaTraceInterceptor } from '../../../../src/core/kafka-trace.interceptor';
-import { LogixiaLoggerService } from '../../../../src/core/logitron-nestjs.service';
+import { LogixiaLoggerService } from '../../../../src/core/logixia-nestjs.service';
 import { LogMethod } from '../../../../src/core/nestjs-extras';
 import { getCurrentTraceId } from '../../../../src/utils/trace.utils';
 

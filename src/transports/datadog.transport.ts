@@ -87,9 +87,7 @@ function tag(key: string, value: string): string {
  *
  * The API key is transmitted via the `DD-API-KEY` request header — never in the URL.
  *
- * Metric names keep the legacy `logitron.logs.<level>` prefix (kept for
- * dashboards and monitors that already query it; renaming would be a breaking
- * change). Query `logitron.logs.error`, not `logixia.logs.error`.
+ * Metrics are named `logixia.logs.<level>`; `metricPrefix` changes the first part.
  *
  * @example
  * analytics: { datadog: { apiKey: process.env.DD_API_KEY, service: 'api', env: 'production' } }
@@ -271,9 +269,7 @@ export class DataDogTransport extends AnalyticsTransport {
 
   private transformToDataDogMetric(entry: TransportLogEntry): Record<string, unknown> {
     return {
-      // TODO(v2): rename to logixia.logs.* — kept as logitron.logs.* so existing
-      // Datadog dashboards and monitors keep resolving. Maintainers decide when to break them.
-      metric: `logitron.logs.${entry.level}`,
+      metric: `${this.datadogConfig.metricPrefix ?? 'logixia'}.logs.${entry.level}`,
       points: [[Math.floor(entry.timestamp.getTime() / 1000), 1]],
       type: 'count',
       host: this.getHostname(),

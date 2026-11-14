@@ -1,4 +1,4 @@
-import { LogixiaLogger } from '../logitron-logger';
+import { LogixiaLogger } from '../logixia-logger';
 
 function makeLogger(sampling: object) {
   const logger = new LogixiaLogger({

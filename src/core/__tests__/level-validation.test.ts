@@ -10,7 +10,7 @@
  * falling back to the configured level instead of being applied unchecked.
  */
 
-import { createLogger, LogixiaLogger } from '../logitron-logger';
+import { createLogger, LogixiaLogger } from '../logixia-logger';
 
 const BASE_CONFIG = {
   appName: 'TestApp',

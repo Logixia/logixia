@@ -35,7 +35,7 @@
   - On process exit before `.catch()` fires → unhandled rejection
   - Fix: track all in-flight flushes and drain them in `destroy()` / shutdown hook
 
-- [x] **[BUG] Unbounded Namespace Pattern Cache (Memory Leak)** (`src/core/logitron-logger.ts`)
+- [x] **[BUG] Unbounded Namespace Pattern Cache (Memory Leak)** (`src/core/logixia-logger.ts`)
   - `_nsPatternCache` is a `Map` with no size cap or eviction policy
   - Apps using dynamic namespaces (per-request / per-tenant) will leak memory
   - Fix: cap at ~1000 entries, evict oldest on overflow (simple LRU)
@@ -44,7 +44,7 @@
 
 ## 🟡 Medium — Next cycle
 
-- [x] **[CODE] `any` Cast on Transport Config** (`src/core/logitron-logger.ts`)
+- [x] **[CODE] `any` Cast on Transport Config** (`src/core/logixia-logger.ts`)
   - `(this.config as any).transports` — malformed transports cause silent, unclear errors
   - Fix: added `transports?: TransportConfig` to `LoggerConfig` type — cast removed
 
@@ -89,7 +89,7 @@
 - [x] Fixed `OtelTransport` — `readonly id` → `readonly name`, `entry.payload` → `entry.data`
 - [x] Fixed `LogixiaExceptionFilter` — removed `IBaseLogger` cast, added local `LogLike` interface
 - [x] Fixed all ESLint issues in `pii-patterns.ts` (useless-escape, duplicates-in-character-class, regex-complexity)
-- [x] Fixed `sonarjs/no-nested-conditional` in `logitron-logger.ts` and `logixia-exception-filter.ts`
+- [x] Fixed `sonarjs/no-nested-conditional` in `logixia-logger.ts` and `logixia-exception-filter.ts`
 - [x] Fixed `unicorn/consistent-destructuring` in `redact.utils.ts`
 - [x] CI quality job: auto-fix formatting + lint, commit-back on PRs only
 - [x] CI release job: `git fetch origin && git reset --hard origin/main` to fix "local branch behind remote"

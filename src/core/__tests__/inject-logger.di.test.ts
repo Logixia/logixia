@@ -8,8 +8,8 @@ import 'reflect-metadata';
 import { Injectable, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 
-import { LogixiaLoggerModule } from '../logitron-logger.module';
-import { LogixiaLoggerService } from '../logitron-nestjs.service';
+import { LogixiaLoggerModule } from '../logixia-logger.module';
+import { LogixiaLoggerService } from '../logixia-nestjs.service';
 import { InjectLogger, LogixiaExceptionFilter } from '../nestjs-extras';
 
 const contextOf = (svc: LogixiaLoggerService): string | undefined =>

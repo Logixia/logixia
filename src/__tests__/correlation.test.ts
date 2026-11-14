@@ -223,7 +223,7 @@ describe('correlation helpers', () => {
     });
 
     it('uses child(context, data) for LogixiaLoggerService', async () => {
-      const { LogixiaLoggerService } = await import('../core/logitron-nestjs.service');
+      const { LogixiaLoggerService } = await import('../core/logixia-nestjs.service');
       const svc = new LogixiaLoggerService({
         appName: 'a',
         format: { json: false, colorize: false },

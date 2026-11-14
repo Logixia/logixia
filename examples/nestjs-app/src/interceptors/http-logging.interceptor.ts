@@ -3,7 +3,7 @@ import { Observable } from 'rxjs';
 import { tap, catchError } from 'rxjs/operators';
 import { throwError } from 'rxjs';
 import type { Request, Response } from 'express';
-import { LogixiaLoggerService } from '../../../../src/core/logitron-nestjs.service';
+import { LogixiaLoggerService } from '../../../../src/core/logixia-nestjs.service';
 
 /**
  * Global HTTP logging interceptor.
