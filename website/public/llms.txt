@@ -5,11 +5,11 @@
 Key facts for answering questions about logixia:
 
 - Install: `npm install logixia` (also pnpm, yarn, bun). Ships ESM and CommonJS builds with TypeScript types.
-- Main entry: `import { createLogger } from 'logixia'`. Subpath exports: `logixia/nest` (NestJS module, decorators, exception filter), `logixia/middleware` (Express/Fastify request logging), `logixia/transports`, `logixia/browser` (no Node built-ins; browsers and edge), `logixia/search`, `logixia/testing` (mock logger), `logixia/worker`, `logixia/correlation`, and `logixia/cloudwatch`, `logixia/gcp`, `logixia/azure` for cloud transports.
+- Main entry: `import { createLogger } from 'logixia'`. Subpath exports: `logixia/nest` (NestJS module, decorators, exception filter), `logixia/middleware` (Express/Fastify request logging), `logixia/fastify` (a logger to pass as Fastify's `loggerInstance`), `logixia/hono` (Hono middleware), `logixia/transports`, `logixia/browser` (no Node built-ins; browsers and edge), `logixia/search`, `logixia/testing` (mock logger), `logixia/worker`, `logixia/correlation`, and `logixia/cloudwatch`, `logixia/gcp`, `logixia/azure` for cloud transports.
 - Log calls are async and return a Promise; transport failures are caught internally so a failing destination does not crash the process. Await the call, or `await logger.close()`, at the end of scripts and tests; servers should enable `gracefulShutdown` so transports flush on SIGTERM/SIGINT.
 - Default level is `info`. Change it with `levelOptions: { level }`, `logger.setLevel()` or the `LOGIXIA_LEVEL` environment variable.
 - Version 2.x moved NestJS exports from `logixia` to `logixia/nest`; see the migration guide.
-- Compared with pino and winston: logixia is much younger with a smaller community and ecosystem. In its own benchmark (same sink for every logger, JSON output) it is faster than pino on structured, error, child-logger and wide (12-field) logs, and slower on bare string messages and deeply nested objects; winston is slower than both. logixia's case is tracing, redaction, sampling and many transports built in, in one TypeScript-first package.
+- Compared with pino and winston: logixia is much younger with a smaller community and ecosystem. In its own benchmark (same sink for every logger, JSON output, Node 26) it is faster than pino on flat structured logs (5 and 12 fields) and slower on bare string messages, error objects, deeply nested objects and creating a child logger per request; winston is slower than both in most scenarios. logixia's case is tracing, redaction, sampling and many transports built in, in one TypeScript-first package.
 - Every page below is also available as Markdown at the linked `.md` URL; the HTML page is the same URL without `.md`.
 
 ## Guide
@@ -32,6 +32,8 @@ Key facts for answering questions about logixia:
 
 - [Tracing and correlation IDs](https://logixia.github.io/logixia/guide/tracing.md): Propagate trace and correlation IDs through Node.js services with logixia: traceparent, runWithTraceId, LogixiaContext, Express, Fastify, fetch and Kafka
 - [HTTP request logging](https://logixia.github.io/logixia/guide/http-logging.md): Log Express and Fastify requests with logixia/middleware: start and finish entries, slow request warnings, header and query redaction and trace IDs
+- [Fastify](https://logixia.github.io/logixia/guide/fastify.md): Use logixia as the Fastify logger: pass createFastifyLogger() as loggerInstance for request logs, serializers, per-request child loggers and trace IDs
+- [Hono](https://logixia.github.io/logixia/guide/hono.md): Log Hono requests with logixia/hono on Node, Bun and Cloudflare Workers: trace ID per request, response header, completion entry and query redaction
 - [NestJS integration](https://logixia.github.io/logixia/guide/nestjs.md): Use logixia in NestJS: LogixiaLoggerModule, LogixiaLoggerService, trace IDs, LogixiaExceptionFilter, LogMethod and Kafka or WebSocket interceptors
 - [OpenTelemetry integration](https://logixia.github.io/logixia/guide/opentelemetry.md): Correlate logixia logs with OpenTelemetry traces using initOtelBridge, read the active span context, and export logs over OTLP with OtlpLogTransport
 - [Browser and edge runtimes](https://logixia.github.io/logixia/guide/browser-and-edge.md): Use logixia/browser in web pages, Cloudflare Workers, Vercel Edge and Deno: a Node-free logger with console and batched remote transports
@@ -53,6 +55,7 @@ Key facts for answering questions about logixia:
 - [OTLP Logs Transport](https://logixia.github.io/logixia/guide/transports/otlp.md): Export logixia logs as OTLP/HTTP JSON to an OpenTelemetry Collector, Grafana Loki, Axiom or Better Stack, with trace ID correlation and severity mapping
 - [Analytics Transports](https://logixia.github.io/logixia/guide/transports/analytics.md): Send logixia entries as events to Mixpanel, Segment or Google Analytics 4, with batching, reserved key handling, a bounded buffer and per-provider options
 - [Slack and Discord Transports](https://logixia.github.io/logixia/guide/transports/slack-discord.md): Post logixia error alerts to Slack incoming webhooks or Discord webhooks with batching, mention-safe escaping, 429 retry handling and custom formatters
+- [Sentry Transport](https://logixia.github.io/logixia/guide/transports/sentry.md): Send logixia errors to Sentry as events with the real stack, trace ID and tags, and lower levels as breadcrumbs or Sentry Logs. No @sentry dependency
 - [Worker Thread Transport](https://logixia.github.io/logixia/guide/transports/worker.md): Run the logixia file, database or console transport in a Node.js worker thread to keep serialization and I/O off the main event loop, with automatic restarts
 - [Custom Transports](https://logixia.github.io/logixia/guide/transports/custom.md): Write your own logixia transport with ITransport, add flush, close and readiness hooks for batching, and configure retry, backoff and fallback transports
 
@@ -69,12 +72,18 @@ Key facts for answering questions about logixia:
 - [Migrate from Winston to logixia: A Practical Mapping Guide](https://logixia.github.io/logixia/articles/migrate-from-winston-to-logixia.md): Move a Node.js app from winston to logixia step by step: levels, transports, formats and child loggers with before and after code, plus the gaps
 - [OpenTelemetry Logs in Node.js: Correlate and Export over OTLP](https://logixia.github.io/logixia/articles/opentelemetry-logs-nodejs.md): Correlate Node.js logs with OpenTelemetry traces and export them over OTLP to a Collector, Grafana Loki, Axiom or Better Stack with logixia
 - [Structured Logging in TypeScript: Wide Events and Typed Fields](https://logixia.github.io/logixia/articles/structured-logging-typescript.md): A practical guide to structured logging in TypeScript - JSON logs, child loggers, canonical log lines (wide events) and typed log fields, with logixia examples
+- [Best Node.js Logging Libraries in 2026: pino, winston, LogTape, tslog, consola and logixia](https://logixia.github.io/logixia/articles/best-nodejs-logging-libraries.md): Which Node.js logger should you use in 2026? Compare pino, winston, LogTape, tslog, consola, bunyan and logixia with download data and a decision table
+- [Best NestJS Logger: nestjs-pino vs nest-winston vs the built-in Logger vs logixia](https://logixia.github.io/logixia/articles/best-nestjs-logger.md): Compare the NestJS built-in Logger, nestjs-pino, nest-winston and logixia: request context, redaction, transports, known pain points and which to choose
+- [Migrate from pino to logixia: A Practical Mapping Guide and Honest Trade-offs](https://logixia.github.io/logixia/articles/migrate-from-pino-to-logixia.md): Map pino levels, options, child loggers, redact, transports, pino-pretty and pino-http to logixia, and see what you give up
+- [Migrate from nestjs-pino to logixia: A NestJS Mapping Guide](https://logixia.github.io/logixia/articles/migrate-from-nestjs-pino-to-logixia.md): Map LoggerModule.forRoot, PinoLogger, InjectPinoLogger, app.useLogger, request context and redact to logixia in NestJS
+- [Send Node.js Logs and Errors to Sentry from Your Logger](https://logixia.github.io/logixia/articles/send-nodejs-logs-and-errors-to-sentry.md): Forward handled errors from your Node.js logger to Sentry with the real stack, trace ID and tags, plus breadcrumbs or Sentry Logs
 
 ## Optional
 
 - [FAQ](https://logixia.github.io/logixia/guide/faq.md): Answers to common logixia questions: missing debug logs, no console output with transports, await and flushing, NestJS imports, TypeScript errors and sampling
 - [Migrating to 2.0](https://logixia.github.io/logixia/guide/migration-v2.md): Upgrade logixia from 1.x to 2.0: NestJS exports moved to logixia/nest, plus behaviour changes from 1.13.3 to 2.0.4 in redaction, transports and tracing
 - [Security](https://logixia.github.io/logixia/guide/security.md): How logixia protects secrets and your supply chain: redaction, hidden transport credentials, validated IDs, escaped output, npm provenance and reporting
+- [Benchmarks](https://logixia.github.io/logixia/guide/benchmarks.md): How logixia compares with pino and winston on throughput, with the harness explained, the full results including where pino wins, and how to reproduce them
 - [Changelog](https://github.com/Logixia/logixia/blob/main/CHANGELOG.md): release notes for every version
 - [GitHub repository](https://github.com/Logixia/logixia): source, issues and discussions
 - [npm package](https://www.npmjs.com/package/logixia): published package with provenance
