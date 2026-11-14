@@ -3,6 +3,7 @@
 // `dist/*.d.ts`, under strict + exactOptionalPropertyTypes with real framework types.
 import express from 'express';
 import Fastify from 'fastify';
+import { Hono } from 'hono';
 import type {
   ILoggerDefault,
   LogixiaPlugin,
@@ -17,11 +18,14 @@ import {
   defineLogSchema,
   wideEventMiddleware,
 } from 'logixia';
+import { createBrowserLogger } from 'logixia/browser';
 import {
   childFromRequest,
   correlationFastifyHook,
   correlationMiddleware,
 } from 'logixia/correlation';
+import { createFastifyLogger, createFastifySerializers } from 'logixia/fastify';
+import { createHonoMiddleware } from 'logixia/hono';
 import { createExpressMiddleware, createFastifyPlugin } from 'logixia/middleware';
 import { createMockLogger } from 'logixia/testing';
 import type {
@@ -56,6 +60,23 @@ fastify.get('/', (request) => {
   void childFromRequest(request, logger).info('hi');
   return 'ok';
 });
+
+// The facade is a Fastify `loggerInstance` with no cast, and Hono accepts the middleware.
+const facadeApp = Fastify({
+  loggerInstance: createFastifyLogger(logger, {
+    serializers: { req: createFastifySerializers().req },
+    redactQueryParams: ['session'],
+  }),
+});
+facadeApp.get('/', (request) => {
+  request.log.info({ orderId: 1 }, 'order %s', 'a');
+  return 'ok';
+});
+
+const honoApp = new Hono<{ Variables: { traceId: string } }>();
+honoApp.use(createHonoMiddleware(logger, { responseHeader: 'x-request-id' }));
+honoApp.use(createHonoMiddleware(createBrowserLogger({ appName: 'edge' })));
+honoApp.get('/', (c) => c.text(c.get('traceId')));
 
 logger.setLevel('debug');
 const level: string = logger.getLevel();

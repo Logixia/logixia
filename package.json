@@ -127,6 +127,26 @@
         "default": "./dist/correlation.js"
       }
     },
+    "./fastify": {
+      "import": {
+        "types": "./dist/fastify.d.mts",
+        "default": "./dist/fastify.mjs"
+      },
+      "require": {
+        "types": "./dist/fastify.d.ts",
+        "default": "./dist/fastify.js"
+      }
+    },
+    "./hono": {
+      "import": {
+        "types": "./dist/hono.d.mts",
+        "default": "./dist/hono.mjs"
+      },
+      "require": {
+        "types": "./dist/hono.d.ts",
+        "default": "./dist/hono.js"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -170,7 +190,7 @@
     "dev:search-readme": "ts-node -P tsconfig.examples.json --transpile-only -r ./examples/register.js examples/search-readme.ts",
     "dev:intelligent-search": "ts-node -P tsconfig.examples.json --transpile-only -r ./examples/register.js examples/intelligent-search.ts",
     "benchmark": "npm run build && node benchmarks/run.mjs",
-    "check:browser": "node --experimental-vm-modules --no-warnings scripts/check-browser-entry.mjs",
+    "check:browser": "node --experimental-vm-modules --no-warnings scripts/check-browser-entry.mjs && node --experimental-vm-modules --no-warnings scripts/check-hono-edge.mjs",
     "check:dist": "node scripts/check-dist-runtime.mjs",
     "check:exports": "node scripts/check-exports.mjs",
     "check:optional-peers": "node scripts/check-optional-peers.mjs",
@@ -204,6 +224,7 @@
     "wide-events",
     "express",
     "fastify",
+    "hono",
     "cloudflare-workers",
     "edge",
     "browser-logger",
@@ -379,6 +400,20 @@
       "name": "CJS (gzipped)",
       "path": "dist/index.js",
       "limit": "200 KB",
+      "brotli": false,
+      "gzip": true
+    },
+    {
+      "name": "logixia/hono ESM (gzipped)",
+      "path": "dist/hono.mjs",
+      "limit": "12 KB",
+      "brotli": false,
+      "gzip": true
+    },
+    {
+      "name": "logixia/fastify ESM (gzipped)",
+      "path": "dist/fastify.mjs",
+      "limit": "12 KB",
       "brotli": false,
       "gzip": true
     }

@@ -62,6 +62,28 @@ const RESOLVED: Promise<void> = Promise.resolve();
 
 const UNSERIALIZABLE = '[Unserializable]';
 
+// ANSI color codes by name; read-only, shared by every logger instance.
+const ANSI_COLORS: ReadonlyMap<string, string> = new Map([
+  ['black', '\x1b[30m'],
+  ['red', '\x1b[31m'],
+  ['green', '\x1b[32m'],
+  ['yellow', '\x1b[33m'],
+  ['blue', '\x1b[34m'],
+  ['magenta', '\x1b[35m'],
+  ['cyan', '\x1b[36m'],
+  ['white', '\x1b[37m'],
+  ['gray', '\x1b[90m'],
+  ['grey', '\x1b[90m'],
+  ['brightred', '\x1b[91m'],
+  ['brightgreen', '\x1b[92m'],
+  ['brightyellow', '\x1b[93m'],
+  ['brightblue', '\x1b[94m'],
+  ['brightmagenta', '\x1b[95m'],
+  ['brightcyan', '\x1b[96m'],
+  ['brightwhite', '\x1b[97m'],
+  ['reset', '\x1b[0m'],
+]);
+
 // ── JSON line shape ──────────────────────────────────────────────────────────
 // A JSON line keeps a fixed shape for log pipelines: these fields are always strings
 // and payload is always an object, even when a JS caller or a plugin passed another type.
@@ -263,7 +285,7 @@ export class LogixiaLogger<
   /** `source=value` pairs already reported as unknown levels — warn once per logger. */
   private readonly _warnedInvalidLevels = new Set<string>();
   /** Pre-built ANSI color codes to avoid recreating the object in colorize(). */
-  private _colorMap: Map<string, string> = new Map();
+  private _colorMap: ReadonlyMap<string, string> = ANSI_COLORS;
   /** Pre-computed field-enabled booleans so isFieldEnabled() isn't called per log. */
   private _fieldCache: Map<string, boolean> = new Map();
   /** True when contextData is non-empty — avoids Object.keys() check on hot path. */
@@ -333,11 +355,16 @@ export class LogixiaLogger<
       },
     };
 
-    this.config = { ...defaultConfig, ...config };
-
-    // ── Feature 5: Adaptive log level ───────────────────────────────────────
-    const resolvedLevel = resolveInitialLevel(this.config);
-    this.config.levelOptions = { ...this.config.levelOptions, level: resolvedLevel };
+    if (parent) {
+      // A child is handed its parent's config, which already has the defaults and a
+      // validated level. Its own levelOptions keep child.setLevel() off the parent.
+      this.config = { ...config, levelOptions: { ...config.levelOptions } };
+    } else {
+      this.config = { ...defaultConfig, ...config };
+      // ── Feature 5: Adaptive log level ─────────────────────────────────────
+      const resolvedLevel = resolveInitialLevel(this.config);
+      this.config.levelOptions = { ...this.config.levelOptions, level: resolvedLevel };
+    }
 
     this.config.fields ??= {
       timestamp: '[yyyy-mm-dd HH:MM:ss.MS]',
@@ -401,7 +428,7 @@ export class LogixiaLogger<
     }
 
     // ── Build hot-path caches after all config is finalised ──────────────────
-    this._buildPerfCaches();
+    this._buildPerfCaches(parent);
   }
 
   // ── Feature 1 ────────────────────────────────────────────────────────────────
@@ -445,7 +472,19 @@ export class LogixiaLogger<
    * Rebuild all hot-path caches after any config mutation or level change.
    * Keeps the actual log() call free of allocations in the common case.
    */
-  private _buildPerfCaches(): void {
+  private _buildPerfCaches(inheritFrom?: LogixiaLogger<TConfig>): void {
+    if (inheritFrom && inheritFrom.fieldState.size === 0) {
+      // A new child has its parent's config and no field toggles of its own, so the
+      // config-derived caches are the parent's. Only the level threshold depends on
+      // the child's context (namespace levels), so it is resolved here.
+      this._levelValues = inheritFrom._levelValues;
+      this._fieldCache = new Map(inheritFrom._fieldCache);
+      this._formattedLevels = inheritFrom._formattedLevels;
+      this._formattedAppName = inheritFrom._formattedAppName;
+      this._hasRedact = inheritFrom._hasRedact;
+      this._minLevelValue = this._levelValues.get(this.resolveEffectiveLevel()) ?? 2;
+      return;
+    }
     // 1. Level value map — pre-merge built-ins + custom levels once
     const customLevelEntries = Object.entries(this.config.levelOptions?.levels ?? {});
     this._levelValues = new Map<string, number>([
@@ -465,27 +504,8 @@ export class LogixiaLogger<
     const effectiveLevel = this.resolveEffectiveLevel();
     this._minLevelValue = this._levelValues.get(effectiveLevel) ?? 2;
 
-    // 2. ANSI color map — static, built once
-    this._colorMap = new Map([
-      ['black', '\x1b[30m'],
-      ['red', '\x1b[31m'],
-      ['green', '\x1b[32m'],
-      ['yellow', '\x1b[33m'],
-      ['blue', '\x1b[34m'],
-      ['magenta', '\x1b[35m'],
-      ['cyan', '\x1b[36m'],
-      ['white', '\x1b[37m'],
-      ['gray', '\x1b[90m'],
-      ['grey', '\x1b[90m'],
-      ['brightred', '\x1b[91m'],
-      ['brightgreen', '\x1b[92m'],
-      ['brightyellow', '\x1b[93m'],
-      ['brightblue', '\x1b[94m'],
-      ['brightmagenta', '\x1b[95m'],
-      ['brightcyan', '\x1b[96m'],
-      ['brightwhite', '\x1b[97m'],
-      ['reset', '\x1b[0m'],
-    ]);
+    // 2. ANSI color map — static, shared by every logger
+    this._colorMap = ANSI_COLORS;
 
     // 3. Field enabled cache — replaces per-call isFieldEnabled() calls
     const fieldNames = [

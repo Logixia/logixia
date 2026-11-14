@@ -21,6 +21,12 @@ const FASTIFY_COUNTER_ID = /^req-[\da-z]+$/;
 
 const FALLBACK_KEY = '_logixiaFallbackId';
 
+/** A caller-supplied request ID that is safe to use as a trace ID, or `undefined` for a counter ID. */
+export function usableRequestId(id: unknown): string | undefined {
+  const sanitized = sanitizeIncomingId(id);
+  return sanitized !== undefined && !FASTIFY_COUNTER_ID.test(sanitized) ? sanitized : undefined;
+}
+
 /** Header names to read a trace ID from, defaulting to the library-wide list. */
 export function resolveTraceHeaders(option: TraceHeaderOption | undefined): readonly string[] {
   if (option === undefined) return DEFAULT_TRACE_HEADERS;
@@ -38,8 +44,8 @@ export function resolveRequestTraceId(req: ContextRequestLike, headers: readonly
   const fromHeader = extractTraceId(req, { header: [...headers] });
   if (fromHeader !== undefined) return fromHeader;
 
-  const fromId = sanitizeIncomingId(req.id);
-  if (fromId !== undefined && !FASTIFY_COUNTER_ID.test(fromId)) return fromId;
+  const fromId = usableRequestId(req.id);
+  if (fromId !== undefined) return fromId;
 
   const holder = req as Record<string, unknown>;
   const cached = holder[FALLBACK_KEY];
