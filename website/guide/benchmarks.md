@@ -23,7 +23,7 @@ Higher throughput is better. The table shows operations per second for pino and 
 
 These are two back-to-back runs on Node 26.10 (Apple Silicon, November 2026); a range means the runs differed.
 
-Earlier versions of this page showed larger wins (+53% on error objects, +111% on 12 fields). Those came from an older harness that gave pino a slower sink than logixia, which inflated logixia's ratio on every row. logixia itself did not get slower: built from the commit that fixed the harness and run on today's harness, it measures the same as now.
+Versions of this page before November 2026 quoted numbers from an older harness that gave pino a slower sink than logixia, which inflated logixia's ratio on every row. The rows above come from the current harness, which gives every library the same kind of sink; a rework of `child()` and of how the logger stores its config, also in November 2026, is what moved them since.
 
 winston was slower than pino in every scenario except the error object row, where it is given less work (see below).
 

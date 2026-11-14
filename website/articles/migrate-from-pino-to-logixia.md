@@ -228,7 +228,7 @@ Fastify users have `createFastifyPlugin(logger, options)`. If you use Fastify's 
 
 Be clear-eyed about these before committing:
 
-- **Speed on simple logs.** Pino is faster on plain string messages (our own harness measured logixia at about 61% lower throughput in JSON mode; see the [benchmarks](/guide/benchmarks) for why and for where logixia wins).
+- **Speed on simple logs.** Pino is faster on plain string messages (our own harness measured logixia at about 40-45% lower throughput in JSON mode; see the [benchmarks](/guide/benchmarks) for why and for where logixia wins).
 - **Ecosystem.** Many more transports, integrations and answered questions, and a long production record. logixia is a young project with a tiny community.
 - **`pino.destination` sync and async modes.** Pino lets you pick a [synchronous or asynchronous destination](https://getpino.io/#/docs/asynchronous) with buffering for throughput. logixia's console transport writes synchronously, and its file transport batches; there is no equivalent single knob.
 - **Worker-thread transports as the default model.** In logixia this is opt-in.
@@ -259,7 +259,7 @@ What you gain: a trace ID in async context, redaction with regexes and presets, 
 
 **Is logixia a drop-in replacement for pino?** No. The concepts map closely, but argument order, level representation, output field names and the transport model differ, as the tables above show.
 
-**Is logixia faster than pino?** Not on simple strings: pino was about 61% faster in our benchmark. logixia in JSON mode was ahead on some structured payloads. See the [benchmarks](/guide/benchmarks) and run them yourself.
+**Is logixia faster than pino?** Not on simple strings: pino handled about 1.7 times as many plain string logs per second in our benchmark. logixia in JSON mode was ahead on flat structured payloads (5 and 12 fields). See the [benchmarks](/guide/benchmarks) and run them yourself.
 
 **Can I run pino and logixia together during migration?** Yes. They are independent libraries; convert one module at a time.
 
