@@ -50,6 +50,7 @@ export default defineConfig([
       'src/search.ts',
       'src/testing.ts',
       'src/middleware.ts',
+      'src/fastify.ts',
       'src/correlation.ts',
       'src/worker.ts',
       'src/cloudwatch.ts',
@@ -76,6 +77,16 @@ export default defineConfig([
   {
     ...base,
     entry: ['src/browser.ts'],
+    format: ['cjs', 'esm'],
+    dts: true,
+    sourcemap: true,
+    platform: 'neutral',
+  },
+  // Hono middleware: web-standard APIs plus `node:async_hooks` / `node:crypto`, which Workers
+  // provide under `nodejs_compat`. Kept out of the Node block so no Node shims are injected.
+  {
+    ...base,
+    entry: ['src/hono.ts'],
     format: ['cjs', 'esm'],
     dts: true,
     sourcemap: true,
