@@ -283,3 +283,30 @@ describe('OtlpLogTransport', () => {
     });
   });
 });
+
+describe('OtlpLogTransport close() against a collector that never answers', () => {
+  it('gives up within the close timeout instead of the full request timeout', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const net = require('node:net') as typeof import('node:net');
+    const sockets: import('node:net').Socket[] = [];
+    const server = net.createServer((s) => {
+      sockets.push(s);
+      s.on('error', () => {});
+      s.on('data', () => {});
+    });
+    await new Promise<void>((r) => server.listen(0, r));
+    const port = (server.address() as import('node:net').AddressInfo).port;
+    process.env['LOGIXIA_SILENT_INTERNAL'] = '1';
+    const transport = new OtlpLogTransport({
+      url: `http://127.0.0.1:${port}/v1/logs`,
+      requestTimeoutMs: 10_000,
+      closeTimeoutMs: 100,
+    });
+    transport.write({ timestamp: new Date(), level: 'info', message: 'x' });
+    const start = Date.now();
+    await transport.close();
+    expect(Date.now() - start).toBeLessThan(2000);
+    for (const s of sockets) s.destroy();
+    await new Promise((r) => server.close(r));
+  });
+});
