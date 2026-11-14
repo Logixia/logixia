@@ -15,17 +15,21 @@ Higher throughput is better. The table shows logixia in JSON mode compared with 
 | Scenario             | logixia (JSON) vs pino |
 | -------------------- | ---------------------- |
 | Simple string        | -61%                   |
-| Structured, 5 fields | +19%                   |
-| Error object         | +53%                   |
-| Child logger         | +33%                   |
-| Deep nested object   | -22%                   |
-| 12-field object      | +111%                  |
+| Structured, 5 fields | +12% to +16%           |
+| Error object         | -24%                   |
+| Child logger         | -82% to -83%           |
+| Deep nested object   | -37% to -39%           |
+| 12-field object      | +93%                   |
 
-winston was slower than both pino and logixia in every scenario.
+These are two back-to-back runs on Node 26.10 (Apple Silicon, November 2026); a range means the runs differed.
+
+Earlier versions of this page showed larger wins (+53% on error objects, +111% on 12 fields). Those came from an older harness that gave pino a slower sink than logixia, which inflated logixia's ratio on every row. logixia itself did not get slower: built from the commit that fixed the harness and run on today's harness, it measures the same as now.
+
+winston was slower than pino in every scenario except the error object row, where it is given less work (see below).
 
 Read these as ratios from one harness, not as promises about your service. Absolute operations per second depend on the machine, Node version, payload shape and load, and the ratios move between runs. Two cautions on specific rows:
 
-- **Child logger.** pino and winston create the child inside the timed function on every call, while the logixia child is created once outside it (see the harness below). That favours logixia in that row, so the +33% overstates what you would see if you create a child per request in both libraries.
+- **Child logger.** Every library creates the child inside the timed function and logs one line through it, which is what a per-request child costs. logixia is far behind here: a logixia child copies its parent's configuration, while a pino child is little more than a prototype link and a prebuilt string of bindings. If you log many lines per request, create the child once per request, not per line. Earlier versions of this page reported +33% for this row from a harness that built the logixia child once, outside the timer; that number was wrong.
 - **Error object.** The three libraries are not given identical work: pino receives `{ err }`, logixia receives the `Error`, and winston receives only `err.message`. The row compares behavior on the harness's inputs, not like-for-like serialization of stack traces.
 
 ## What does the harness do?
@@ -41,14 +45,14 @@ How it keeps the comparison as even as it can:
 
 The scenarios:
 
-| Scenario                   | What is logged                                                          |
-| -------------------------- | ----------------------------------------------------------------------- |
-| Simple string              | `'User logged in'`                                                      |
-| Structured log (5 fields)  | message plus a 5-field object                                           |
-| Error object               | an `Error` plus a message (see the caution above)                       |
-| Child / per-request logger | pino and winston: `child()` inside the call; logixia: a pre-built child |
-| Deep nested object         | a 3-level object with headers, query and user data                      |
-| High-cardinality metadata  | a 12-field object                                                       |
+| Scenario                   | What is logged                                                 |
+| -------------------------- | -------------------------------------------------------------- |
+| Simple string              | `'User logged in'`                                             |
+| Structured log (5 fields)  | message plus a 5-field object                                  |
+| Error object               | an `Error` plus a message (see the caution above)              |
+| Child / per-request logger | `child()` with one binding, then one log line, inside the call |
+| Deep nested object         | a 3-level object with headers, query and user data             |
+| High-cardinality metadata  | a 12-field object                                              |
 
 What the harness does **not** measure: real I/O (files, network, a log collector), redaction, sampling, plugins or any logixia transport other than the intercepted console output, multi-process behavior, memory use, or startup time. Turning on `redact` adds work to logixia's per-line cost, and none of that is in these numbers.
 
@@ -62,7 +66,7 @@ Pino's design goal is to do as little as possible per call, and a plain string m
 
 Each is small, but on a call that does almost nothing else, they dominate. That is the price of the features they support: a trace ID on every line without passing a logger around, and timestamps people can read.
 
-As payloads get larger, fixed per-line costs matter less and serialization dominates, which is why the structured, error and 12-field rows go the other way. The deep nested object row is a loss for logixia (-22%), and I have not profiled it, so I will not guess at the cause.
+As flat payloads get wider, fixed per-line costs matter less and serialization dominates, which is why the structured and 12-field rows go the other way. The error object and deep nested object rows are losses for logixia (-24% and about -38%), and I have not profiled them yet, so I will not guess at the cause.
 
 ## How do I reproduce the benchmarks?
 
@@ -80,5 +84,5 @@ When you run it, close other work, run it more than once and look at the spread.
 ## What should I take from this?
 
 - If your hot path is millions of plain string logs per second, use pino. It is faster, and the harness shows it.
-- If your logs are structured objects, the gap narrows or reverses in this harness, but your destination, serialization of your own data and I/O will usually matter more than logger overhead.
+- If your logs are flat structured objects, the gap narrows or reverses in this harness, but your destination, serialization of your own data and I/O will usually matter more than logger overhead.
 - Treat any logger benchmark, including this one, as a starting point. See also [the best Node.js logging libraries](/articles/best-nodejs-logging-libraries) and [pino vs winston vs logixia](/articles/pino-vs-winston-vs-logixia), which publishes an earlier run on Node 22 with a different machine.
