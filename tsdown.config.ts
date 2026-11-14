@@ -32,6 +32,22 @@ const OPTIONAL_RUNTIME_DEPS = [
   'socket.io',
 ];
 
+// `TraceMiddleware` sets `req.traceId`, so the `logixia/nest` types tell Express's
+// Request about it. This lives here, not in src/core/trace.middleware.ts, because
+// JSR (which publishes the source) refuses packages that modify global types.
+const EXPRESS_REQUEST_AUGMENTATION = `declare global {
+  namespace Express {
+    interface Request {
+      traceId?: string;
+    }
+  }
+}
+`;
+
+/** Appends the Express Request augmentation to the `logixia/nest` declaration files only. */
+const nestTypesFooter = ({ fileName }: { fileName: string }): string | undefined =>
+  /^nest\.d\.m?ts$/.test(fileName) ? EXPRESS_REQUEST_AUGMENTATION : undefined;
+
 // Shared by every entry: keep .js/.mjs output names and never bundle optional deps.
 const base = {
   outDir: 'dist',
@@ -59,6 +75,7 @@ export default defineConfig([
     ],
     format: ['cjs', 'esm'],
     dts: true,
+    footer: nestTypesFooter,
     sourcemap: true,
     target: 'node16',
     platform: 'node',

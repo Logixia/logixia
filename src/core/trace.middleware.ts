@@ -50,16 +50,10 @@ function writeTraceHeader(res: unknown, header: string, traceId: string): void {
   }
 }
 
-// Extend Express Request interface — requires namespace to augment Express typings
-/* eslint-disable @typescript-eslint/no-namespace */
-declare global {
-  namespace Express {
-    interface Request {
-      traceId?: string;
-    }
-  }
-}
-/* eslint-enable @typescript-eslint/no-namespace */
+// The npm types also add `traceId` to Express's global Request (see `footer` in
+// tsdown.config.ts). That augmentation is kept out of the source because JSR
+// refuses packages that modify global types.
+type TracedRequest = Request & { traceId?: string };
 
 /** Injection token for extra query parameter names redacted in the trace context `url`. */
 export const LOGIXIA_TRACE_REDACT_QUERY_PARAMS = 'LOGIXIA_TRACE_REDACT_QUERY_PARAMS';
@@ -133,7 +127,7 @@ export class TraceMiddleware implements NestMiddleware {
       traceId = this.ctx.generate();
     }
 
-    req.traceId = traceId;
+    (req as TracedRequest).traceId = traceId;
 
     const header = resolveResponseHeader(this.config);
     if (header) writeTraceHeader(res, header, traceId);
@@ -206,7 +200,7 @@ export function traceMiddleware(config?: TraceIdConfig, redactQueryParams?: read
       traceId = ctx.generate();
     }
 
-    req.traceId = traceId;
+    (req as TracedRequest).traceId = traceId;
 
     const header = resolveResponseHeader(traceConfig);
     if (header) writeTraceHeader(res, header, traceId);

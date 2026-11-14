@@ -65,6 +65,16 @@ jobs:
       - name: Type check against @types/express@4
         run: npm run typecheck:express4
 
+      # JSR rejects a package that modifies global types, but only on its server,
+      # after the npm release is out. `jsr publish --dry-run` does not catch it.
+      # Global augmentations for the npm types go in tsdown.config.ts instead.
+      - name: No global type augmentation in the JSR source
+        run: |
+          if grep -rnE '^\s*declare\s+(global|module)\b' src --include='*.ts' --exclude-dir=__tests__; then
+            echo "::error::JSR refuses packages that modify global types; see tsdown.config.ts"
+            exit 1
+          fi
+
   # ─────────────────────────────────────────────────────────
   # 2. Tests — Node 18 / 20 / 22 matrix
   # ─────────────────────────────────────────────────────────
