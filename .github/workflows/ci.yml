@@ -144,6 +144,11 @@ jobs:
       - name: Check browser entry runs without Node globals
         run: npm run check:browser
 
+      # Same CLI and flags as the publish-jsr job; catches a source change JSR
+      # can't publish before a tag exists. JSR resolves imports from node_modules.
+      - name: JSR dry-run publish
+        run: npx --yes jsr@0.14.3 publish --dry-run --allow-slow-types --allow-dirty
+
       - name: Check the built package runs
         run: npm run check:dist
 
@@ -200,11 +205,6 @@ jobs:
           npm pack --pack-destination release --ignore-scripts
           tarball_path="./release/logixia-${CHECK_VERSION}.tgz"
           npm publish "$tarball_path" --dry-run --access public --ignore-scripts --tag ci-dry-run
-
-      # Same CLI and flags as the publish-jsr job; catches a source change JSR
-      # can't publish before a tag exists.
-      - name: JSR dry-run publish
-        run: npx --yes jsr@0.14.3 publish --dry-run --allow-slow-types --allow-dirty
 
   # ─────────────────────────────────────────────────────────
   # 4. Release — only on direct push to main. Does NOT publish to npm.
@@ -367,8 +367,8 @@ jobs:
   # 6. Publish to JSR (jsr.io/@logixia/logixia) — TypeScript source, for Deno,
   # Bun and Node users who install from JSR.
   #
-  # Kept out of the npm `publish` job because the jsr CLI is downloaded from
-  # the registry, and that job installs nothing. It runs in its own `jsr`
+  # Kept out of the npm `publish` job because the jsr CLI and node_modules are
+  # downloaded from the registry, and that job installs nothing. It runs in its own `jsr`
   # Environment, so it has its own reviewer gate, and npm trusted publishing
   # should be bound to the `npm` environment so this job's token can't publish
   # to npm. Authenticates to JSR with OIDC (the package is linked to this repo
@@ -394,6 +394,11 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24.22.2'
+
+      # JSR resolves the source's imports from node_modules. --ignore-scripts means no
+      # dependency code runs while this job holds id-token; jsr publish only reads files.
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
 
       - name: Set the version and publish
         env:
