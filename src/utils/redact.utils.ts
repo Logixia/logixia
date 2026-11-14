@@ -416,14 +416,32 @@ export function redactObject(
   return result === obj ? { ...obj } : result;
 }
 
+// Each element of an array message is redacted as if it were logged on its own, so
+// path rules anchored at the top level still match. Nested arrays use the payload
+// walk, which guards against cycles.
+function redactMessageObject(value: object, config: RedactConfig): unknown {
+  if (!Array.isArray(value)) return applyRedaction(value as Record<string, unknown>, config);
+  return value.map((item: unknown) => {
+    if (typeof item === 'string') return applyRedactionToString(item, config);
+    if (item === null || typeof item !== 'object') return item;
+    if (!Array.isArray(item)) return applyRedaction(item as Record<string, unknown>, config);
+    return applyRedaction({ items: item }, config)?.['items'];
+  });
+}
+
 /**
- * Apply pattern-based redaction to a single string (e.g. the log message).
+ * Apply redaction to the log message and return it as a string.
  *
- * Path-based rules don't apply to a bare string — only the `patterns` are run.
+ * A string message gets only the `patterns`, because path rules don't apply to a
+ * bare string. An object logged as the message (`logger.log(dto)` in NestJS) gets
+ * every rule, as a payload would, before it is turned into a string.
  * Returns the input unchanged when no patterns are configured, so the hot path
  * stays allocation-free for the common no-redact case.
  */
 export function applyRedactionToString(value: unknown, config: RedactConfig | undefined): string {
+  if (config && value !== null && typeof value === 'object') {
+    return safeToString(redactMessageObject(value, config));
+  }
   const text = typeof value === 'string' ? value : safeToString(value);
   if (!config) return text;
   const resolved = resolveConfig(config);

@@ -1,6 +1,7 @@
 import type { ITransport, TransportLogEntry } from '../../types/transport.types';
 import { resetShutdownHandlers } from '../../utils/shutdown.utils';
 import { LogixiaLogger } from '../logitron-logger';
+import { LogixiaLoggerService } from '../logitron-nestjs.service';
 
 const BASE = { appName: 'app', environment: 'test' };
 
@@ -74,6 +75,65 @@ describe('logger redaction hardening', () => {
     const err = Object.assign(new Error('boom'), { token: 'ERRTOK' });
     await logger.error('failed', { err });
     expect(JSON.stringify(entries[0])).not.toContain('ERRTOK');
+  });
+});
+
+describe('an object logged as the message', () => {
+  const redact = { paths: ['password', '**.cardNumber', 'user.ssn'], autoDetect: true };
+
+  it('gets key and path rules, not only patterns', async () => {
+    const { entries, transport } = capture();
+    const logger = new LogixiaLogger({
+      ...BASE,
+      redact,
+      transports: { custom: [transport] },
+    } as never);
+    await logger.info({
+      email: 'a@b.c',
+      password: 'hunter2',
+      card: { cardNumber: '4111111111111111' },
+      user: { ssn: '123-45-6789' },
+    } as never);
+    const message = String(entries[0]?.message);
+    expect(message).toContain('a@b.c');
+    expect(message).not.toContain('hunter2');
+    expect(message).not.toContain('4111111111111111');
+    expect(message).not.toContain('123-45-6789');
+  });
+
+  it('redacts each element of an array message as if logged alone', async () => {
+    const { entries, transport } = capture();
+    const logger = new LogixiaLogger({
+      ...BASE,
+      redact,
+      transports: { custom: [transport] },
+    } as never);
+    await logger.info([
+      { user: { ssn: '123-45-6789' } },
+      'Bearer abc.def.ghi',
+      [{ password: 'x' }],
+    ] as never);
+    const message = String(entries[0]?.message);
+    expect(message.startsWith('[')).toBe(true);
+    expect(message).not.toContain('123-45-6789');
+    expect(message).not.toContain('abc.def.ghi');
+    expect(message).not.toContain('"x"');
+  });
+
+  it('is redacted when NestJS code calls log(dto)', async () => {
+    const { entries, transport } = capture();
+    const service = new LogixiaLoggerService({
+      ...BASE,
+      redact,
+      transports: { custom: [transport] },
+    } as never);
+    service.log({ email: 'a@b.c', password: 'hunter2' });
+    service.warn({ password: 'hunter3' });
+    await new Promise((resolve) => setImmediate(resolve));
+    const messages = entries.map((e) => String(e.message)).join('\n');
+    expect(messages).toContain('a@b.c');
+    expect(messages).not.toContain('hunter2');
+    expect(messages).not.toContain('hunter3');
   });
 });
 
