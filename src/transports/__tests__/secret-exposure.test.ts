@@ -317,7 +317,8 @@ describe('DatabaseTransport', () => {
     });
     const secrets = ['DB-PASSWORD-VALUE', connectionString];
     expectNoLeak(t, secrets);
-    const error = (await t.write(entry).catch((e: Error) => e)) as Error;
+    await t.write(entry);
+    const error = (await t.flush().catch((e: Error) => e)) as Error;
     expect(error).toBeInstanceOf(Error);
     expectNoSecretIn(
       [error.message, String(error.stack), String((error.cause as Error).message)],
