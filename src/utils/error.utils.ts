@@ -24,6 +24,18 @@ const EXTRA_FIELDS = [
   'type',
 ] as const;
 
+// Fields the own-property pass skips, built once instead of per error.
+const SKIPPED_FIELDS = new Set<string>([
+  'name',
+  'message',
+  'stack',
+  'cause',
+  'errors',
+  ...EXTRA_FIELDS,
+]);
+const NO_OPTIONS: ErrorSerializationOptions = Object.freeze({});
+const NO_FIELDS: string[] = [];
+
 /**
  * Serialize an Error into a plain JSON-safe object, including:
  *  - `name`, `message`, `stack`
@@ -34,9 +46,9 @@ const EXTRA_FIELDS = [
  */
 export function serializeError(
   error: Error,
-  options: ErrorSerializationOptions = {}
+  options: ErrorSerializationOptions = NO_OPTIONS
 ): Record<string, unknown> {
-  const { includeStack = true, maxDepth = 5, excludeFields = [] } = options;
+  const { includeStack = true, maxDepth = 5, excludeFields = NO_FIELDS } = options;
   const seen = new WeakSet<object>();
   return _serializeError(error, includeStack, maxDepth, excludeFields, 0, seen);
 }
@@ -97,21 +109,14 @@ function _serializeError(
   // ── Standard Node.js / HTTP error fields ───────────────────────────────────
   const errorRecord = error as unknown as Record<string, unknown>;
   for (const field of EXTRA_FIELDS) {
-    if (!excludeFields.includes(field) && field in error && errorRecord[field] !== undefined) {
+    if (!excludeFields.includes(field) && errorRecord[field] !== undefined) {
       serialized[field] = errorRecord[field];
     }
   }
 
   // ── All other own enumerable properties ────────────────────────────────────
-  const skip = new Set<string>([
-    'name',
-    'message',
-    'stack',
-    'cause',
-    'errors',
-    ...EXTRA_FIELDS,
-    ...excludeFields,
-  ]);
+  const skip =
+    excludeFields.length === 0 ? SKIPPED_FIELDS : new Set([...SKIPPED_FIELDS, ...excludeFields]);
 
   for (const key of Object.getOwnPropertyNames(error)) {
     if (skip.has(key)) continue;
