@@ -144,6 +144,9 @@ jobs:
       - name: Check browser entry runs without Node globals
         run: npm run check:browser
 
+      - name: Check the built package runs
+        run: npm run check:dist
+
       - name: Check package exports
         run: npm run check:exports
 
