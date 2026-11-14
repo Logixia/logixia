@@ -28,7 +28,7 @@ import type {
 } from '../types';
 import { LogLevel } from '../types';
 import { safeToString } from '../utils/coerce.utils';
-import { isError, serializeError } from '../utils/error.utils';
+import { isError, serializeError, serializeNestedErrors } from '../utils/error.utils';
 import { internalError, internalLog, internalWarn } from '../utils/internal-log';
 import { _getOtelPayloadIfEnabled, _isOtelBridgeEnabled } from '../utils/otel';
 import { applyRedaction, applyRedactionToString, REDACTION_FAILED } from '../utils/redact.utils';
@@ -966,12 +966,14 @@ export class LogixiaLogger<
   private log(
     level: string,
     message: string,
-    data?: Record<string, unknown>
+    rawData?: Record<string, unknown>
   ): void | Promise<void> {
     // One read: protectSecrets() makes `this.config` a getter.
     const config = this.config;
     if (config.silent) return;
     if (!this.shouldLog(level)) return;
+    // Before the merges below, because spreading an Error drops its message and stack.
+    const data = rawData instanceof Error ? { error: serializeError(rawData) } : rawData;
 
     // One read of each ALS store per call. TraceContext is the source of truth for
     // the trace ID; a traceId on a bare LogixiaContext scope is only a fallback.
@@ -1012,7 +1014,16 @@ export class LogixiaLogger<
 
     // ── Feature 2: Redaction ─────────────────────────────────────────────────
     // Avoid spread allocation when contextData is empty (the common case)
-    const rawPayload = this._hasContextData ? { ...this.contextData, ...mergedData } : mergedData;
+    // Before redaction, so patterns and paths also apply to an error's message and stack.
+    let rawPayload = this._hasContextData ? { ...this.contextData, ...mergedData } : mergedData;
+    if (rawPayload) {
+      try {
+        rawPayload = serializeNestedErrors(rawPayload);
+      } catch (error) {
+        // A hostile proxy must not reject the log call. Redaction below still fails closed.
+        internalError('Error serialization failed', error);
+      }
+    }
     // _hasRedact is pre-computed in _buildPerfCaches() — skips the entire redaction
     // code path when no redact config is present (fast path for the common case).
     let payload: Record<string, unknown> | undefined;

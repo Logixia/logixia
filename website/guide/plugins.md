@@ -35,6 +35,8 @@ logger.use(buildTag);
 | `onError(error, entry?)` | When a transport write fails.                                                                                                                                      |
 | `onShutdown()`           | When the logger is closed.                                                                                                                                         |
 
+An `Error` in a payload reaches `onLog` as a plain object with `name`, `message` and `stack`, so check those fields and not `instanceof Error`.
+
 Plugins run in registration order and each receives the previous plugin's output. Errors thrown inside a hook are swallowed, so a faulty plugin cannot break logging; when `onLog` throws, the chain continues with the entry as it was before that plugin.
 
 Because `onLog` runs after redaction, a plugin never sees values that [`redact`](/guide/redaction) removed.
