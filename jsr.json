@@ -30,14 +30,7 @@
     "picocolors": "npm:picocolors@^1.1.1"
   },
   "publish": {
-    "include": [
-      "src/**/*.ts",
-      "README.md",
-      "LICENSE"
-    ],
-    "exclude": [
-      "src/**/__tests__/**",
-      "src/**/*.test.ts"
-    ]
+    "include": ["src/**/*.ts", "README.md", "LICENSE"],
+    "exclude": ["src/**/__tests__/**", "src/**/*.test.ts"]
   }
 }
