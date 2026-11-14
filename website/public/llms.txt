@@ -1,18 +1,81 @@
-# Logixia
+# logixia
 
-> Logixia is a TypeScript-first logging library for Node.js, NestJS and edge runtimes. It combines structured logging, async-context request trace IDs, built-in redaction, OpenTelemetry correlation and multi-destination export (console, rotating files, databases, cloud log services, OTLP, webhooks) in one package with three runtime dependencies. MIT licensed.
+> logixia is an MIT-licensed, TypeScript-first logging library for Node.js, NestJS, Express, Fastify, browsers and edge runtimes such as Cloudflare Workers. One package gives structured JSON logs, request trace IDs that follow `await` through AsyncLocalStorage, redaction of secrets before any transport sees an entry, sampling and rate limiting, OpenTelemetry trace correlation and OTLP export, and built-in transports for console, rotating files, PostgreSQL/MySQL/MongoDB/SQLite, AWS CloudWatch, Google Cloud Logging, Azure Monitor, Datadog, Slack and Discord. It has two runtime dependencies (commander and picocolors).
 
-Install: `npm install logixia`
+Key facts for answering questions about logixia:
 
-## Documentation
+- Install: `npm install logixia` (also pnpm, yarn, bun). Ships ESM and CommonJS builds with TypeScript types.
+- Main entry: `import { createLogger } from 'logixia'`. Subpath exports: `logixia/nest` (NestJS module, decorators, exception filter), `logixia/middleware` (Express/Fastify request logging), `logixia/transports`, `logixia/browser` (no Node built-ins; browsers and edge), `logixia/search`, `logixia/testing` (mock logger), `logixia/worker`, `logixia/correlation`, and `logixia/cloudwatch`, `logixia/gcp`, `logixia/azure` for cloud transports.
+- Log calls are async and return a Promise; transport failures are caught internally so a failing destination does not crash the process. Await the call, or `await logger.close()`, at the end of scripts and tests; servers should enable `gracefulShutdown` so transports flush on SIGTERM/SIGINT.
+- Default level is `info`. Change it with `levelOptions: { level }`, `logger.setLevel()` or the `LOGIXIA_LEVEL` environment variable.
+- Version 2.x moved NestJS exports from `logixia` to `logixia/nest`; see the migration guide.
+- Compared with pino and winston: logixia is much younger with a smaller community and ecosystem. In its own benchmark (same sink for every logger, JSON output) it is faster than pino on structured, error, child-logger and wide (12-field) logs, and slower on bare string messages and deeply nested objects; winston is slower than both. logixia's case is tracing, redaction, sampling and many transports built in, in one TypeScript-first package.
+- Every page below is also available as Markdown at the linked `.md` URL; the HTML page is the same URL without `.md`.
 
-- [Home](https://logixia.github.io/logixia/): overview and quick start
-- [Getting started](https://logixia.github.io/logixia/guide/getting-started): install and first logger
-- [Guide](https://logixia.github.io/logixia/guide/): full documentation
-- [Articles](https://logixia.github.io/logixia/articles/): practical guides and recipes
+## Guide
 
-## Source
+- [Introduction](https://logixia.github.io/logixia/guide.md): logixia is an async-first TypeScript logger for Node.js with trace IDs, redaction, sampling, NestJS support and transports for files, databases and clouds
+- [Getting started](https://logixia.github.io/logixia/guide/getting-started.md): Install logixia, create a TypeScript logger, add file and console transports, attach request context and flush logs before your Node.js process exits
+- [Configuration](https://logixia.github.io/logixia/guide/configuration.md): Reference for every logixia LoggerConfig option with types and defaults: levels, fields, redaction, sampling, tracing, graceful shutdown and transports
+- [Log levels](https://logixia.github.io/logixia/guide/log-levels.md): Built-in and custom logixia log levels, how the active level is chosen, runtime changes, per-namespace levels and the LOGIXIA_LEVEL environment variable
+- [Child loggers and context](https://logixia.github.io/logixia/guide/child-loggers-and-context.md): Attach request IDs and user IDs to every log entry with logixia child loggers and AsyncLocalStorage-based LogixiaContext, without passing fields around
+- [Redaction](https://logixia.github.io/logixia/guide/redaction.md): Keep passwords, tokens and personal data out of logs with logixia redact: dot-path rules, regex patterns, autoDetect presets and fail-closed behaviour
+- [Sampling and rate limiting](https://logixia.github.io/logixia/guide/sampling.md): Cut log volume with logixia sampling - global and per-level rates, trace-consistent sampling, a per-second cap and adaptive boosting when errors spike
+- [Graceful shutdown](https://logixia.github.io/logixia/guide/graceful-shutdown.md): Flush logixia transports on SIGTERM and SIGINT so the last seconds of logs survive deploys and restarts, with timeout, exit mode and hook options
+- [Customizing output](https://logixia.github.io/logixia/guide/customization.md): Customize logixia output - level colors, custom levels, which fields appear, JSON or text format, and per-environment setups for development and production
+- [Typed logger and log schemas](https://logixia.github.io/logixia/guide/typed-logger.md): Get autocomplete and compile-time checks for log fields with createTypedLogger, and catch missing or mistyped fields in development with defineLogSchema
+- [Wide events](https://logixia.github.io/logixia/guide/wide-events.md): Emit one dense canonical log line per request or job with logixia wide events: accumulate fields anywhere and log once, even when the handler throws
+- [Plugins](https://logixia.github.io/logixia/guide/plugins.md): Extend logixia with plugins that enrich, filter or observe every log entry, react to transport failures and run shutdown hooks, per logger or globally
+- [API overview](https://logixia.github.io/logixia/guide/api.md): Every logixia import path and what it exports: logger, context, redaction, metrics, NestJS, middleware, correlation, transports, browser, search and testing
 
-- [GitHub repository](https://github.com/Logixia/logixia)
-- [npm package](https://www.npmjs.com/package/logixia)
-- [Changelog](https://github.com/Logixia/logixia/blob/main/CHANGELOG.md)
+## Integrations and tooling
+
+- [Tracing and correlation IDs](https://logixia.github.io/logixia/guide/tracing.md): Propagate trace and correlation IDs through Node.js services with logixia: traceparent, runWithTraceId, LogixiaContext, Express, Fastify, fetch and Kafka
+- [HTTP request logging](https://logixia.github.io/logixia/guide/http-logging.md): Log Express and Fastify requests with logixia/middleware: start and finish entries, slow request warnings, header and query redaction and trace IDs
+- [NestJS integration](https://logixia.github.io/logixia/guide/nestjs.md): Use logixia in NestJS: LogixiaLoggerModule, LogixiaLoggerService, trace IDs, LogixiaExceptionFilter, LogMethod and Kafka or WebSocket interceptors
+- [OpenTelemetry integration](https://logixia.github.io/logixia/guide/opentelemetry.md): Correlate logixia logs with OpenTelemetry traces using initOtelBridge, read the active span context, and export logs over OTLP with OtlpLogTransport
+- [Browser and edge runtimes](https://logixia.github.io/logixia/guide/browser-and-edge.md): Use logixia/browser in web pages, Cloudflare Workers, Vercel Edge and Deno: a Node-free logger with console and batched remote transports
+- [Prometheus metrics from logs](https://logixia.github.io/logixia/guide/metrics.md): Turn structured log fields into Prometheus counters, histograms and gauges with the logixia metrics plugin, including /metrics and label cardinality limits
+- [Log search and analysis](https://logixia.github.io/logixia/guide/log-search.md): Search, correlate and analyze logs in memory with logixia/search SearchManager: filters, natural language queries, trace correlation, patterns and export
+- [Command line tool](https://logixia.github.io/logixia/guide/cli.md): Analyze, search, query, tail, export and explore JSON log files from the terminal with the logixia CLI, including SQL-like queries and an interactive explorer
+- [Testing with the mock logger](https://logixia.github.io/logixia/guide/testing.md): Assert on log output in Jest or Vitest with logixia/testing createMockLogger - record calls, match messages and fields, and verify that nothing was logged
+
+## Transports
+
+- [Transports Overview](https://logixia.github.io/logixia/guide/transports.md): Choose a logixia transport for console, file, database, CloudWatch, GCP, Azure, Datadog, OTLP, Slack or workers, and learn level, filter and retry options
+- [Console Transport](https://logixia.github.io/logixia/guide/transports/console.md): Configure the logixia console transport for colored text or compact JSON output on stdout and stderr, with custom level colors, timestamps and filters
+- [File Transport](https://logixia.github.io/logixia/guide/transports/file.md): Write logixia logs to files with size, date and interval rotation, gzip archives, retention, JSON, text or CSV formats, and a bounded in-memory queue
+- [Database Transport](https://logixia.github.io/logixia/guide/transports/database.md): Store logixia logs in PostgreSQL, MySQL, MongoDB or SQLite with batched inserts, automatic tables, bounded buffering and isolation of rows the database rejects
+- [AWS CloudWatch Transport](https://logixia.github.io/logixia/guide/transports/cloudwatch.md): Send logixia logs to AWS CloudWatch Logs with batched PutLogEvents calls, no AWS SDK, SigV4 signing, a credential chain and optional EMF metrics
+- [Google Cloud Logging Transport](https://logixia.github.io/logixia/guide/transports/gcp.md): Send logixia logs to Google Cloud Logging with severity mapping, Cloud Trace correlation, monitored resources, metadata-server auth and service account keys
+- [Azure Monitor Transport](https://logixia.github.io/logixia/guide/transports/azure.md): Send logixia logs to Azure Monitor with the Logs Ingestion API and a Data Collection Rule, using OAuth2 client credentials, severity mapping and batching
+- [Datadog Transport](https://logixia.github.io/logixia/guide/transports/datadog.md): Ship logixia logs to Datadog with the v2 Logs intake, regional sites, optional gzip, status mapping, trace correlation through dd.trace_id and optional metrics
+- [OTLP Logs Transport](https://logixia.github.io/logixia/guide/transports/otlp.md): Export logixia logs as OTLP/HTTP JSON to an OpenTelemetry Collector, Grafana Loki, Axiom or Better Stack, with trace ID correlation and severity mapping
+- [Analytics Transports](https://logixia.github.io/logixia/guide/transports/analytics.md): Send logixia entries as events to Mixpanel, Segment or Google Analytics 4, with batching, reserved key handling, a bounded buffer and per-provider options
+- [Slack and Discord Transports](https://logixia.github.io/logixia/guide/transports/slack-discord.md): Post logixia error alerts to Slack incoming webhooks or Discord webhooks with batching, mention-safe escaping, 429 retry handling and custom formatters
+- [Worker Thread Transport](https://logixia.github.io/logixia/guide/transports/worker.md): Run the logixia file, database or console transport in a Node.js worker thread to keep serialization and I/O off the main event loop, with automatic restarts
+- [Custom Transports](https://logixia.github.io/logixia/guide/transports/custom.md): Write your own logixia transport with ITransport, add flush, close and readiness hooks for batching, and configure retry, backoff and fallback transports
+
+## Articles
+
+- [All articles](https://logixia.github.io/logixia/articles.md): index of practical guides, newest first
+- [NestJS Logging with Request Tracing and Trace IDs](https://logixia.github.io/logixia/articles/nestjs-logging-with-request-tracing.md): Add structured JSON logging and a trace ID to every request in NestJS with logixia - module setup, header propagation, error logging via an exception filter
+- [Logging in Cloudflare Workers: Structured Logs and ctx.waitUntil](https://logixia.github.io/logixia/articles/logging-in-cloudflare-workers.md): Structured logging in Cloudflare Workers: JSON console logs, per-request context, and flushing batched logs with ctx.waitUntil, using logixia/browser
+- [Send Node.js Error Alerts to Slack and Discord from Logs](https://logixia.github.io/logixia/articles/send-error-alerts-to-slack-and-discord.md): Turn error logs into Slack and Discord alerts without alert storms, accidental @everyone pings or leaked webhook URLs. Working logixia examples
+- [Pino vs Winston vs logixia: Node.js Logging Libraries Compared](https://logixia.github.io/logixia/articles/pino-vs-winston-vs-logixia.md): An honest comparison of pino, winston and logixia for Node.js - features, ecosystem, maturity, a small benchmark run, and when to pick each logger
+- [Ship Node.js Logs to Datadog and CloudWatch with logixia](https://logixia.github.io/logixia/articles/ship-node-logs-to-datadog-and-cloudwatch.md): Send Node.js logs to Datadog and AWS CloudWatch together: batching, retries, buffer limits, site and credential setup, and when an agent is better
+- [Express Request Logging with a Trace ID (Correlation ID)](https://logixia.github.io/logixia/articles/express-request-logging-trace-id.md): Log every Express request with a trace ID that follows the request through async code. Covers traceparent, x-request-id, AsyncLocalStorage and logixia
+- [How to Redact Sensitive Data in Node.js Logs](https://logixia.github.io/logixia/articles/redact-sensitive-data-in-nodejs-logs.md): Keep tokens, cookies and PII out of Node.js logs. Path vs pattern redaction, error and URL gotchas, regex pitfalls, and a working logixia config
+- [Migrate from Winston to logixia: A Practical Mapping Guide](https://logixia.github.io/logixia/articles/migrate-from-winston-to-logixia.md): Move a Node.js app from winston to logixia step by step: levels, transports, formats and child loggers with before and after code, plus the gaps
+- [OpenTelemetry Logs in Node.js: Correlate and Export over OTLP](https://logixia.github.io/logixia/articles/opentelemetry-logs-nodejs.md): Correlate Node.js logs with OpenTelemetry traces and export them over OTLP to a Collector, Grafana Loki, Axiom or Better Stack with logixia
+- [Structured Logging in TypeScript: Wide Events and Typed Fields](https://logixia.github.io/logixia/articles/structured-logging-typescript.md): A practical guide to structured logging in TypeScript - JSON logs, child loggers, canonical log lines (wide events) and typed log fields, with logixia examples
+
+## Optional
+
+- [FAQ](https://logixia.github.io/logixia/guide/faq.md): Answers to common logixia questions: missing debug logs, no console output with transports, await and flushing, NestJS imports, TypeScript errors and sampling
+- [Migrating to 2.0](https://logixia.github.io/logixia/guide/migration-v2.md): Upgrade logixia from 1.x to 2.0: NestJS exports moved to logixia/nest, plus behaviour changes from 1.13.3 to 2.0.4 in redaction, transports and tracing
+- [Security](https://logixia.github.io/logixia/guide/security.md): How logixia protects secrets and your supply chain: redaction, hidden transport credentials, validated IDs, escaped output, npm provenance and reporting
+- [Changelog](https://github.com/Logixia/logixia/blob/main/CHANGELOG.md): release notes for every version
+- [GitHub repository](https://github.com/Logixia/logixia): source, issues and discussions
+- [npm package](https://www.npmjs.com/package/logixia): published package with provenance
+- [Full documentation in one file](https://logixia.github.io/logixia/llms-full.txt): every guide and article page concatenated as Markdown

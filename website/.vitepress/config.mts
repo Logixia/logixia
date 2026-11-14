@@ -1,4 +1,5 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import llmstxt from 'vitepress-plugin-llms';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type HeadConfig } from 'vitepress';
 import { readDate } from './meta';
@@ -49,6 +50,101 @@ function breadcrumbs(relativePath: string, title: string) {
   };
 }
 
+const VERSION = process.env['LOGIXIA_VERSION'];
+const NPM = 'https://www.npmjs.com/package/logixia';
+const ORG_ID = `${SITE}#organization`;
+const SITE_ID = `${SITE}#website`;
+const SOFTWARE_ID = `${SITE}#software`;
+const organization = {
+  '@type': 'Organization',
+  '@id': ORG_ID,
+  name: 'logixia',
+  url: SITE,
+  logo: { '@type': 'ImageObject', url: `${SITE}logo.svg` },
+  sameAs: [REPO, NPM, 'https://github.com/Logixia'],
+};
+const website = {
+  '@type': 'WebSite',
+  '@id': SITE_ID,
+  url: SITE,
+  name: 'logixia',
+  description: SITE_DESCRIPTION,
+  inLanguage: 'en-US',
+  publisher: { '@id': ORG_ID },
+};
+const software = {
+  '@type': ['SoftwareApplication', 'SoftwareSourceCode'],
+  '@id': SOFTWARE_ID,
+  name: 'logixia',
+  alternateName: 'logixia logger',
+  description: SITE_DESCRIPTION,
+  url: SITE,
+  sameAs: [REPO, NPM],
+  codeRepository: REPO,
+  downloadUrl: NPM,
+  installUrl: `${SITE}guide/getting-started`,
+  programmingLanguage: { '@type': 'ComputerLanguage', name: 'TypeScript' },
+  runtimePlatform: ['Node.js', 'Cloudflare Workers', 'Web browsers'],
+  applicationCategory: 'DeveloperApplication',
+  applicationSubCategory: 'Logging library',
+  operatingSystem: 'Cross-platform',
+  softwareRequirements: 'Node.js 16 or later',
+  keywords:
+    'TypeScript logger, Node.js logging, NestJS logger, structured logging, request tracing, log redaction, OpenTelemetry, OTLP',
+  license: 'https://opensource.org/licenses/MIT',
+  isAccessibleForFree: true,
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  author: { '@id': ORG_ID },
+  publisher: { '@id': ORG_ID },
+  ...(VERSION ? { softwareVersion: VERSION } : {}),
+};
+const graph = (...nodes: unknown[]): HeadConfig =>
+  jsonLd({ '@context': 'https://schema.org', '@graph': nodes });
+const stripContext = (n: object) => {
+  const { '@context': _c, ...rest } = n as Record<string, unknown>;
+  return rest;
+};
+function authorOf(frontmatter: Record<string, unknown>) {
+  const a = frontmatter['author'] as { name?: string; url?: string } | undefined;
+  return a?.name
+    ? { '@type': 'Person', name: a.name, ...(a.url ? { url: a.url } : {}) }
+    : { '@id': ORG_ID };
+}
+const plain = (s: string) =>
+  s
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/[*_`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+function faqPairs(relativePath: string): { q: string; a: string }[] {
+  const md = readFileSync(`${srcDir}${relativePath}`, 'utf8').replace(/^---[\s\S]*?\n---\n/, '');
+  if (relativePath === 'guide/faq.md') {
+    return md
+      .split(/^## /m)
+      .slice(1)
+      .map((block) => {
+        const [q = '', ...rest] = block.split('\n');
+        return { q: plain(q), a: plain(rest.join('\n').split(/\n```/)[0] ?? '') };
+      })
+      .filter((p) => p.q && p.a);
+  }
+  const section = md.split(/^## FAQ\s*$/m)[1]?.split(/^## /m)[0] ?? '';
+  return [...section.matchAll(/^\*\*(.+?\?)\*\*\s*(.+)$/gm)].map((m) => ({
+    q: plain(m[1] ?? ''),
+    a: plain(m[2] ?? ''),
+  }));
+}
+const faqNode = (url: string, pairs: { q: string; a: string }[]) => ({
+  '@type': 'FAQPage',
+  '@id': `${url}#faq`,
+  url,
+  mainEntity: pairs.map((p) => ({
+    '@type': 'Question',
+    name: p.q,
+    acceptedAnswer: { '@type': 'Answer', text: p.a },
+  })),
+});
+
 export default defineConfig({
   lang: 'en-US',
   title: 'logixia',
@@ -60,11 +156,24 @@ export default defineConfig({
   srcExclude: ['README.md'],
   lastUpdated: true,
   sitemap: { hostname: SITE },
+  vite: {
+    plugins: [
+      llmstxt({
+        domain: 'https://logixia.github.io',
+        generateLLMsTxt: false,
+        generateLLMsFullTxt: true,
+        generateLLMFriendlyDocsForEachPage: true,
+        injectLLMHint: false,
+        ignoreFiles: ['README.md', '404.md'],
+      }),
+    ],
+  },
 
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: `${BASE}favicon.svg` }],
     ['meta', { name: 'theme-color', content: '#0b0b0f' }],
     ['meta', { name: 'author', content: 'logixia contributors' }],
+    ['link', { rel: 'describedby', href: `${BASE}llms.txt` }],
   ],
 
   markdown: { theme: { light: 'github-light', dark: 'github-dark' } },
@@ -141,53 +250,58 @@ export default defineConfig({
       }
     }
 
+    const isGuide = relativePath.startsWith('guide/');
     if (isHome) {
-      head.push(
-        jsonLd({
-          '@context': 'https://schema.org',
-          '@type': 'SoftwareSourceCode',
-          name: 'logixia',
-          description: SITE_DESCRIPTION,
-          url: SITE,
-          codeRepository: REPO,
-          programmingLanguage: 'TypeScript',
-          runtimePlatform: 'Node.js',
-          license: 'https://opensource.org/licenses/MIT',
-          author: { '@type': 'Organization', name: 'logixia contributors' },
-        }),
-        jsonLd({
-          '@context': 'https://schema.org',
-          '@type': 'SoftwareApplication',
-          name: 'logixia',
-          description: SITE_DESCRIPTION,
-          url: SITE,
-          applicationCategory: 'DeveloperApplication',
-          operatingSystem: 'Any',
-          offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
-        })
-      );
-    } else if (isArticle) {
-      head.push(
-        jsonLd({
-          '@context': 'https://schema.org',
+      head.push(graph(organization, website, software));
+    } else if (isArticle || isGuide) {
+      const nodes: object[] = [
+        {
           '@type': 'TechArticle',
-          headline: String(title),
+          '@id': `${url}#article`,
+          headline: String(title).slice(0, 110),
           description: pageDescription,
           url,
           mainEntityOfPage: url,
           image: absImage,
+          inLanguage: 'en-US',
+          isPartOf: { '@id': SITE_ID },
+          about: { '@id': SOFTWARE_ID },
           ...(published ? { datePublished: published } : {}),
           ...(dateModified ? { dateModified } : {}),
-          author: { '@type': 'Organization', name: 'logixia contributors' },
-          publisher: { '@type': 'Organization', name: 'logixia', url: SITE },
+          author: authorOf(frontmatter),
+          publisher: { '@id': ORG_ID },
           ...(Array.isArray(frontmatter['tags'])
             ? { keywords: frontmatter['tags'].join(', ') }
             : {}),
-        }),
-        jsonLd(breadcrumbs(relativePath, String(title)))
+        },
+        stripContext(breadcrumbs(relativePath, String(title))),
+        organization,
+        { '@type': 'WebSite', '@id': SITE_ID, url: SITE, name: 'logixia' },
+        {
+          '@type': 'SoftwareSourceCode',
+          '@id': SOFTWARE_ID,
+          name: 'logixia',
+          url: SITE,
+          codeRepository: REPO,
+        },
+      ];
+      const pairs = faqPairs(relativePath);
+      if (pairs.length) nodes.push(faqNode(url, pairs));
+      head.push(graph(...nodes));
+    } else if (relativePath === 'articles/index.md') {
+      head.push(
+        graph(
+          {
+            '@type': 'CollectionPage',
+            '@id': `${url}#page`,
+            url,
+            name: String(title),
+            isPartOf: { '@id': SITE_ID },
+            about: { '@id': SOFTWARE_ID },
+          },
+          stripContext(breadcrumbs(relativePath, String(title)))
+        )
       );
-    } else if (relativePath.startsWith('guide/')) {
-      head.push(jsonLd(breadcrumbs(relativePath, String(title))));
     }
 
     return head;

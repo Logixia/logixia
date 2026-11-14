@@ -1,7 +1,7 @@
 {
   "name": "logixia",
   "version": "1.12.0",
-  "description": "Async-first TypeScript logger for Node, NestJS and the edge: request tracing, redaction, OpenTelemetry/OTLP export, file/database/cloud transports, sampling and log search. Winston/Pino alternative.",
+  "description": "TypeScript logger for Node.js, NestJS and edge runtimes: structured JSON logs, request trace IDs, redaction, OpenTelemetry/OTLP and cloud transports. Pino/Winston alternative.",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -216,7 +216,13 @@
     "log-rotation",
     "log-search",
     "prometheus",
-    "observability"
+    "observability",
+    "nodejs-logger",
+    "json-logger",
+    "log-redaction",
+    "pii",
+    "bun",
+    "nodejs"
   ],
   "author": {
     "name": "Sanjeev Sharma",
