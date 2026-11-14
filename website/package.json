@@ -13,13 +13,17 @@
   },
   "devDependencies": {
     "gray-matter": "^4.0.3",
-    "vitepress": "^1.6.4"
+    "vitepress": "^1.6.4",
+    "vitepress-plugin-llms": "1.14.0"
   },
   "dependencies": {
     "@fontsource-variable/geist": "5.3.0",
     "@fontsource-variable/geist-mono": "5.3.0"
   },
   "overrides": {
-    "vite": "^6.4.5"
+    "vite": "^6.4.5",
+    "vitepress-plugin-llms": {
+      "minimatch": "11.0.3"
+    }
   }
 }
