@@ -32,7 +32,7 @@ import { LogLevel } from '../types';
  * duplicate / conflicting signatures.
  */
 type _ServiceBuiltinLevels =
-  'error' | 'warn' | 'info' | 'debug' | 'verbose' | 'trace' | 'log' | 'logLevel';
+  'error' | 'warn' | 'info' | 'debug' | 'verbose' | 'trace' | 'log' | 'fatal' | 'logLevel';
 
 /**
  * Mapped type that adds one method per *custom* level (i.e. every key in TLevels
@@ -115,14 +115,44 @@ import { internalError } from '../utils/internal-log';
 import { getTraceContextKey, TraceContext } from '../utils/trace.utils';
 import { LogixiaLogger } from './logitron-logger';
 
+// A trailing string param is a stack trace only when it looks like one.
+const looksLikeStack = (value: string): boolean => value.includes('\n    at ');
+
+// NestJS `LogLevel` names -> logixia levels (`verbose()` logs at `trace`), and logixia levels least to most verbose.
+const NEST_LEVEL_TO_LOGIXIA: Record<string, LogLevelString> = {
+  fatal: LogLevel.ERROR,
+  error: LogLevel.ERROR,
+  warn: LogLevel.WARN,
+  log: LogLevel.INFO,
+  debug: LogLevel.DEBUG,
+  verbose: LogLevel.TRACE,
+};
+const LEVEL_VERBOSITY: readonly string[] = [
+  LogLevel.ERROR,
+  LogLevel.WARN,
+  LogLevel.INFO,
+  LogLevel.DEBUG,
+  LogLevel.TRACE,
+];
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) return false;
+  const proto: unknown = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+function describeObject(value: object): string {
+  return Array.isArray(value) ? safeToString(value) : `[${value.constructor?.name ?? 'Object'}]`;
+}
+
 @Injectable({ scope: Scope.TRANSIENT })
 export class LogixiaLoggerService implements LoggerService {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- index signature required for dynamic custom-level methods
   [K: string]: any;
 
-  private logger: LogixiaLogger;
+  private logger!: LogixiaLogger;
   private context?: string;
-  private _mergedConfig: LoggerConfig;
+  private _mergedConfig!: LoggerConfig;
 
   constructor(config?: LoggerConfig) {
     const defaultConfig: LoggerConfig = {
@@ -163,9 +193,15 @@ export class LogixiaLoggerService implements LoggerService {
       },
     };
 
+    const mergedConfig = { ...defaultConfig, ...config };
+    this._attach(mergedConfig, new LogixiaLogger(mergedConfig));
+  }
+
+  // Shared by the constructor and child(): wraps `logger` without building a root of its own.
+  private _attach(mergedConfig: LoggerConfig, logger: LogixiaLogger): void {
     protectSecrets(this, ['_mergedConfig']);
-    this._mergedConfig = { ...defaultConfig, ...config };
-    this.logger = new LogixiaLogger(this._mergedConfig);
+    this._mergedConfig = mergedConfig;
+    this.logger = logger;
     this._createCustomLevelMethods();
   }
 
@@ -174,33 +210,35 @@ export class LogixiaLoggerService implements LoggerService {
   private _createCustomLevelMethods(): void {
     const levels = this._mergedConfig.levelOptions?.levels;
     if (!levels) return;
-    for (const levelName of Object.keys(levels)) {
-      const lower = levelName.toLowerCase();
+    const self = this as Record<string, unknown>;
+    const define = (method: string, levelName: string): void => {
       // Skip levels that already have a built-in implementation on this class
-      if (typeof (this as Record<string, unknown>)[lower] !== 'undefined') continue;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (this as any)[lower] = async (
-        message: string,
-        data?: Record<string, unknown>
-      ): Promise<void> => {
-        return this.logger.logLevel(lower, message, data);
-      };
-    }
+      if (typeof self[method] !== 'undefined') return;
+      self[method] = async (message: string, data?: Record<string, unknown>): Promise<void> =>
+        this.logger.logLevel(levelName, message, data);
+    };
+    const names = Object.keys(levels);
+    // Exact names first, so a lowercase alias never takes the slot of a level that is really named that.
+    for (const levelName of names) define(levelName, levelName);
+    // Lowercase alias kept for callers that used it; it logs at the exact level.
+    for (const levelName of names) define(levelName.toLowerCase(), levelName);
   }
 
   // ── log / info ──────────────────────────────────────────────────────────────
 
   /**
-   * NestJS `LoggerService.log` — void, string context.
-   * Maps internally to `info`.
+   * NestJS `LoggerService.log` — void. Maps internally to `info`.
+   * A trailing string is the context for this call only; object params are merged into the payload.
    *
    * @example `logger.log('User signed up', 'AuthService')`
+   * @example `logger.log('User signed up', { userId: 'u_abc' }, 'AuthService')`
    */
-  log(message: unknown, context?: string): void {
-    this.setContextIfProvided(context);
-    this.logger
-      .info(this.formatMessage(message))
-      .catch((err: unknown) => internalError('LogixiaLoggerService.log failed', err));
+  log(message: unknown, ...optionalParams: unknown[]): void {
+    const { context, data } = this.parseParams(optionalParams);
+    this.reportFailure(
+      'log',
+      this.withContext(context, () => this.logger.info(this.formatMessage(message), data))
+    );
   }
 
   /**
@@ -223,37 +261,56 @@ export class LogixiaLoggerService implements LoggerService {
   error(message: string | Error, data: Record<string, unknown>): Promise<void>;
 
   /**
-   * NestJS compat overload — string trace + optional context, returns `void`.
+   * NestJS compat overload — optional stack trace, then an optional context
+   * that applies to this call only, returns `void`.
    *
    * @example `logger.error('Something failed', err.stack, 'AuthService')`
    */
-  error(message: unknown, trace?: string, context?: string): void;
+  error(message: unknown, ...optionalParams: unknown[]): void;
 
-  error(
-    message: unknown,
-    dataOrTrace?: Record<string, unknown> | string,
-    context?: string
-  ): void | Promise<void> {
-    // ── Native path: second arg is a structured-data object ──────────────────
-    if (typeof dataOrTrace === 'object' && dataOrTrace !== null) {
+  error(message: unknown, ...optionalParams: unknown[]): void | Promise<void> {
+    // ── Native path: a single structured-data object ─────────────────────────
+    const only = optionalParams[0];
+    if (optionalParams.length === 1 && typeof only === 'object' && only !== null) {
+      const data = only as Record<string, unknown>;
       return message instanceof Error
-        ? this.logger.error(message, dataOrTrace)
-        : this.logger.error(this.formatMessage(message), dataOrTrace);
+        ? this.logger.error(message, data)
+        : this.logger.error(this.formatMessage(message), data);
     }
 
-    // ── NestJS compat path: second arg is trace string or undefined ──────────
-    this.setContextIfProvided(context);
-    const errorData: Record<string, string> = {};
-    if (typeof dataOrTrace === 'string' && dataOrTrace) {
-      errorData.stack = dataOrTrace;
-    }
+    // ── NestJS compat path ───────────────────────────────────────────────────
+    const { context, data } = this.parseParams(optionalParams, true);
+    this.reportFailure(
+      'error',
+      this.withContext(context, () =>
+        message instanceof Error
+          ? this.logger.error(message, data)
+          : this.logger.error(this.formatMessage(message), data)
+      )
+    );
+  }
 
-    const logPromise =
-      message instanceof Error
-        ? this.logger.error(message, errorData)
-        : this.logger.error(this.formatMessage(message), errorData);
+  // ── fatal ──────────────────────────────────────────────────────────────────
 
-    logPromise.catch((err: unknown) => internalError('LogixiaLoggerService.error failed', err));
+  /**
+   * NestJS `LoggerService.fatal`. logixia has no level above `error`, so this logs
+   * at `error` with `fatal: true` in the payload, or at a custom `fatal` level when
+   * one is configured.
+   *
+   * @example `logger.fatal('Cannot reach the database, shutting down', 'Bootstrap')`
+   */
+  fatal(message: unknown, ...optionalParams: unknown[]): void {
+    const { context, data } = this.parseParams(optionalParams, true);
+    const text = this.formatMessage(message);
+    const hasFatalLevel = this._mergedConfig.levelOptions?.levels?.['fatal'] !== undefined;
+    this.reportFailure(
+      'fatal',
+      this.withContext(context, () =>
+        hasFatalLevel
+          ? this.logger.logLevel('fatal', text, data)
+          : this.logger.error(text, { ...data, fatal: true })
+      )
+    );
   }
 
   // ── warn ───────────────────────────────────────────────────────────────────
@@ -266,20 +323,23 @@ export class LogixiaLoggerService implements LoggerService {
   warn(message: string, data: Record<string, unknown>): Promise<void>;
 
   /**
-   * NestJS compat overload — optional context string, returns `void`.
+   * NestJS compat overload — optional context for this call only, plus object
+   * params merged into the payload, returns `void`.
    *
    * @example `logger.warn('Deprecated API used', 'PaymentService')`
    */
-  warn(message: unknown, context?: string): void;
+  warn(message: unknown, ...optionalParams: unknown[]): void;
 
-  warn(message: unknown, dataOrContext?: Record<string, unknown> | string): void | Promise<void> {
-    if (typeof dataOrContext === 'object' && dataOrContext !== null) {
-      return this.logger.warn(this.formatMessage(message), dataOrContext);
+  warn(message: unknown, ...optionalParams: unknown[]): void | Promise<void> {
+    const only = optionalParams[0];
+    if (optionalParams.length === 1 && typeof only === 'object' && only !== null) {
+      return this.logger.warn(this.formatMessage(message), only as Record<string, unknown>);
     }
-    this.setContextIfProvided(typeof dataOrContext === 'string' ? dataOrContext : undefined);
-    this.logger
-      .warn(this.formatMessage(message))
-      .catch((err: unknown) => internalError('LogixiaLoggerService.warn failed', err));
+    const { context, data } = this.parseParams(optionalParams);
+    this.reportFailure(
+      'warn',
+      this.withContext(context, () => this.logger.warn(this.formatMessage(message), data))
+    );
   }
 
   // ── debug ──────────────────────────────────────────────────────────────────
@@ -292,20 +352,23 @@ export class LogixiaLoggerService implements LoggerService {
   debug(message: string, data: Record<string, unknown>): Promise<void>;
 
   /**
-   * NestJS compat overload — optional context string, returns `void`.
+   * NestJS compat overload — optional context for this call only, plus object
+   * params merged into the payload, returns `void`.
    *
    * @example `logger.debug('Processing request', 'OrderService')`
    */
-  debug(message: unknown, context?: string): void;
+  debug(message: unknown, ...optionalParams: unknown[]): void;
 
-  debug(message: unknown, dataOrContext?: Record<string, unknown> | string): void | Promise<void> {
-    if (typeof dataOrContext === 'object' && dataOrContext !== null) {
-      return this.logger.debug(this.formatMessage(message), dataOrContext);
+  debug(message: unknown, ...optionalParams: unknown[]): void | Promise<void> {
+    const only = optionalParams[0];
+    if (optionalParams.length === 1 && typeof only === 'object' && only !== null) {
+      return this.logger.debug(this.formatMessage(message), only as Record<string, unknown>);
     }
-    this.setContextIfProvided(typeof dataOrContext === 'string' ? dataOrContext : undefined);
-    this.logger
-      .debug(this.formatMessage(message))
-      .catch((err: unknown) => internalError('LogixiaLoggerService.debug failed', err));
+    const { context, data } = this.parseParams(optionalParams);
+    this.reportFailure(
+      'debug',
+      this.withContext(context, () => this.logger.debug(this.formatMessage(message), data))
+    );
   }
 
   // ── verbose ────────────────────────────────────────────────────────────────
@@ -319,23 +382,23 @@ export class LogixiaLoggerService implements LoggerService {
   verbose(message: string, data: Record<string, unknown>): Promise<void>;
 
   /**
-   * NestJS compat overload — optional context string, returns `void`.
+   * NestJS compat overload — optional context for this call only, plus object
+   * params merged into the payload, returns `void`.
    *
    * @example `logger.verbose('Connection established', 'WebSocketGateway')`
    */
-  verbose(message: unknown, context?: string): void;
+  verbose(message: unknown, ...optionalParams: unknown[]): void;
 
-  verbose(
-    message: unknown,
-    dataOrContext?: Record<string, unknown> | string
-  ): void | Promise<void> {
-    if (typeof dataOrContext === 'object' && dataOrContext !== null) {
-      return this.logger.trace(this.formatMessage(message), dataOrContext);
+  verbose(message: unknown, ...optionalParams: unknown[]): void | Promise<void> {
+    const only = optionalParams[0];
+    if (optionalParams.length === 1 && typeof only === 'object' && only !== null) {
+      return this.logger.trace(this.formatMessage(message), only as Record<string, unknown>);
     }
-    this.setContextIfProvided(typeof dataOrContext === 'string' ? dataOrContext : undefined);
-    this.logger
-      .trace(this.formatMessage(message))
-      .catch((err: unknown) => internalError('LogixiaLoggerService.verbose failed', err));
+    const { context, data } = this.parseParams(optionalParams);
+    this.reportFailure(
+      'verbose',
+      this.withContext(context, () => this.logger.trace(this.formatMessage(message), data))
+    );
   }
 
   // ── trace / logLevel ───────────────────────────────────────────────────────
@@ -388,11 +451,35 @@ export class LogixiaLoggerService implements LoggerService {
     return this.logger.getLevel();
   }
 
+  /**
+   * NestJS `LoggerService.setLogLevels`. logixia filters by a minimum level, not a
+   * set, so the most verbose of `levels` becomes the threshold and everything more
+   * severe stays on (`['log', 'error']` also enables `warn`). Unknown names are
+   * ignored, and an empty list is ignored too: use `silent` to turn logging off.
+   *
+   * @example `logger.setLogLevels(['error', 'warn'])`
+   */
+  setLogLevels(levels: readonly string[]): void {
+    let threshold: LogLevelString | undefined;
+    let verbosity = -1;
+    for (const name of levels) {
+      const level = NEST_LEVEL_TO_LOGIXIA[name];
+      const rank = level === undefined ? -1 : LEVEL_VERBOSITY.indexOf(level);
+      if (rank > verbosity) {
+        verbosity = rank;
+        threshold = level;
+      }
+    }
+    if (threshold !== undefined) this.setLevel(threshold);
+  }
+
   // ── Child logger ───────────────────────────────────────────────────────────
 
   child(context: string, data?: Record<string, unknown>): LogixiaLoggerService {
-    const childService = new LogixiaLoggerService(this._mergedConfig);
-    childService.logger = this.logger.child(context, data) as LogixiaLogger;
+    // Wrap the core child directly: running the constructor would build a second
+    // root logger with its own transports, timers and shutdown registration.
+    const childService = Object.create(LogixiaLoggerService.prototype) as LogixiaLoggerService;
+    childService._attach(this._mergedConfig, this.logger.child(context, data) as LogixiaLogger);
     childService.context = context;
     return childService;
   }
@@ -424,14 +511,59 @@ export class LogixiaLoggerService implements LoggerService {
 
   // ── Private helpers ────────────────────────────────────────────────────────
 
-  private setContextIfProvided(context?: unknown): void {
-    // NestJS framework occasionally passes non-string values (ExecutionContext,
-    // arguments host, etc.) in the context slot. Silently ignore those — we
-    // only want an explicit string label to override `this.context`.
-    if (typeof context !== 'string' || context.length === 0) return;
-    if (context !== this.context) {
-      this.setContext(context);
+  // Runs `fn` with `context` as the logger's context, then restores it. The log call builds its
+  // entry synchronously, so the swap is invisible to other calls and instance state is untouched.
+  private withContext<T>(context: string | undefined, fn: () => T): T {
+    if (context === undefined || context === this.logger.getContext()) return fn();
+    const previous = this.logger.getContext() ?? '';
+    this.logger.setContext(context);
+    try {
+      return fn();
+    } finally {
+      this.logger.setContext(previous);
     }
+  }
+
+  /**
+   * Split NestJS `...optionalParams` into a per-call context and a payload.
+   * A trailing string is the context; plain objects are merged into the payload and
+   * an Error goes under `error`. For `error()` (`withStack`), a leading string is the stack
+   * trace, and a lone string is the stack only if it looks like one, since Nest's own
+   * `Logger` appends the context as the last param. Anything else is listed under `params`.
+   */
+  private parseParams(
+    params: unknown[],
+    withStack = false
+  ): { context?: string | undefined; data?: Record<string, unknown> | undefined } {
+    if (params.length === 0) return {};
+    let rest = params;
+    let context: string | undefined;
+    const last = params[params.length - 1];
+    if (typeof last === 'string' && !(withStack && params.length === 1 && looksLikeStack(last))) {
+      // NestJS also passes non-string values (ExecutionContext etc.) in this slot; those
+      // are not strings and fall through to the payload handling below.
+      context = last.length > 0 ? last : undefined;
+      rest = params.slice(0, -1);
+    }
+    let data: Record<string, unknown> | undefined;
+    const extras: unknown[] = [];
+    for (const param of rest) {
+      if (withStack && typeof param === 'string' && data?.['stack'] === undefined) {
+        data = { ...data, stack: param };
+      } else if (param instanceof Error) {
+        data = { ...data, error: param };
+      } else if (isPlainObject(param)) {
+        data = { ...data, ...param };
+      } else if (param !== undefined) {
+        extras.push(typeof param === 'object' && param !== null ? describeObject(param) : param);
+      }
+    }
+    if (extras.length > 0) data = { ...data, params: extras };
+    return context === undefined ? { data } : { context, data };
+  }
+
+  private reportFailure(method: string, result: Promise<void>): void {
+    result.catch((err: unknown) => internalError(`LogixiaLoggerService.${method} failed`, err));
   }
 
   private formatMessage(message: unknown): string {
