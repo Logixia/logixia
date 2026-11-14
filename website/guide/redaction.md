@@ -98,6 +98,8 @@ If a field matches both `paths` and `excludePaths`, `paths` wins.
 - The log message string, for `patterns` and `autoDetect` patterns.
 - HTTP request headers and query parameters have their own lists in the [HTTP logging](/guide/http-logging) middleware. Set `redact.queryParams` (for example `['invite']`) to add query parameter names that the NestJS exception filter and trace middleware redact in logged URLs and error messages.
 
+An `Error` in a payload field is serialized before redaction, so its message and stack are covered too. Its stack repeats its message, so a path rule needs both `error.message` and `error.stack`, while a pattern covers both on its own. An `Error` with its own `toJSON()` is left to it.
+
 ## Limits and failure behaviour
 
 Redaction is bounded so a hostile payload cannot stall the process:

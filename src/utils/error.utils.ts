@@ -186,6 +186,85 @@ export function isError(value: unknown): value is Error {
   );
 }
 
+const MAX_ERROR_SEARCH_DEPTH = 3;
+const MAX_ERROR_SEARCH_NODES = 2000;
+
+/**
+ * Replaces real Error instances inside a log payload with their serialized form,
+ * because JSON output drops an Error's non-enumerable `message` and `stack`. Runs on
+ * every log call, so its work is capped and it copies nothing until it finds one.
+ * Duck-typed objects are data, and an Error with its own toJSON has already chosen
+ * what to show. The caller's objects are never mutated.
+ */
+export function serializeNestedErrors(data: Record<string, unknown>): Record<string, unknown> {
+  // Saved and restored, because a getter read during the walk can log and re-enter.
+  const outerBudget = errorSearchBudget;
+  errorSearchBudget = MAX_ERROR_SEARCH_NODES;
+  try {
+    return walkForErrors(data, MAX_ERROR_SEARCH_DEPTH, undefined, undefined) as Record<
+      string,
+      unknown
+    >;
+  } finally {
+    errorSearchBudget = outerBudget;
+  }
+}
+
+let errorSearchBudget = 0;
+const hasOwn = Object.prototype.hasOwnProperty;
+
+// Allocates nothing until it finds an Error. With the depth cap, a node has at most
+// two ancestors that can still recurse, so they are passed as arguments for the cycle check.
+function walkForErrors(
+  value: object,
+  depth: number,
+  parent?: object,
+  grandparent?: object
+): unknown {
+  if (value instanceof Error) {
+    return typeof (value as { toJSON?: unknown }).toJSON === 'function'
+      ? value
+      : serializeError(value);
+  }
+  if (depth === 0 || --errorSearchBudget < 0 || value === parent || value === grandparent) {
+    return value;
+  }
+
+  let copy: unknown;
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      const item: unknown = value[i];
+      if (item === null || typeof item !== 'object') continue;
+      const next = walkForErrors(item, depth - 1, value, parent);
+      if (next !== item) {
+        copy ??= value.slice();
+        (copy as unknown[])[i] = next;
+      }
+    }
+  } else {
+    const proto: unknown = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) return value;
+    const record = value as Record<string, unknown>;
+    // for...in avoids the key array that Object.keys allocates on every call.
+    for (const key in record) {
+      if (!hasOwn.call(record, key)) continue;
+      let item: unknown;
+      try {
+        item = record[key];
+      } catch {
+        continue;
+      }
+      if (item === null || typeof item !== 'object') continue;
+      const next = walkForErrors(item, depth - 1, record, parent);
+      if (next !== item) {
+        copy ??= { ...record };
+        assignOwn(copy as Record<string, unknown>, key, next);
+      }
+    }
+  }
+  return copy ?? value;
+}
+
 /**
  * Coerce any thrown value into a proper Error instance.
  */

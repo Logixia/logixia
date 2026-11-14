@@ -81,6 +81,13 @@ Output (colors omitted, stack trace shortened):
 [2026-10-30T14:24:30.625Z] [ERROR] [api] [ec339fb5-5afb-4675-8c39-ecbad4353818] Connection timeout {"orderId":"ord_123","error":{"name":"Error","message":"Connection timeout","stack":"Error: Connection timeout\n    at main (...)"}}
 ```
 
+Errors can also sit in a field, in a nested object or in an array. They keep their name, message, stack, `cause` and extra fields such as `code`, up to three levels down:
+
+```ts
+await logger.error('Payment failed', { orderId: 'ord_123', error: new Error('Card declined') });
+// → {"orderId":"ord_123","error":{"name":"Error","message":"Card declined","stack":"Error: Card declined..."}}
+```
+
 Without a `transports` key logs go to the console. Add `transports` to write to files, databases or cloud services, all concurrently. There is also a ready-made default instance: `import { logger } from 'logixia'`.
 
 → [Getting started](https://logixia.github.io/logixia/guide/getting-started) · [Configuration](https://logixia.github.io/logixia/guide/configuration) · [Log levels](https://logixia.github.io/logixia/guide/log-levels)
@@ -149,6 +156,8 @@ await logger.info('Login', { user: 'alice', password: 'hunter2' });
 ```
 
 Paths support `*` (one segment) and `**` (any depth), match case-insensitively, and the input object is never mutated. Circular references are printed as `[Circular]`.
+
+An error's stack repeats its message, so to hide a message by path, list both `error.message` and `error.stack`, or use a pattern, which covers both.
 
 → [Redaction](https://logixia.github.io/logixia/guide/redaction)
 
