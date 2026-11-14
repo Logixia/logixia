@@ -98,3 +98,41 @@ describe('child() shares the root transports', () => {
     await logger.close();
   });
 });
+
+describe('child() reuses the parent configuration', () => {
+  const base = { appName: 'ChildTest', environment: 'development', silent: true } as const;
+
+  afterEach(() => resetShutdownHandlers());
+
+  it('keeps setLevel() on a child off the parent', () => {
+    const parent = new LogixiaLogger({ ...base, levelOptions: { level: 'info' } } as never);
+    const child = parent.child('svc');
+    child.setLevel('debug');
+    expect(child.getLevel()).toBe('debug');
+    expect(parent.getLevel()).toBe('info');
+  });
+
+  it('resolves namespace levels for each child context', async () => {
+    const lines: string[] = [];
+    const parent = new LogixiaLogger({
+      ...base,
+      silent: false,
+      levelOptions: { level: 'info' },
+      namespaceLevels: { db: 'debug' },
+      transports: {
+        custom: [{ name: 'cap', write: (e: { message: string }) => void lines.push(e.message) }],
+      },
+    } as never);
+    await parent.child('db').debug('db debug');
+    await parent.child('api').debug('api debug');
+    expect(lines).toEqual(['db debug']);
+  });
+
+  it('creates many children quickly', () => {
+    const parent = new LogixiaLogger(base as never);
+    const started = Date.now();
+    for (let i = 0; i < 20_000; i++) parent.child('request', { reqId: `r-${i}` });
+    // About 60 ms on a laptop; the bound only catches a return to rebuilding everything.
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+});
