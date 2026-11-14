@@ -10,16 +10,16 @@ This page describes the benchmark harness in the repository, shows how logixia c
 
 ## Results
 
-Higher throughput is better. The table shows logixia in JSON mode compared with pino's throughput in the same scenario (Node 26):
+Higher throughput is better. The table shows operations per second for pino and for logixia in JSON mode, and logixia's difference from pino in the same scenario (Node 26):
 
-| Scenario             | logixia (JSON) vs pino |
-| -------------------- | ---------------------- |
-| Simple string        | -61%                   |
-| Structured, 5 fields | +12% to +16%           |
-| Error object         | -24%                   |
-| Child logger         | -82% to -83%           |
-| Deep nested object   | -37% to -39%           |
-| 12-field object      | +93%                   |
+| Scenario             | pino           | logixia (JSON) | logixia vs pino |
+| -------------------- | -------------- | -------------- | --------------- |
+| Simple string        | 7.5M           | 4.2M to 4.4M   | -44% to -41%    |
+| Structured, 5 fields | 1.9M           | 2.8M           | +49% to +51%    |
+| Error object         | 1.2M           | 1.0M to 1.1M   | -16% to -13%    |
+| Child logger         | 1.6M           | 0.79M to 0.81M | -50% to -49%    |
+| Deep nested object   | 2.4M to 2.5M   | 1.7M to 1.9M   | -29% to -23%    |
+| 12-field object      | 0.85M to 0.88M | 2.0M to 2.1M   | +134% to +145%  |
 
 These are two back-to-back runs on Node 26.10 (Apple Silicon, November 2026); a range means the runs differed.
 
@@ -29,7 +29,7 @@ winston was slower than pino in every scenario except the error object row, wher
 
 Read these as ratios from one harness, not as promises about your service. Absolute operations per second depend on the machine, Node version, payload shape and load, and the ratios move between runs. Two cautions on specific rows:
 
-- **Child logger.** Every library creates the child inside the timed function and logs one line through it, which is what a per-request child costs. logixia is far behind here: a logixia child copies its parent's configuration, while a pino child is little more than a prototype link and a prebuilt string of bindings. If you log many lines per request, create the child once per request, not per line. Earlier versions of this page reported +33% for this row from a harness that built the logixia child once, outside the timer; that number was wrong.
+- **Child logger.** Every library creates the child inside the timed function and logs one line through it, which is what a per-request child costs. logixia is about half pino's speed here: a logixia child is a full logger with its own level, timers and field toggles, while a pino child is little more than a prototype link and a prebuilt string of bindings. A rework of `child()` in November 2026 took this row from -82% to about -50%. If you log many lines per request, create the child once per request, not per line. Earlier versions of this page reported +33% for this row from a harness that built the logixia child once, outside the timer; that number was wrong.
 - **Error object.** The three libraries are not given identical work: pino receives `{ err }`, logixia receives the `Error`, and winston receives only `err.message`. The row compares behavior on the harness's inputs, not like-for-like serialization of stack traces.
 
 ## What does the harness do?
@@ -66,7 +66,7 @@ Pino's design goal is to do as little as possible per call, and a plain string m
 
 Each is small, but on a call that does almost nothing else, they dominate. That is the price of the features they support: a trace ID on every line without passing a logger around, and timestamps people can read.
 
-As flat payloads get wider, fixed per-line costs matter less and serialization dominates, which is why the structured and 12-field rows go the other way. The error object and deep nested object rows are losses for logixia (-24% and about -38%), and I have not profiled them yet, so I will not guess at the cause.
+As flat payloads get wider, fixed per-line costs matter less and serialization dominates, which is why the structured and 12-field rows go the other way. The error object and deep nested object rows are losses for logixia (about -15% and -26%), and I have not profiled them yet, so I will not guess at the cause.
 
 ## How do I reproduce the benchmarks?
 
