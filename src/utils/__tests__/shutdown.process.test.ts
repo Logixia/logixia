@@ -34,7 +34,8 @@ describe('flushOnExit in a real process', () => {
 
   it('lets the app finish its own SIGTERM cleanup when it has a handler', async () => {
     const result = await run('own-handler', 'SIGTERM');
-    expect(result.stdout).toContain('logger-closed');
+    expect(result.stdout).toContain('logger-flushed');
+    expect(result.stdout).not.toContain('logger-closed');
     expect(result.stdout).toContain('app-cleanup-done');
     expect(result.code).toBe(0);
   });
