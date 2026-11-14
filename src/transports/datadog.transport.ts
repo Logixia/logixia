@@ -6,6 +6,7 @@ import { internalError } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
 import type { AnalyticsMetric } from './analytics.transport';
 import { AnalyticsTransport, PartialBatchError } from './analytics.transport';
+import { fetchWithTimeout } from './fetch-timeout';
 import { protectSecrets } from './secret-config';
 
 const gzipAsync = promisify(gzip);
@@ -295,7 +296,7 @@ export class DataDogTransport extends AnalyticsTransport {
 
     try {
       const compress = this.datadogConfig.compress === true;
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -319,7 +320,7 @@ export class DataDogTransport extends AnalyticsTransport {
     const url = `${this.metricsUrl}${endpoint}`;
 
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -381,7 +382,7 @@ export class DataDogTransport extends AnalyticsTransport {
     const url = `${this.baseUrl}/api/v1/events`;
 
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -10,7 +10,8 @@ import type {
   TransportMetrics,
   TransportType,
 } from '../types/transport.types';
-import { internalLog, internalWarn } from '../utils/internal-log';
+import { internalError, internalLog, internalWarn } from '../utils/internal-log';
+import { stringifyForLog } from '../utils/safe-stringify';
 import { ConsoleTransport } from './console.transport';
 import { DatabaseTransport } from './database.transport';
 import { DataDogTransport } from './datadog.transport';
@@ -21,9 +22,21 @@ import { buildLevelValues, meetsTransportLevel } from './level-filter';
 import { MixpanelTransport } from './mixpanel.transport';
 import { SegmentTransport } from './segment.transport';
 
-// Tiny sleep helper — avoids setTimeout wrapper object allocation on every call
-function _sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+const DEFAULT_MAX_PENDING_RETRIES = 1000;
+const RETRY_WARN_INTERVAL_MS = 5000;
+
+interface RetryItem {
+  entry: TransportLogEntry;
+  attempt: number;
+  due: number;
+}
+
+interface RetryState {
+  queue: RetryItem[];
+  timer: NodeJS.Timeout | undefined;
+  running: boolean;
+  dropped: number;
+  lastWarn: number;
 }
 
 export class TransportManager extends EventEmitter {
@@ -32,6 +45,8 @@ export class TransportManager extends EventEmitter {
   private isShuttingDown = false;
   private transportLevelPreferences: Map<string, string[]> = new Map(); // Store user preferences for transport levels
   private warnedPromptDeprecated = false;
+  private closePromise: Promise<void> | undefined;
+  private retryStates: Map<string, RetryState> = new Map();
 
   private readonly levelValues: LevelValues;
 
@@ -146,11 +161,14 @@ export class TransportManager extends EventEmitter {
 
     this.transports.delete(id);
     this.metrics.delete(id);
+    void this.drainRetries(id, transport);
 
-    // Close transport if it has a close method
+    // Close transport if it has a close method. A failing close() is reported
+    // here: emitting 'error' with no listener would throw from this promise
+    // callback and take the process down.
     if (transport.close) {
       transport.close().catch((error) => {
-        this.emit('error', error, id);
+        internalError(`Transport "${id}" failed to close`, error);
       });
     }
 
@@ -169,7 +187,10 @@ export class TransportManager extends EventEmitter {
    * sync path.
    */
   write(entry: LogEntry): void | Promise<void> {
-    if (this.isShuttingDown) return;
+    if (this.isShuttingDown) {
+      this.writeAfterClose(entry);
+      return;
+    }
 
     // Build the transport entry — exactOptionalPropertyTypes requires we only set
     // optional properties when they have a real value (not undefined).
@@ -219,6 +240,30 @@ export class TransportManager extends EventEmitter {
     });
   }
 
+  /**
+   * Transports are gone once closed, but the app may still log (its own signal
+   * handler, a late async callback). Emit such lines on stdout/stderr rather
+   * than losing them silently.
+   */
+  private writeAfterClose(entry: LogEntry): void {
+    const line = `${stringifyForLog({
+      timestamp: entry.timestamp,
+      level: entry.level,
+      message: entry.message,
+      appName: entry.appName,
+      context: entry.context,
+      traceId: entry.traceId,
+      ...(entry.payload as Record<string, unknown> | undefined),
+    })}\n`;
+    const level = String(entry.level).toLowerCase();
+    const stream = level === 'error' || level === 'warn' ? 'stderr' : 'stdout';
+    try {
+      process[stream].write(line);
+    } catch {
+      // a closed stdio stream must not turn a log call into a crash
+    }
+  }
+
   private writeToTransport(
     id: string,
     transport: ITransport,
@@ -258,65 +303,111 @@ export class TransportManager extends EventEmitter {
       return;
     }
 
-    return this._writeWithRetry(transport, entry).then(onSuccess, onError);
+    return this._writeWithRetry(id, transport, entry).then((written) => {
+      if (written) onSuccess();
+    }, onError);
   }
 
   /**
    * Feature 9: Multi-transport retry + failover.
    *
-   * Attempts `transport.write()` up to `retry.maxRetries + 1` times with the
-   * configured backoff strategy. If all attempts fail and a fallback transport
-   * is configured, routes the entry there instead.
+   * The first attempt is awaited by the caller. If it fails, the entry moves to
+   * a bounded per-transport retry queue and the caller's promise resolves, so a
+   * down transport never holds a log call across backoff. The queue retries up
+   * to `retry.maxRetries` more times with the configured backoff, then routes
+   * the entry to the fallback transport (if any) and calls `onExhausted`.
+   * Returns true when the first attempt succeeded.
    */
-  private async _writeWithRetry(transport: ITransport, entry: TransportLogEntry): Promise<void> {
-    const retryCfg = transport.retry;
-
-    // Fast path: no retry config → single attempt
-    if (!retryCfg || !retryCfg.maxRetries) {
+  private async _writeWithRetry(
+    id: string,
+    transport: ITransport,
+    entry: TransportLogEntry
+  ): Promise<boolean> {
+    try {
       await transport.write(entry);
+      return true;
+    } catch (err) {
+      this.enqueueRetry(id, transport, entry, err instanceof Error ? err : new Error(String(err)));
+      return false;
+    }
+  }
+
+  private enqueueRetry(
+    id: string,
+    transport: ITransport,
+    entry: TransportLogEntry,
+    error: Error
+  ): void {
+    let state = this.retryStates.get(id);
+    if (!state) {
+      state = { queue: [], timer: undefined, running: false, dropped: 0, lastWarn: 0 };
+      this.retryStates.set(id, state);
+    }
+    const cfg = transport.retry!;
+    const maxPending = cfg.maxPending ?? DEFAULT_MAX_PENDING_RETRIES;
+    while (state.queue.length >= maxPending) {
+      state.queue.shift();
+      state.dropped++;
+    }
+    this.warnDropped(id, state);
+    this.scheduleRetry(id, transport, state, { entry, attempt: 0, due: 0 }, error);
+    this.pumpRetries(id, transport, state);
+  }
+
+  private warnDropped(id: string, state: RetryState): void {
+    const now = Date.now();
+    if (state.dropped > 0 && now - state.lastWarn >= RETRY_WARN_INTERVAL_MS) {
+      internalWarn(
+        `TransportManager: retry queue for "${id}" is full; dropped ${state.dropped} oldest log entr${state.dropped === 1 ? 'y' : 'ies'}`
+      );
+      state.dropped = 0;
+      state.lastWarn = now;
+    }
+  }
+
+  /** Queues `item` for its next attempt, or finishes it when retries ran out. */
+  private scheduleRetry(
+    id: string,
+    transport: ITransport,
+    state: RetryState,
+    item: RetryItem,
+    error: Error
+  ): void {
+    const {
+      maxRetries = 0,
+      backoff = 'exponential',
+      delay = 500,
+      maxDelay = 30_000,
+    } = transport.retry!;
+    if (item.attempt >= maxRetries) {
+      void this.exhaust(id, transport, item.entry, error);
       return;
     }
-
-    const {
-      maxRetries,
-      backoff = 'exponential',
-      delay: baseDelay = 500,
-      maxDelay = 30_000,
-      fallback,
-      onExhausted,
-    } = retryCfg;
-
-    let lastError: Error = new Error('Unknown transport error');
-
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        await transport.write(entry);
-        return; // success
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-
-        if (attempt < maxRetries) {
-          // Compute next delay
-          let wait: number;
-          switch (backoff) {
-            case 'fixed':
-              wait = baseDelay;
-              break;
-            case 'linear':
-              wait = baseDelay * (attempt + 1);
-              break;
-            case 'exponential':
-            default:
-              wait = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
-          }
-
-          this.emit('transport:retry', transport.name, attempt + 1, maxRetries, wait);
-          await _sleep(wait);
-        }
-      }
+    let wait: number;
+    switch (backoff) {
+      case 'fixed':
+        wait = delay;
+        break;
+      case 'linear':
+        wait = delay * (item.attempt + 1);
+        break;
+      case 'exponential':
+      default:
+        wait = Math.min(delay * Math.pow(2, item.attempt), maxDelay);
     }
+    item.attempt++;
+    item.due = Date.now() + wait;
+    state.queue.push(item);
+    this.emit('transport:retry', transport.name, item.attempt, maxRetries, wait);
+  }
 
-    // All retries exhausted — try fallback
+  private async exhaust(
+    id: string,
+    transport: ITransport,
+    entry: TransportLogEntry,
+    error: Error
+  ): Promise<void> {
+    const { fallback, onExhausted } = transport.retry!;
     if (fallback) {
       this.emit('transport:fallback', transport.name, fallback.name);
       try {
@@ -326,9 +417,78 @@ export class TransportManager extends EventEmitter {
         // fallback also failed — fall through to onExhausted
       }
     }
+    const metrics = this.metrics.get(id);
+    if (metrics) metrics.errors++;
+    try {
+      onExhausted?.(error, entry);
+    } catch (hookError) {
+      internalWarn(`TransportManager: onExhausted for "${id}" threw: ${String(hookError)}`);
+    }
+    if (this.listenerCount('error') > 0) this.emit('error', error, id);
+  }
 
-    onExhausted?.(lastError, entry);
-    throw lastError;
+  /** One serial worker per transport: the earliest-due entry is retried first. */
+  private pumpRetries(id: string, transport: ITransport, state: RetryState): void {
+    if (state.running || state.timer || state.queue.length === 0) return;
+    let next = 0;
+    for (let i = 1; i < state.queue.length; i++) {
+      if (state.queue[i]!.due < state.queue[next]!.due) next = i;
+    }
+    const wait = Math.max(0, state.queue[next]!.due - Date.now());
+    state.timer = setTimeout(() => {
+      state.timer = undefined;
+      void this.runRetry(id, transport, state);
+    }, wait);
+    state.timer.unref?.();
+  }
+
+  private async runRetry(id: string, transport: ITransport, state: RetryState): Promise<void> {
+    if (state.queue.length === 0) return;
+    let next = 0;
+    for (let i = 1; i < state.queue.length; i++) {
+      if (state.queue[i]!.due < state.queue[next]!.due) next = i;
+    }
+    const [item] = state.queue.splice(next, 1);
+    if (!item) return;
+    state.running = true;
+    try {
+      await transport.write(item.entry);
+      const metrics = this.metrics.get(id);
+      if (metrics) {
+        metrics.logsWritten++;
+        metrics.lastWrite = new Date();
+      }
+      this.emit('log', item.entry);
+    } catch (err) {
+      this.scheduleRetry(
+        id,
+        transport,
+        state,
+        item,
+        err instanceof Error ? err : new Error(String(err))
+      );
+    } finally {
+      state.running = false;
+    }
+    if (!this.isShuttingDown) this.pumpRetries(id, transport, state);
+  }
+
+  /** Stops a transport's retry worker and hands what is still queued to its fallback. */
+  private async drainRetries(id: string, transport: ITransport | undefined): Promise<void> {
+    const state = this.retryStates.get(id);
+    if (!state) return;
+    this.retryStates.delete(id);
+    if (state.timer) clearTimeout(state.timer);
+    state.timer = undefined;
+    const fallback = transport?.retry?.fallback;
+    if (state.queue.length === 0) return;
+    if (!fallback) {
+      internalWarn(
+        `TransportManager: "${id}" closed with ${state.queue.length} log entr${state.queue.length === 1 ? 'y' : 'ies'} still awaiting retry`
+      );
+      return;
+    }
+    await Promise.allSettled(state.queue.map((item) => fallback.write(item.entry)));
   }
 
   private shouldTransportHandle(
@@ -376,9 +536,19 @@ export class TransportManager extends EventEmitter {
   }
 
   async flush(): Promise<void> {
+    await this.flushTransports(false);
+  }
+
+  /**
+   * @param skipClosable  Leave out transports with a close(): close() flushes
+   *   them itself, and a second flush first would double the time a hung
+   *   endpoint can hold shutdown.
+   */
+  private async flushTransports(skipClosable: boolean): Promise<void> {
     const flushPromises: Promise<void>[] = [];
 
     for (const [id, transport] of this.transports) {
+      if (skipClosable && transport.close) continue;
       if (this.isBatchTransport(transport)) {
         const flushPromise = transport.flush().catch((error) => {
           this.emit('error', error, id);
@@ -391,12 +561,22 @@ export class TransportManager extends EventEmitter {
     this.emit('flush', 'all', this.transports.size);
   }
 
-  async close(): Promise<void> {
+  close(): Promise<void> {
+    // Concurrent callers (signal handler + logger.close()) share one close, so
+    // transports are never closed twice.
+    this.closePromise ??= this.closeOnce();
+    return this.closePromise;
+  }
+
+  private async closeOnce(): Promise<void> {
     // Flush first so any in-flight log calls that race in during shutdown still
     // get written — only block new writes once we move to the close phase.
-    await this.flush();
+    await this.flushTransports(true);
 
     this.isShuttingDown = true;
+    await Promise.allSettled(
+      [...this.retryStates.keys()].map((id) => this.drainRetries(id, this.transports.get(id)))
+    );
 
     // Close all transports
     const closePromises: Promise<void>[] = [];

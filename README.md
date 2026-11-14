@@ -32,7 +32,7 @@ Most Node loggers give you a fast `info()` and leave the rest to you. logixia ke
 
 - **Request tracing built in.** Trace IDs travel through `await` via `AsyncLocalStorage`. Express and Fastify helpers read `traceparent`, `x-request-id` and friends, and every log line inside the request carries the ID.
 - **Redaction before dispatch.** Mask paths (`*.password`, `req.headers.authorization`) and regex patterns once, before any transport sees the entry. Transport credentials are also kept out of serialized output and error text.
-- **Transports for real destinations.** Console, rotating files, PostgreSQL, MySQL, MongoDB, SQLite, CloudWatch, Google Cloud Logging, Azure Monitor, Datadog, OTLP, Slack, Discord, and a worker-thread wrapper. Several can run on one log call.
+- **Transports for real destinations.** Console, rotating files, PostgreSQL, MySQL, MongoDB, SQLite, CloudWatch, Google Cloud Logging, Azure Monitor, Datadog, OTLP, Sentry, Slack, Discord, and a worker-thread wrapper. Several can run on one log call.
 - **OpenTelemetry-native.** Read the active span for trace/log correlation, or export logs as OTLP/HTTP records. The OTLP transport builds the JSON itself, so no `@opentelemetry/*` SDK is required to emit logs.
 - **Runs outside Node too.** `logixia/browser` has no Node built-ins and is written for browsers and edge runtimes such as Cloudflare Workers.
 - **Small footprint.** Two runtime dependencies (`commander`, `picocolors`), no install scripts, ESM and CommonJS builds with types.
@@ -198,6 +198,7 @@ const logger = createLogger({
 | [Datadog](https://logixia.github.io/logixia/guide/transports/datadog)               | `transports.analytics.datadog`, `logixia/transports` | Logs and metrics to Datadog                        |
 | [OTLP](https://logixia.github.io/logixia/guide/transports/otlp)                     | `logixia`, `logixia/transports`                      | OTLP/HTTP to Grafana, Axiom, SigNoz, a Collector   |
 | [Analytics](https://logixia.github.io/logixia/guide/transports/analytics)           | `transports.analytics`                               | Mixpanel, Segment, Google Analytics, Datadog       |
+| [Sentry](https://logixia.github.io/logixia/guide/transports/sentry)                 | `logixia`, `logixia/transports`                      | Errors, breadcrumbs and logs to Sentry             |
 | [Slack / Discord](https://logixia.github.io/logixia/guide/transports/slack-discord) | `logixia`, `logixia/transports`                      | Alerting to a chat channel via webhooks            |
 | [Worker thread](https://logixia.github.io/logixia/guide/transports/worker)          | `logixia/worker`                                     | Move file/database/console I/O off the main thread |
 | [Custom](https://logixia.github.io/logixia/guide/transports/custom)                 | `transports.custom` with `ITransport`                | Anything else: S3, queues, internal services       |

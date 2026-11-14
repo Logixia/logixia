@@ -26,6 +26,23 @@ function isCacheableTraceId(id: string): boolean {
   return true;
 }
 
+/** Maps a trace id to a stable number in [0, 1): FNV-1a followed by a murmur3 finalizer. */
+function traceFraction(id: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return (h >>> 0) / 0x100000000;
+}
+
+const ADAPTIVE_BUCKETS = 100;
+
 // ── Sampler ───────────────────────────────────────────────────────────────────
 
 export interface SamplingStats {
@@ -44,14 +61,15 @@ export interface SamplingStats {
 export class Sampler {
   private readonly config: SamplingConfig;
   /**
-   * Per-trace decisions in LRU order (Map preserves insertion order; a hit
-   * re-inserts the key). Survives resetStats() so a long trace is not re-decided
-   * mid-flight. Bounded by size, by an idle TTL (refreshed on hit) and by a hard
+   * Per-trace sampling fractions in LRU order (Map preserves insertion order; a
+   * hit re-inserts the key). A trace is kept at a level when its fraction is below
+   * that level's rate, so it is never fixed by the first level seen. Survives
+   * resetStats() so a long trace is not re-evaluated mid-flight. Bounded by size, by an idle TTL (refreshed on hit) and by a hard
    * lifetime measured from the first decision.
    */
   private readonly traceDecisions = new Map<
     string,
-    { emit: boolean; firstAt: number; seenAt: number }
+    { fraction: number; firstAt: number; seenAt: number }
   >();
   private readonly maxTrackedTraces = 100_000;
   private readonly traceTtlMs = 5 * 60_000;
@@ -61,11 +79,14 @@ export class Sampler {
   private _tokenBucket = 0;
   private _lastRefillMs = Date.now();
 
-  // Adaptive (anomaly-driven) sampling state — a sliding window of recent
-  // (timestamp, isError) samples. `_adaptiveHead` marks the oldest live entry so
-  // eviction is O(1); the array is compacted once the dead prefix dominates.
-  private _adaptiveWindow: Array<{ t: number; err: boolean }> = [];
-  private _adaptiveHead = 0;
+  // Adaptive (anomaly-driven) sampling state — a fixed ring of per-bucket
+  // (total, errors) counts covering the window, with running sums, so memory
+  // stays constant however many logs are evaluated.
+  private readonly _adaptiveBucketMs: number;
+  private readonly _adaptiveTotals = new Float64Array(ADAPTIVE_BUCKETS);
+  private readonly _adaptiveErrorCounts = new Float64Array(ADAPTIVE_BUCKETS);
+  private _adaptiveBucket = 0;
+  private _adaptiveTotal = 0;
   private _adaptiveErrors = 0;
 
   // Stats
@@ -80,6 +101,10 @@ export class Sampler {
 
   constructor(config: SamplingConfig, onStats?: (stats: SamplingStats) => void) {
     this.config = config;
+    this._adaptiveBucketMs = Math.max(
+      1,
+      Math.ceil((config.adaptive?.windowMs ?? 10_000) / ADAPTIVE_BUCKETS)
+    );
 
     // Initialise token bucket to the max cap
     if (config.maxLogsPerSecond && config.maxLogsPerSecond > 0) {
@@ -159,7 +184,7 @@ export class Sampler {
 
   // ── Private helpers ─────────────────────────────────────────────────────────
 
-  private _sampleByRate(level: string): boolean {
+  private _sampleByRate(level: string, fraction?: number): boolean {
     const baseRate =
       this.config.perLevel?.[level] ?? this.config.perLevel?.['*'] ?? this.config.rate ?? 1.0;
 
@@ -169,27 +194,35 @@ export class Sampler {
 
     if (rate >= 1.0) return true;
     if (rate <= 0.0) return false;
+    if (fraction !== undefined) return fraction < rate;
     // eslint-disable-next-line sonarjs/pseudo-random -- probabilistic sampling, not security-sensitive
     return Math.random() < rate;
   }
 
-  /** Record one evaluated sample and evict entries older than the window. O(1) amortized. */
-  private _recordAdaptiveSample(level: string): void {
-    const now = Date.now();
-    const windowMs = this.config.adaptive?.windowMs ?? 10_000;
-    const err = level === 'error' || level === 'fatal';
-    this._adaptiveWindow.push({ t: now, err });
-    if (err) this._adaptiveErrors += 1;
-
-    const cutoff = now - windowMs;
-    const win = this._adaptiveWindow;
-    while (this._adaptiveHead < win.length && win[this._adaptiveHead]!.t < cutoff) {
-      if (win[this._adaptiveHead]!.err) this._adaptiveErrors -= 1;
-      this._adaptiveHead += 1;
+  /** Moves the ring forward to the bucket holding `now`, dropping buckets that left the window. */
+  private _advanceAdaptive(now: number): number {
+    const target = Math.floor(now / this._adaptiveBucketMs);
+    if (target <= this._adaptiveBucket) return this._adaptiveBucket;
+    const steps = Math.min(target - this._adaptiveBucket, ADAPTIVE_BUCKETS);
+    for (let i = 1; i <= steps; i++) {
+      const slot = (this._adaptiveBucket + i) % ADAPTIVE_BUCKETS;
+      this._adaptiveTotal -= this._adaptiveTotals[slot]!;
+      this._adaptiveErrors -= this._adaptiveErrorCounts[slot]!;
+      this._adaptiveTotals[slot] = 0;
+      this._adaptiveErrorCounts[slot] = 0;
     }
-    if (this._adaptiveHead >= 1024 && this._adaptiveHead * 2 >= win.length) {
-      this._adaptiveWindow = win.slice(this._adaptiveHead);
-      this._adaptiveHead = 0;
+    this._adaptiveBucket = target;
+    return target;
+  }
+
+  /** Record one evaluated sample in the current bucket. O(1). */
+  private _recordAdaptiveSample(level: string): void {
+    const slot = this._advanceAdaptive(Date.now()) % ADAPTIVE_BUCKETS;
+    this._adaptiveTotals[slot]! += 1;
+    this._adaptiveTotal += 1;
+    if (level === 'error' || level === 'fatal') {
+      this._adaptiveErrorCounts[slot]! += 1;
+      this._adaptiveErrors += 1;
     }
   }
 
@@ -201,8 +234,9 @@ export class Sampler {
   private _adaptiveBoostRate(): number {
     const cfg = this.config.adaptive;
     if (!cfg) return 0;
+    this._advanceAdaptive(Date.now());
     const minSamples = cfg.minSamples ?? 20;
-    const total = this._adaptiveWindow.length - this._adaptiveHead;
+    const total = this._adaptiveTotal;
     if (total < minSamples) return 0;
 
     const errorRate = this._adaptiveErrors / total;
@@ -216,8 +250,9 @@ export class Sampler {
   }
 
   /**
-   * Return the cached decision for a trace, or make and cache a new one. Entries
-   * idle past the TTL, or older than the hard lifetime, are re-decided; the least
+   * Decide a trace by comparing its stable fraction with the level's rate, caching
+   * the fraction. Entries idle past the TTL, or older than the hard lifetime, are
+   * recomputed; the least
    * recently used entry is evicted once the cap is reached. IDs that are empty,
    * too long or contain control characters are sampled independently and never cached.
    */
@@ -234,17 +269,17 @@ export class Sampler {
       this.traceDecisions.delete(traceId);
       known.seenAt = now;
       this.traceDecisions.set(traceId, known);
-      return known.emit;
+      return this._sampleByRate(level, known.fraction);
     }
 
-    const emit = this._sampleByRate(level);
+    const fraction = traceFraction(traceId);
     this.traceDecisions.delete(traceId);
-    this.traceDecisions.set(traceId, { emit, firstAt: now, seenAt: now });
+    this.traceDecisions.set(traceId, { fraction, firstAt: now, seenAt: now });
     if (this.traceDecisions.size > this.maxTrackedTraces) {
       const oldest = this.traceDecisions.keys().next().value;
       if (oldest !== undefined) this.traceDecisions.delete(oldest);
     }
-    return emit;
+    return this._sampleByRate(level, fraction);
   }
 
   private _consumeToken(): boolean {

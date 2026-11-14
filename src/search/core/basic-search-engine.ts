@@ -27,7 +27,9 @@ import { extractUserId } from './user-id';
  * Basic search engine implementation
  */
 export class BasicSearchEngine implements ILogSearchEngine {
-  private logs: LogEntry[] = [];
+  private buffer: LogEntry[] = [];
+  /** Index of the oldest live entry in `buffer`; evicted entries are dropped in bulk. */
+  private head = 0;
   private presets: Map<string, SearchPreset> = new Map();
   private searchHistory: string[] = [];
   private suggestionCache: Map<string, SearchSuggestion[]> = new Map();
@@ -41,6 +43,15 @@ export class BasicSearchEngine implements ILogSearchEngine {
     };
   }
 
+  /** The live logs, oldest first. Compacts away evicted entries on demand. */
+  private get logs(): LogEntry[] {
+    if (this.head > 0) {
+      this.buffer = this.buffer.slice(this.head);
+      this.head = 0;
+    }
+    return this.buffer;
+  }
+
   /**
    * Add logs to the search index.
    *
@@ -51,11 +62,19 @@ export class BasicSearchEngine implements ILogSearchEngine {
    * large array onto the call stack.
    */
   public addLogs(logs: LogEntry[]): void {
-    for (const log of logs) this.logs.push(log);
+    for (const log of logs) this.buffer.push(log);
 
     const maxLogs = this.options?.maxLogs ?? 100_000;
-    if (this.logs.length > maxLogs) {
-      this.logs.splice(0, this.logs.length - maxLogs);
+    const excess = this.buffer.length - this.head - maxLogs;
+    if (excess > 0) {
+      // Advance the head instead of splicing: splice(0, n) shifts the whole array
+      // on every add once at the cap. The dead prefix is compacted once it is
+      // a quarter of the cap, so eviction stays O(1) amortized.
+      this.head += excess;
+      if (this.head >= Math.max(1, maxLogs / 4)) {
+        this.buffer = this.buffer.slice(this.head);
+        this.head = 0;
+      }
     }
   }
 
@@ -63,7 +82,8 @@ export class BasicSearchEngine implements ILogSearchEngine {
    * Clear all logs from the index
    */
   public clearLogs(): void {
-    this.logs = [];
+    this.buffer = [];
+    this.head = 0;
   }
 
   /**
@@ -269,9 +289,9 @@ export class BasicSearchEngine implements ILogSearchEngine {
    */
   async getStats(): Promise<SearchStats> {
     return {
-      totalResults: this.logs.length,
+      totalResults: this.buffer.length - this.head,
       executionTime: 0,
-      indexSize: this.logs.length,
+      indexSize: this.buffer.length - this.head,
       topTerms: this.getTopTerms(),
     };
   }

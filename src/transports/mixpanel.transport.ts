@@ -3,6 +3,7 @@ import { internalError } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
 import type { AnalyticsEvent, AnalyticsUser } from './analytics.transport';
 import { AnalyticsTransport } from './analytics.transport';
+import { fetchWithTimeout } from './fetch-timeout';
 import { protectSecrets } from './secret-config';
 
 /**
@@ -98,7 +99,7 @@ export class MixpanelTransport extends AnalyticsTransport {
     const url = `${this.mixpanelConfig.endpoint || this.baseUrl}${endpoint}`;
 
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
