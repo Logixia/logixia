@@ -98,6 +98,8 @@ interface IsolationState {
 }
 
 /** A write that stored part of a batch: only `remaining` still needs to be written. */
+class DatabaseUnavailableError extends Error {}
+
 class PartialWriteError extends Error {
   constructor(
     message: string,
@@ -157,6 +159,8 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
   private connection: any;
   private isConnected = false;
   private connectionPromise?: Promise<void> | undefined;
+  private connectFailures = 0;
+  private nextConnectAt = 0;
   private readonly cap: BufferCap;
 
   constructor(private config: DatabaseTransportConfig) {
@@ -179,14 +183,20 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
   }
 
   async write(entry: TransportLogEntry): Promise<void> {
-    if (!this.isConnected) {
-      await this.connect();
-    }
-
+    // Buffer first: the entry is kept (bounded by maxBufferSize) whether or not
+    // the database is reachable. Connecting happens lazily in drain(), with
+    // backoff, so a down database costs one connect attempt at a time rather
+    // than one per log.
     this.addToBatch(entry);
 
     if (this.batch.length >= this.batchSize) {
-      await this.flush();
+      try {
+        await this.flush();
+      } catch (error) {
+        // An unreachable database keeps the entries buffered for the next
+        // flush; throwing would make the caller re-send an entry already queued.
+        if (!(error instanceof DatabaseUnavailableError)) throw error;
+      }
     }
   }
 
@@ -225,6 +235,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
    */
   private async drain(): Promise<void> {
     while (this.batch.length > 0) {
+      await this.ensureConnected();
       const entries = this.batch.splice(0, this.batchSize);
 
       try {
@@ -337,6 +348,44 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
     }
   }
 
+  private async ensureConnected(): Promise<void> {
+    if (this.isConnected) return;
+    const wait = this.nextConnectAt - Date.now();
+    if (wait > 0) {
+      throw new DatabaseUnavailableError(`Database unavailable; next connect attempt in ${wait}ms`);
+    }
+    try {
+      await this.connect();
+      this.connectFailures = 0;
+    } catch (error) {
+      this.connectFailures += 1;
+      this.nextConnectAt = Date.now() + Math.min(30_000, 1000 * 2 ** (this.connectFailures - 1));
+      internalError('Database connection error', error);
+      throw new DatabaseUnavailableError('Database unavailable', { cause: error });
+    }
+  }
+
+  /**
+   * The driver reported the connection gone (idle timeout, server restart,
+   * network drop). Forget it so the next flush reconnects; without an 'error'
+   * listener the driver's emitter would crash the process.
+   */
+  private onConnectionLost(connection: unknown, error?: unknown): void {
+    if (this.connection !== connection) return;
+    if (error) internalError('Database connection lost', error);
+    this.isConnected = false;
+    this.connectionPromise = undefined;
+    this.connection = undefined;
+  }
+
+  private watchConnection(connection: {
+    on?: (event: string, listener: (...args: unknown[]) => void) => unknown;
+  }): void {
+    const lost = (error?: unknown) => this.onConnectionLost(connection, error);
+    connection.on?.('error', lost);
+    connection.on?.('end', () => lost());
+  }
+
   private async connect(): Promise<void> {
     if (this.connectionPromise) {
       return this.connectionPromise;
@@ -386,6 +435,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
         `mongodb://${this.config.host}:${this.config.port}/${this.config.database}`;
 
       this.connection = new MongoClient(connectionString);
+      this.watchConnection(this.connection);
       await this.connection.connect();
 
       // Test connection
@@ -414,6 +464,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       if (this.config.ssl) config.ssl = typeof this.config.ssl === 'boolean' ? {} : this.config.ssl;
 
       this.connection = new Client(config);
+      this.watchConnection(this.connection);
 
       await this.connection.connect();
       await this.createPostgreSQLTable();
@@ -440,6 +491,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
       if (this.config.ssl) config.ssl = typeof this.config.ssl === 'boolean' ? {} : this.config.ssl;
 
       this.connection = await mysql.createConnection(config);
+      this.watchConnection(this.connection);
 
       await this.createMySQLTable();
     } catch (error) {
@@ -757,6 +809,7 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
     // attempts so a permanently-dead DB can't hang shutdown forever (the
     // flushOnExit force-exit timer is the outer backstop).
     const MAX_CLOSE_FLUSH_ATTEMPTS = 3;
+    this.nextConnectAt = 0;
     // A drain already running has detached its snapshot, so batch.length can be
     // 0 while rows are still being written. Wait for it before touching the
     // connection; a failure re-buffers its entries and the loop below retries.
@@ -783,19 +836,21 @@ export class DatabaseTransport implements IAsyncTransport, IBatchTransport {
     this.cap.report(0);
 
     // Close connection
-    if (this.connection) {
+    const connection = this.connection;
+    this.connection = undefined;
+    if (connection) {
       switch (this.config.type) {
         case 'mongodb':
-          await this.connection.close();
+          await connection.close();
           break;
         case 'postgresql':
-          await this.connection.end();
+          await connection.end();
           break;
         case 'mysql':
-          await this.connection.end();
+          await connection.end();
           break;
         case 'sqlite':
-          await this.connection.close();
+          await connection.close();
           break;
       }
     }
