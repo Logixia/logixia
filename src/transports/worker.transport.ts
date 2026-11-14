@@ -92,6 +92,10 @@ export class WorkerTransport implements ITransport {
   private restartTimer: NodeJS.Timeout | null = null;
   /** Set once close() begins, so a worker 'exit' no longer triggers a restart. */
   private closing = false;
+  /** Writes have been posted since the last flush; keeps the beforeExit flush from looping. */
+  private dirty = false;
+  /** Run once the worker reports ready, used when the process wants to exit before that. */
+  private onReady: (() => void) | undefined;
   /** Max time to wait for the worker's 'flushed' ack before giving up. */
   private readonly FLUSH_TIMEOUT_MS = 5000;
   /** Max time to wait for a graceful worker exit before force-terminating. */
@@ -104,7 +108,29 @@ export class WorkerTransport implements ITransport {
     this.level = config.level;
     protectSecrets(this, ['config']);
     this.startWorker();
+    process.on('beforeExit', this.flushForExit);
   }
+
+  /**
+   * The worker is unref'd so it never keeps the process alive on its own; the
+   * trade-off is that lines still queued on it would be lost when the event loop
+   * drains. On beforeExit, re-ref the worker until it acknowledges a flush.
+   */
+  private readonly flushForExit = (): void => {
+    const worker = this.worker;
+    if (!worker || this.closing || !this.dirty) return;
+    worker.ref();
+    const timer = setTimeout(() => worker.unref(), this.FLUSH_TIMEOUT_MS);
+    const done = (): void => {
+      clearTimeout(timer);
+      worker.unref();
+    };
+    if (this.ready) {
+      void this.flush().finally(done);
+    } else {
+      this.onReady = () => void this.flush().finally(done);
+    }
+  };
 
   private startWorker(): void {
     try {
@@ -120,6 +146,9 @@ export class WorkerTransport implements ITransport {
         if (msg.type === 'ready') {
           this.ready = true;
           this.drainBuffer();
+          const onReady = this.onReady;
+          this.onReady = undefined;
+          onReady?.();
         } else if (msg.type === 'error' || msg.type === 'write-error') {
           internalError(
             `WorkerTransport [${this.config.transportType}]: ${msg.error ?? 'unknown'}`
@@ -138,6 +167,9 @@ export class WorkerTransport implements ITransport {
           this.handleWorkerExit();
         }
       });
+
+      // After the listeners: adding a 'message' listener re-refs the worker's port.
+      this.worker.unref();
     } catch (err) {
       internalError('WorkerTransport failed to start', err);
     }
@@ -181,6 +213,7 @@ export class WorkerTransport implements ITransport {
   }
 
   write(entry: TransportLogEntry): void {
+    this.dirty = true;
     if (this.ready && this.worker) {
       this.worker.postMessage({ type: 'write', entry });
     } else {
@@ -195,6 +228,7 @@ export class WorkerTransport implements ITransport {
   async flush(): Promise<void> {
     if (!this.ready || !this.worker) return;
     const worker = this.worker;
+    this.dirty = false;
     return new Promise<void>((resolve) => {
       // Time-box the flush: if the worker dies or restarts before answering,
       // the 'flushed' message would never arrive and this promise would hang
@@ -202,6 +236,7 @@ export class WorkerTransport implements ITransport {
       // (losing everything). Resolve on timeout so close() can still terminate.
       const timer = setTimeout(() => {
         worker.off('message', handler);
+        worker.unref?.();
         resolve();
       }, this.FLUSH_TIMEOUT_MS);
       if (timer.unref) timer.unref();
@@ -210,6 +245,7 @@ export class WorkerTransport implements ITransport {
         if (msg.type === 'flushed') {
           clearTimeout(timer);
           worker.off('message', handler);
+          worker.unref?.();
           resolve();
         }
       };
@@ -229,6 +265,7 @@ export class WorkerTransport implements ITransport {
     // Stop the restart loop first: cancel any queued backoff restart and flag
     // that further worker exits are expected (so handleWorkerExit no-ops).
     this.closing = true;
+    process.removeListener('beforeExit', this.flushForExit);
     if (this.restartTimer) {
       clearTimeout(this.restartTimer);
       this.restartTimer = null;
