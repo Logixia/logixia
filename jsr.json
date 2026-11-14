@@ -18,8 +18,26 @@
     "./fastify": "./src/fastify.ts",
     "./hono": "./src/hono.ts"
   },
+  "imports": {
+    "@nestjs/common": "npm:@nestjs/common@^11.0.0",
+    "@nestjs/common/": "npm:/@nestjs/common@^11.0.0/",
+    "rxjs": "npm:rxjs@^7.8.0",
+    "express": "npm:express@^5.0.0",
+    "mongodb": "npm:mongodb@^7.7.0",
+    "pg": "npm:pg@^8.16.3",
+    "mysql2/promise": "npm:mysql2@^3.14.5/promise",
+    "commander": "npm:commander@^11.1.0",
+    "picocolors": "npm:picocolors@^1.1.1"
+  },
   "publish": {
-    "include": ["src/**/*.ts", "README.md", "LICENSE"],
-    "exclude": ["src/**/__tests__/**", "src/**/*.test.ts"]
+    "include": [
+      "src/**/*.ts",
+      "README.md",
+      "LICENSE"
+    ],
+    "exclude": [
+      "src/**/__tests__/**",
+      "src/**/*.test.ts"
+    ]
   }
 }
