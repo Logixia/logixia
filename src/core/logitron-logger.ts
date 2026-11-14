@@ -9,25 +9,6 @@
  *  - Feature 5: Adaptive log level based on NODE_ENV / CI detection
  */
 
-import buildFastStringify from 'fast-json-stringify';
-
-// ── Module-level JSON serializer (built once, reused for all loggers) ─────────
-// Covers the fixed LogEntry shape; unknown payload fields handled by additionalProperties
-const _fastStringifyEntry = buildFastStringify({
-  type: 'object',
-  properties: {
-    timestamp: { type: 'string' },
-    level: { type: 'string' },
-    appName: { type: 'string' },
-    environment: { type: 'string' },
-    message: { type: 'string' },
-    context: { type: 'string' },
-    traceId: { type: 'string' },
-    payload: { type: 'object', additionalProperties: true },
-  },
-  additionalProperties: true,
-});
-
 import { LogixiaContext } from '../context/async-context';
 import type { LogixiaPlugin } from '../plugin';
 import { globalPluginRegistry, PluginRegistry } from '../plugin';
@@ -73,6 +54,51 @@ function nowIso(): string {
     _tsCacheStr = new Date(ms).toISOString();
   }
   return _tsCacheStr;
+}
+
+// Returned by the public log methods when the write finished synchronously, so the
+// common console path allocates no Promise. Callers can still await it.
+const RESOLVED: Promise<void> = Promise.resolve();
+
+// ── JSON line shape ──────────────────────────────────────────────────────────
+// A JSON line keeps a fixed shape for log pipelines: these fields are always strings
+// and payload is always an object, even when a JS caller or a plugin passed another type.
+const JSON_STRING_FIELDS = [
+  'timestamp',
+  'level',
+  'appName',
+  'environment',
+  'message',
+  'context',
+  'traceId',
+] as const;
+
+function toJsonString(value: unknown): string {
+  if (value === null) return '';
+  if (value instanceof Date) return value.toISOString();
+  if (value instanceof RegExp) return value.source;
+  return String(value);
+}
+
+function toJsonEntry(entry: LogEntry): LogEntry {
+  const record = entry as unknown as Record<string, unknown>;
+  let copy: Record<string, unknown> | undefined;
+  for (const field of JSON_STRING_FIELDS) {
+    const value = record[field];
+    if (value !== undefined && typeof value !== 'string') {
+      copy ??= { ...record };
+      copy[field] = toJsonString(value);
+    }
+  }
+  const payload: unknown = entry.payload;
+  if (
+    payload !== undefined &&
+    (payload === null || typeof payload !== 'object' || Array.isArray(payload))
+  ) {
+    copy ??= { ...record };
+    copy['payload'] = Object.assign({}, payload);
+  }
+  return (copy ?? entry) as LogEntry;
 }
 
 // ── Namespace level helpers ──────────────────────────────────────────────────
@@ -221,6 +247,16 @@ export class LogixiaLogger<
   private _formattedLevels: Map<string, string> = new Map();
   /** Pre-computed `[appName] ` string — avoids template literal allocation per log. */
   private _formattedAppName = '';
+  /**
+   * JSON line pieces between the timestamp and the message, keyed by level, for the
+   * appName and environment they were built from. Rebuilt when either changes.
+   */
+  private _jsonHeads: Map<string, string> = new Map();
+  private _jsonHeadsApp = '';
+  private _jsonHeadsEnv = '';
+  /** The `,"context":"..."` piece for `_jsonContextKey`. */
+  private _jsonContextKey: unknown = undefined;
+  private _jsonContext = '';
   /** True when a redact config is present — short-circuits applyRedaction when false. */
   private _hasRedact = false;
   /** Sampling engine — only created when sampling config is present. */
@@ -366,12 +402,10 @@ export class LogixiaLogger<
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (!(this as any)[levelName.toLowerCase()]) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (this as any)[levelName.toLowerCase()] = async (
+          (this as any)[levelName.toLowerCase()] = (
             message: string,
             data?: Record<string, unknown>
-          ) => {
-            await this.logLevel(levelName.toLowerCase(), message, data);
-          };
+          ): Promise<void> => this.logLevel(levelName.toLowerCase(), message, data);
         }
       }
     }
@@ -504,40 +538,42 @@ export class LogixiaLogger<
    * (name, message, stack) under `data.error`; a string is logged as-is.
    * `data` is merged into the entry payload.
    */
-  async error(messageOrError: string | Error, data?: Record<string, unknown>): Promise<void> {
-    if (isError(messageOrError)) {
-      await this.log('error', messageOrError.message, {
-        ...data,
-        error: serializeError(messageOrError),
-      });
-    } else {
-      await this.log('error', messageOrError, data);
+  error(messageOrError: string | Error, data?: Record<string, unknown>): Promise<void> {
+    try {
+      return isError(messageOrError)
+        ? this._run('error', messageOrError.message, {
+            ...data,
+            error: serializeError(messageOrError),
+          })
+        : this._run('error', messageOrError, data);
+    } catch (error) {
+      return Promise.reject(error);
     }
   }
 
   /** Log `message` at `warn` level; `data` is merged into the entry payload. */
-  async warn(message: string, data?: Record<string, unknown>): Promise<void> {
-    await this.log('warn', message, data);
+  warn(message: string, data?: Record<string, unknown>): Promise<void> {
+    return this._run('warn', message, data);
   }
 
   /** Log `message` at `info` level; `data` is merged into the entry payload. */
-  async info(message: string, data?: Record<string, unknown>): Promise<void> {
-    await this.log('info', message, data);
+  info(message: string, data?: Record<string, unknown>): Promise<void> {
+    return this._run('info', message, data);
   }
 
   /** Log `message` at `debug` level; `data` is merged into the entry payload. */
-  async debug(message: string, data?: Record<string, unknown>): Promise<void> {
-    await this.log('debug', message, data);
+  debug(message: string, data?: Record<string, unknown>): Promise<void> {
+    return this._run('debug', message, data);
   }
 
   /** Log `message` at `trace` level; `data` is merged into the entry payload. */
-  async trace(message: string, data?: Record<string, unknown>): Promise<void> {
-    await this.log('trace', message, data);
+  trace(message: string, data?: Record<string, unknown>): Promise<void> {
+    return this._run('trace', message, data);
   }
 
   /** Log `message` at `verbose` level; `data` is merged into the entry payload. */
-  async verbose(message: string, data?: Record<string, unknown>): Promise<void> {
-    await this.log('verbose', message, data);
+  verbose(message: string, data?: Record<string, unknown>): Promise<void> {
+    return this._run('verbose', message, data);
   }
 
   /**
@@ -545,8 +581,22 @@ export class LogixiaLogger<
    * active threshold are dropped, as are level names that are not registered
    * in `levelOptions.levels` (and are not built-in).
    */
-  async logLevel(level: string, message: string, data?: Record<string, unknown>): Promise<void> {
-    await this.log(level, message, data);
+  logLevel(level: string, message: string, data?: Record<string, unknown>): Promise<void> {
+    return this._run(level, message, data);
+  }
+
+  // The public methods are not async: an async function allocates a Promise per call
+  // even when the write was synchronous. A sync throw still becomes a rejection.
+  private _run(level: string, message: string, data?: Record<string, unknown>): Promise<void> {
+    try {
+      return this._settle(this.log(level, message, data));
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }
+
+  private _settle(out: void | Promise<void>): Promise<void> {
+    return (out as Promise<void> | undefined) ?? RESOLVED;
   }
 
   // ── Timer API ────────────────────────────────────────────────────────────────
@@ -912,12 +962,15 @@ export class LogixiaLogger<
 
   // ── Core log method ──────────────────────────────────────────────────────────
 
-  private async log(
+  /** Returns a Promise only when a plugin or a transport is asynchronous. */
+  private log(
     level: string,
     message: string,
     rawData?: Record<string, unknown>
-  ): Promise<void> {
-    if (this.config.silent) return;
+  ): void | Promise<void> {
+    // One read: protectSecrets() makes `this.config` a getter.
+    const config = this.config;
+    if (config.silent) return;
     if (!this.shouldLog(level)) return;
     // Before the merges below, because spreading an Error drops its message and stack.
     const data = rawData instanceof Error ? { error: serializeError(rawData) } : rawData;
@@ -926,7 +979,7 @@ export class LogixiaLogger<
     // the trace ID; a traceId on a bare LogixiaContext scope is only a fallback.
     const alsContext = LogixiaContext.get();
     let activeTraceId: string | undefined;
-    if (this.config.traceId) {
+    if (config.traceId) {
       const ctxTraceId = alsContext?.traceId;
       activeTraceId =
         TraceContext.instance.getCurrentTraceId() ??
@@ -947,7 +1000,7 @@ export class LogixiaLogger<
     const hasOtel = otelFields !== undefined && Object.keys(otelFields).length > 0;
     // The entry's top-level traceId is authoritative; an ALS traceId equal to it is
     // dropped from the payload so transports and plugins do not see it twice.
-    const traceId = this.config.traceId ? (activeTraceId ?? this.fallbackTraceId) : undefined;
+    const traceId = config.traceId ? (activeTraceId ?? this.fallbackTraceId) : undefined;
     let mergedData: typeof data;
     if (hasAls) {
       const als: Record<string, unknown> = { ...alsContext };
@@ -978,7 +1031,7 @@ export class LogixiaLogger<
       if (this._hasRedact) {
         // Fail closed: if redaction cannot complete, never emit the raw payload.
         try {
-          payload = applyRedaction(rawPayload, this.config.redact) ?? rawPayload;
+          payload = applyRedaction(rawPayload, config.redact) ?? rawPayload;
         } catch (error) {
           internalError('Redaction failed', error);
           payload = { redaction: REDACTION_FAILED };
@@ -997,7 +1050,7 @@ export class LogixiaLogger<
     let safeMessage: string = message;
     if (this._hasRedact) {
       try {
-        safeMessage = applyRedactionToString(message, this.config.redact);
+        safeMessage = applyRedactionToString(message, config.redact);
       } catch (error) {
         internalError('Redaction failed', error);
         safeMessage = REDACTION_FAILED;
@@ -1006,29 +1059,31 @@ export class LogixiaLogger<
     const entry: LogEntry = {
       timestamp: nowIso(),
       level,
-      appName: this.config.appName ?? 'App',
-      environment: this.config.environment ?? 'development',
+      appName: config.appName ?? 'App',
+      environment: config.environment ?? 'development',
       message: safeMessage,
     };
+    // Same key order as the JSON line has always had, with the payload last.
     if (this.context) entry.context = this.context;
-    if (payload !== undefined) entry.payload = payload;
     if (traceId !== undefined) entry.traceId = traceId;
+    if (payload !== undefined) entry.payload = payload;
 
     // ── Feature 20: Plugin onLog hooks ────────────────────────────────────────
     // Plugins run post-redaction, pre-transport. Any plugin may mutate or cancel
     // the entry by returning null. We only run the pipeline when plugins are registered.
-    let finalEntry: LogEntry | null = entry;
-    if (this._pluginRegistry.size > 0) {
-      finalEntry = await this._pluginRegistry.runOnLog(entry);
-      if (finalEntry === null) return; // entry cancelled by a plugin
-    }
+    if (this._pluginRegistry.size > 0) return this._logThroughPlugins(entry, level);
 
     // NOTE: do NOT pre-format here. When a transport manager is present (the
     // normal case) each transport formats the entry itself, so eagerly calling
     // formatLog() would be wasted work thrown away. output() formats lazily only
     // for the no-transport fallback path.
-    const out = this.output(finalEntry, level);
-    if (out !== undefined) await out;
+    return this.output(entry, level);
+  }
+
+  private async _logThroughPlugins(entry: LogEntry, level: string): Promise<void> {
+    const finalEntry = await this._pluginRegistry.runOnLog(entry);
+    if (finalEntry === null) return; // entry cancelled by a plugin
+    await this.output(finalEntry, level);
   }
 
   // ── Feature 3: Namespace-aware shouldLog ─────────────────────────────────────
@@ -1094,26 +1149,40 @@ export class LogixiaLogger<
   // ── Formatters ───────────────────────────────────────────────────────────────
 
   private formatLog(entry: LogEntry): string {
-    // JSON mode: use fast-json-stringify (pre-compiled serializer, ~59% faster than JSON.stringify)
-    if (this.config.format?.json) {
+    const format = this.config.format;
+    // JSON mode. Native JSON.stringify beats a schema-compiled serializer here, because
+    // the payload has no schema and is most of the line.
+    if (format?.json) {
+      // Without plugins the entry is exactly what log() built, so its line can be
+      // assembled from cached pieces. Anything unusual takes the general path below.
+      if (this._pluginRegistry.size === 0) {
+        try {
+          const line = this._buildJsonLine(entry);
+          if (line !== undefined) return line;
+        } catch {
+          // A BigInt or a cycle in the payload: the general path handles it.
+        }
+      }
+      let jsonEntry: unknown = entry;
       try {
-        return _fastStringifyEntry(entry);
+        jsonEntry = toJsonEntry(entry);
+        return JSON.stringify(jsonEntry);
       } catch {
         // A BigInt or a cycle in the payload — rare, so pay for the safe walk only then.
-        return stringifyForLog(entry);
+        return stringifyForLog(jsonEntry);
       }
     }
 
     let formatted = '';
 
-    const doColorize = this.config.format?.colorize ?? true;
+    const doColorize = format?.colorize ?? true;
     const gray = doColorize ? this._colorMap.get('gray')! : '';
     const cyan = doColorize ? this._colorMap.get('cyan')! : '';
     const yellow = doColorize ? this._colorMap.get('yellow')! : '';
     const reset = doColorize ? this._colorMap.get('reset')! : '';
 
     // Use _fieldCache instead of calling isFieldEnabled() per field
-    if (this.config.format?.timestamp !== false && this._fieldCache.get('timestamp') !== false) {
+    if (format?.timestamp !== false && this._fieldCache.get('timestamp') !== false) {
       // entry.timestamp is already an ISO string — no need to re-parse it
       formatted += `${gray}[${entry.timestamp}]${reset} `;
     }
@@ -1139,6 +1208,59 @@ export class LogixiaLogger<
     }
 
     return formatted;
+  }
+
+  /**
+   * The same bytes JSON.stringify(entry) gives for an entry log() built, without
+   * walking the fixed fields. Returns undefined when a field has an unexpected type.
+   */
+  private _buildJsonLine(entry: LogEntry): string | undefined {
+    const { timestamp, level, appName, environment, message, context, traceId, payload } = entry;
+    if (
+      typeof timestamp !== 'string' ||
+      typeof message !== 'string' ||
+      typeof appName !== 'string' ||
+      typeof environment !== 'string'
+    ) {
+      return undefined;
+    }
+    if (appName !== this._jsonHeadsApp || environment !== this._jsonHeadsEnv) {
+      this._jsonHeads.clear();
+      this._jsonHeadsApp = appName;
+      this._jsonHeadsEnv = environment;
+    }
+    let head = this._jsonHeads.get(level);
+    if (head === undefined) {
+      if (typeof level !== 'string') return undefined;
+      head = `,"level":${JSON.stringify(level)},"appName":${JSON.stringify(appName)},"environment":${JSON.stringify(environment)},"message":`;
+      this._jsonHeads.set(level, head);
+    }
+    // An ISO timestamp has no characters that need escaping.
+    let line = `{"timestamp":"${timestamp}"${head}${JSON.stringify(message)}`;
+    if (context !== undefined) {
+      if (typeof context !== 'string') return undefined;
+      if (context !== this._jsonContextKey) {
+        this._jsonContextKey = context;
+        this._jsonContext = `,"context":${JSON.stringify(context)}`;
+      }
+      line += this._jsonContext;
+    }
+    if (traceId !== undefined) {
+      if (typeof traceId !== 'string') return undefined;
+      line += `,"traceId":${JSON.stringify(traceId)}`;
+    }
+    if (payload !== undefined) {
+      if (
+        payload === null ||
+        typeof payload !== 'object' ||
+        Array.isArray(payload) ||
+        typeof (payload as { toJSON?: unknown }).toJSON === 'function'
+      ) {
+        return undefined;
+      }
+      line += `,"payload":${JSON.stringify(payload)}`;
+    }
+    return `${line}}`;
   }
 
   private colorize(text: string, color: string): string {
@@ -1219,9 +1341,8 @@ export function createLogger<T extends LoggerConfig<Record<string, number>>>(
   if (config.levelOptions?.levels) {
     for (const levelName of Object.keys(config.levelOptions.levels)) {
       if (!mutableLogger[levelName]) {
-        mutableLogger[levelName] = async (message: string, data?: Record<string, unknown>) => {
-          await logger.logLevel(levelName, message, data);
-        };
+        mutableLogger[levelName] = (message: string, data?: Record<string, unknown>) =>
+          logger.logLevel(levelName, message, data);
       }
     }
   }

@@ -2,9 +2,11 @@
  * Logixia benchmark suite — logixia vs pino, winston, bunyan.
  *
  * Methodology:
- *   - All libraries write to /dev/null (no real I/O) so we measure pure
+ *   - Every library writes to a sink that drops the line (no real I/O) so we measure pure
  *     serialization + framework overhead, not disk/terminal speed.
  *   - logixia console output is intercepted at process.stdout/stderr.
+ *   - Every call is made the same way, without awaiting, as most code calls a
+ *     logger. Awaiting logixia's Promise would add a microtask hop pino never pays.
  *   - bunyan is OPTIONAL — skipped automatically if not installed.
  *   - Two logixia configs are benched where relevant: the default (text/console)
  *     and JSON mode (the apples-to-apples comparison vs pino's JSON output).
@@ -20,8 +22,6 @@
  * Run: node benchmarks/run.mjs   (build first: npm run build)
  */
 
-import { Writable } from 'node:stream';
-
 import pino from 'pino';
 import { Bench } from 'tinybench';
 import winston from 'winston';
@@ -36,12 +36,15 @@ try {
   /* bunyan not installed — its rows are simply omitted */
 }
 
-// ── Null sink for pino / winston / bunyan ───────────────────────────────────
-const devNull = new Writable({
-  write(_chunk, _enc, cb) {
-    cb();
+// ── Null sink for pino / bunyan ─────────────────────────────────────────────
+// A bare write() that drops the line, the same cost logixia's silenced stdout has
+// below. A real Writable would charge pino and bunyan for stream bookkeeping that
+// logixia never pays, which skews the comparison in logixia's favour.
+const devNull = {
+  write() {
+    return true;
   },
-});
+};
 
 // Intercept stdout/stderr so logixia console output is swallowed during timing.
 const _realOut = process.stdout.write.bind(process.stdout);
@@ -149,43 +152,67 @@ const suites = [
     pino: () => pinoLogger.info('User logged in'),
     winston: () => winstonLogger.info('User logged in'),
     bunyan: () => bunyanLogger.info('User logged in'),
-    logixia: async () => logixia.info('User logged in'),
-    logixiaJson: async () => logixiaJson.info('User logged in'),
+    logixia: () => {
+      logixia.info('User logged in');
+    },
+    logixiaJson: () => {
+      logixiaJson.info('User logged in');
+    },
   }),
   suite('Structured log (5 fields)', {
     pino: () => pinoLogger.info(META, 'User logged in'),
     winston: () => winstonLogger.info('User logged in', META),
     bunyan: () => bunyanLogger.info(META, 'User logged in'),
-    logixia: async () => logixia.info('User logged in', META),
-    logixiaJson: async () => logixiaJson.info('User logged in', META),
+    logixia: () => {
+      logixia.info('User logged in', META);
+    },
+    logixiaJson: () => {
+      logixiaJson.info('User logged in', META);
+    },
   }),
   suite('Error object logging', {
     pino: () => pinoLogger.error({ err: ERR }, 'Request failed'),
     winston: () => winstonLogger.error('Request failed', { error: ERR.message }),
     bunyan: () => bunyanLogger.error({ err: ERR }, 'Request failed'),
-    logixia: async () => logixia.error('Request failed', ERR),
-    logixiaJson: async () => logixiaJson.error('Request failed', ERR),
+    logixia: () => {
+      logixia.error('Request failed', ERR);
+    },
+    logixiaJson: () => {
+      logixiaJson.error('Request failed', ERR);
+    },
   }),
   suite('Child / per-request logger', {
     pino: () => pinoLogger.child({ reqId: 'r-42' }).info(META, 'handled'),
     winston: () => winstonLogger.child({ reqId: 'r-42' }).info('handled', META),
     bunyan: () => bunyanLogger.child({ reqId: 'r-42' }).info(META, 'handled'),
-    logixia: async () => logixiaChild.info('handled', META),
-    logixiaJson: async () => logixiaJsonChild.info('handled', META),
+    logixia: () => {
+      logixiaChild.info('handled', META);
+    },
+    logixiaJson: () => {
+      logixiaJsonChild.info('handled', META);
+    },
   }),
   suite('Deep nested object', {
     pino: () => pinoLogger.info(DEEP, 'request'),
     winston: () => winstonLogger.info('request', DEEP),
     bunyan: () => bunyanLogger.info(DEEP, 'request'),
-    logixia: async () => logixia.info('request', DEEP),
-    logixiaJson: async () => logixiaJson.info('request', DEEP),
+    logixia: () => {
+      logixia.info('request', DEEP);
+    },
+    logixiaJson: () => {
+      logixiaJson.info('request', DEEP);
+    },
   }),
   suite('High-cardinality metadata (12 fields)', {
     pino: () => pinoLogger.info(WIDE_META, 'event'),
     winston: () => winstonLogger.info('event', WIDE_META),
     bunyan: () => bunyanLogger.info(WIDE_META, 'event'),
-    logixia: async () => logixia.info('event', WIDE_META),
-    logixiaJson: async () => logixiaJson.info('event', WIDE_META),
+    logixia: () => {
+      logixia.info('event', WIDE_META);
+    },
+    logixiaJson: () => {
+      logixiaJson.info('event', WIDE_META);
+    },
   }),
 ];
 

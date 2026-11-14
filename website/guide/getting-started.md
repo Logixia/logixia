@@ -26,7 +26,7 @@ yarn add logixia
 
 :::
 
-logixia needs Node.js 16 or later and has three runtime dependencies (`commander`, `fast-json-stringify`, `picocolors`). Everything else is optional: NestJS (`@nestjs/common`, `reflect-metadata`) and Express are optional peer dependencies, only needed for [`logixia/nest`](/guide/nestjs). Database drivers are only needed for the [database transport](/guide/transports/database).
+logixia needs Node.js 16 or later and has two runtime dependencies (`commander`, `picocolors`). Everything else is optional: NestJS (`@nestjs/common`, `reflect-metadata`) and Express are optional peer dependencies, only needed for [`logixia/nest`](/guide/nestjs). Database drivers are only needed for the [database transport](/guide/transports/database).
 
 ## Your first logger
 
