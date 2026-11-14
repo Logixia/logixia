@@ -17,7 +17,7 @@
 
 import { LogixiaContext } from '../../context/async-context';
 import { resetShutdownHandlers } from '../../utils/shutdown.utils';
-import { LogixiaLogger } from '../logitron-logger';
+import { createLogger, LogixiaLogger } from '../logitron-logger';
 import { LogixiaLoggerService } from '../logitron-nestjs.service';
 
 const BASE_CONFIG = {
@@ -90,6 +90,35 @@ describe('LogixiaLogger.setContext — defensive coercion', () => {
     const logger = new LogixiaLogger({ ...BASE_CONFIG });
     logger.setContext('MyService');
     expect(logger.getContext()).toBe('MyService');
+  });
+});
+
+describe('LogixiaLogger constructor — defensive coercion', () => {
+  it('accepts a number as the context and logs it as a string', async () => {
+    const out = spyOutput();
+    let logger: LogixiaLogger | undefined;
+    try {
+      // Used to throw "ns.split is not a function" while resolving the level.
+      expect(() => {
+        logger = createLogger({ ...BASE_CONFIG }, 7 as any) as unknown as LogixiaLogger;
+      }).not.toThrow();
+      expect(logger!.getContext()).toBe('7');
+      await logger!.info('numbered');
+    } finally {
+      out.restore();
+    }
+    expect(out.joined()).toContain('[7] numbered');
+  });
+
+  it('accepts an object as the context, and as a child context', () => {
+    const logger = new LogixiaLogger({ ...BASE_CONFIG }, { area: 'billing' } as any);
+    expect(logger.getContext()).toContain('billing');
+    expect(() => logger.child({ part: 'invoices' } as any)).not.toThrow();
+  });
+
+  it('still treats a missing or null context as none', () => {
+    expect(new LogixiaLogger({ ...BASE_CONFIG }).getContext()).toBe('');
+    expect(new LogixiaLogger({ ...BASE_CONFIG }, null as any).getContext()).toBe('');
   });
 });
 

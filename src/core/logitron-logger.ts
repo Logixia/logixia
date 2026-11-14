@@ -101,6 +101,13 @@ function toJsonEntry(entry: LogEntry): LogEntry {
   return (copy ?? entry) as LogEntry;
 }
 
+// JS callers and framework glue can pass a non-string context; namespace matching
+// and the formatters need a string.
+function toContextLabel(context: unknown): string {
+  if (context === undefined || context === null) return '';
+  return typeof context === 'string' ? context : safeToString(context);
+}
+
 // ── Namespace level helpers ──────────────────────────────────────────────────
 
 function namespacePatternToRegex(pattern: string): RegExp {
@@ -321,7 +328,7 @@ export class LogixiaLogger<
       timeTaken: '[time_taken_MS]',
     };
 
-    this.context = context ?? '';
+    this.context = toContextLabel(context);
     protectSecrets(this, ['config']);
 
     if (parent) {
