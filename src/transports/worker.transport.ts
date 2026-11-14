@@ -229,6 +229,8 @@ export class WorkerTransport implements ITransport {
     if (!this.ready || !this.worker) return;
     const worker = this.worker;
     this.dirty = false;
+    // Unref'd between flushes; ref'd here so an awaited flush() keeps the process alive.
+    worker.ref();
     return new Promise<void>((resolve) => {
       // Time-box the flush: if the worker dies or restarts before answering,
       // the 'flushed' message would never arrive and this promise would hang
@@ -280,6 +282,8 @@ export class WorkerTransport implements ITransport {
     // shutdown message, which flushes the wrapped transport and exits.
     this.drainBufferTo(worker);
     worker.postMessage({ type: 'shutdown' });
+    // The worker is unref'd, so hold the process open until it has drained and exited.
+    worker.ref();
 
     await new Promise<void>((resolve) => {
       // Don't wait forever for a wedged worker — terminate() it after a timeout.
