@@ -60,6 +60,8 @@ function nowIso(): string {
 // common console path allocates no Promise. Callers can still await it.
 const RESOLVED: Promise<void> = Promise.resolve();
 
+const UNSERIALIZABLE = '[Unserializable]';
+
 // ── JSON line shape ──────────────────────────────────────────────────────────
 // A JSON line keeps a fixed shape for log pipelines: these fields are always strings
 // and payload is always an object, even when a JS caller or a plugin passed another type.
@@ -106,6 +108,25 @@ function toJsonEntry(entry: LogEntry): LogEntry {
 function toContextLabel(context: unknown): string {
   if (context === undefined || context === null) return '';
   return typeof context === 'string' ? context : safeToString(context);
+}
+
+// serializeError reads error.name/message/stack, and any of those can be a throwing getter.
+// A log call must not reject over that, so fall back to a marker and report it.
+function serializeErrorSafely(error: Error): Record<string, unknown> | string {
+  try {
+    return serializeError(error);
+  } catch (cause) {
+    internalError('Error serialization failed', cause);
+    return UNSERIALIZABLE;
+  }
+}
+
+function errorMessageSafely(error: Error): string {
+  try {
+    return safeToString(error.message);
+  } catch {
+    return UNSERIALIZABLE;
+  }
 }
 
 // ── Namespace level helpers ──────────────────────────────────────────────────
@@ -403,19 +424,21 @@ export class LogixiaLogger<
   }
 
   private createCustomLevelMethods(): void {
-    warnOnReservedLevelNames(this.config.levelOptions?.levels);
-    if (this.config.levelOptions?.levels) {
-      for (const levelName of Object.keys(this.config.levelOptions.levels)) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (!(this as any)[levelName.toLowerCase()]) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (this as any)[levelName.toLowerCase()] = (
-            message: string,
-            data?: Record<string, unknown>
-          ): Promise<void> => this.logLevel(levelName.toLowerCase(), message, data);
-        }
+    const levels = this.config.levelOptions?.levels;
+    warnOnReservedLevelNames(levels);
+    if (!levels) return;
+    const self = this as unknown as Record<string, unknown>;
+    const names = Object.keys(levels);
+    const define = (method: string, levelName: string): void => {
+      if (!self[method]) {
+        self[method] = (message: string, data?: Record<string, unknown>): Promise<void> =>
+          this.logLevel(levelName, message, data);
       }
-    }
+    };
+    // Exact names first, so a lowercase alias never takes the slot of a level that is really named that.
+    for (const levelName of names) define(levelName, levelName);
+    // Lowercase alias kept for callers that used it (`dbquery` for a `dbQuery` level); it logs at the exact level.
+    for (const levelName of names) define(levelName.toLowerCase(), levelName);
   }
 
   /**
@@ -548,9 +571,9 @@ export class LogixiaLogger<
   error(messageOrError: string | Error, data?: Record<string, unknown>): Promise<void> {
     try {
       return isError(messageOrError)
-        ? this._run('error', messageOrError.message, {
+        ? this._run('error', errorMessageSafely(messageOrError), {
             ...data,
-            error: serializeError(messageOrError),
+            error: serializeErrorSafely(messageOrError),
           })
         : this._run('error', messageOrError, data);
     } catch (error) {
@@ -766,6 +789,8 @@ export class LogixiaLogger<
   /** Set the context label (e.g. a class or module name) attached to every subsequent entry. */
   setContext(context: string): void {
     this.context = typeof context === 'string' ? context : safeToString(context);
+    // The namespace level depends on the context, so re-resolve it now.
+    this._syncNamespaceLevels();
   }
 
   /** Return the current context label, or `undefined` if none is set. */
@@ -980,7 +1005,7 @@ export class LogixiaLogger<
     if (config.silent) return;
     if (!this.shouldLog(level)) return;
     // Before the merges below, because spreading an Error drops its message and stack.
-    const data = rawData instanceof Error ? { error: serializeError(rawData) } : rawData;
+    const data = rawData instanceof Error ? { error: serializeErrorSafely(rawData) } : rawData;
 
     // One read of each ALS store per call. TraceContext is the source of truth for
     // the trace ID; a traceId on a bare LogixiaContext scope is only a fallback.
@@ -1345,17 +1370,5 @@ export function createLogger<T extends LoggerConfig<Record<string, number>>>(
   config: T,
   context?: string
 ): LoggerWithLevels<T> {
-  const logger = new LogixiaLogger<T>(config, context);
-  const mutableLogger = logger as unknown as Record<string, unknown>;
-
-  if (config.levelOptions?.levels) {
-    for (const levelName of Object.keys(config.levelOptions.levels)) {
-      if (!mutableLogger[levelName]) {
-        mutableLogger[levelName] = (message: string, data?: Record<string, unknown>) =>
-          logger.logLevel(levelName, message, data);
-      }
-    }
-  }
-
-  return logger as unknown as LoggerWithLevels<T>;
+  return new LogixiaLogger<T>(config, context) as unknown as LoggerWithLevels<T>;
 }
