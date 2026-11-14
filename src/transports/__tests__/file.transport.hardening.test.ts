@@ -191,9 +191,12 @@ describe('FileTransport hardening', () => {
       const gz = files.filter((f) => f.endsWith('.gz'));
       expect(gz.length).toBeGreaterThan(0);
       for (const f of files) expect(mode(path.join(dir, f))).toBe(0o600);
-      expect(gunzipSync(fs.readFileSync(path.join(dir, gz[0] as string))).toString()).toContain(
-        'rotate-me-0'
-      );
+      // readdir order is unspecified, and two rotations in the same millisecond get a
+      // `.1` suffix that sorts first, so look through every archive.
+      const archived = gz
+        .map((f) => gunzipSync(fs.readFileSync(path.join(dir, f))).toString())
+        .join('');
+      expect(archived).toContain('rotate-me-0');
     });
   });
 });
