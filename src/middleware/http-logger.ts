@@ -33,6 +33,7 @@ import {
   DEFAULT_REDACT_HEADERS,
   DEFAULT_REDACT_QUERY_PARAMS,
   redactUrlQuery as sanitizeUrl,
+  redactUrlsInText,
 } from '../utils/sensitive-names';
 
 // ── Shared types ─────────────────────────────────────────────────────────────
@@ -98,14 +99,28 @@ export type OutgoingResponse = HttpResponseShape;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Referer, X-Forwarded-Uri, X-Original-Url and the like carry full URLs, so their
+// query strings get the same parameter redaction as the request URL.
+function redactHeaderUrls(value: unknown, paramSet: Set<string>): unknown {
+  if (typeof value === 'string') {
+    return value.includes('?') ? redactUrlsInText(value, paramSet) : value;
+  }
+  return Array.isArray(value) ? value.map((item) => redactHeaderUrls(item, paramSet)) : value;
+}
+
 function sanitizeHeaders(
   headers: Record<string, string | string[] | undefined> | undefined,
-  redactSet: Set<string>
+  redactSet: Set<string>,
+  paramSet: Set<string>
 ): Record<string, unknown> {
   if (!headers) return {};
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(headers)) {
-    assignOwn(out, k, redactSet.has(k.toLowerCase()) ? '[REDACTED]' : v);
+    assignOwn(
+      out,
+      k,
+      redactSet.has(k.toLowerCase()) ? '[REDACTED]' : redactHeaderUrls(v, paramSet)
+    );
   }
   return out;
 }
@@ -142,7 +157,7 @@ function buildBaseFields(
     method: req.method?.toUpperCase() ?? 'UNKNOWN',
     url: sanitizeUrl(req.url ?? '/', paramSet),
     ip: req.ip ?? req.socket?.remoteAddress ?? 'unknown',
-    headers: sanitizeHeaders(req.headers, redactSet),
+    headers: sanitizeHeaders(req.headers, redactSet, paramSet),
   };
 
   if (options.extraFields) {
