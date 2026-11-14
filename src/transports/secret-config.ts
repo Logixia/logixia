@@ -104,8 +104,26 @@ const hiddenKeys = new WeakMap<object, Set<string>>();
 const hiddenValues = new WeakMap<object, Map<string, unknown>>();
 
 function viewOf(target: object): Record<string, unknown> {
-  const hidden = hiddenKeys.get(target) ?? new Set<string>();
-  const values = hiddenValues.get(target);
+  return buildView(target, hiddenKeys.get(target) ?? new Set<string>(), hiddenValues.get(target));
+}
+
+/**
+ * The redacted toJSON / inspect view of `target`, for a class that keeps its secret
+ * fields itself (an accessor on its prototype) instead of calling protectSecrets()
+ * per instance. `hidden` holds those fields and their current values.
+ */
+export function redactedView(
+  target: object,
+  hidden: ReadonlyMap<string, unknown>
+): Record<string, unknown> {
+  return buildView(target, new Set(hidden.keys()), hidden);
+}
+
+function buildView(
+  target: object,
+  hidden: ReadonlySet<string>,
+  values: ReadonlyMap<string, unknown> | undefined
+): Record<string, unknown> {
   const view: Record<string, unknown> = { class: target.constructor?.name };
   for (const key of new Set([...Object.keys(target), ...hidden])) {
     const inner = hidden.has(key) ? values?.get(key) : (target as Record<string, unknown>)[key];

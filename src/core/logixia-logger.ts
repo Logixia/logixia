@@ -12,7 +12,7 @@
 import { LogixiaContext } from '../context/async-context';
 import type { LogixiaPlugin } from '../plugin';
 import { globalPluginRegistry, PluginRegistry } from '../plugin';
-import { protectSecrets } from '../transports/secret-config';
+import { redactedView } from '../transports/secret-config';
 import { TransportManager } from '../transports/transport.manager';
 import type {
   ContextData,
@@ -61,6 +61,10 @@ function nowIso(): string {
 const RESOLVED: Promise<void> = Promise.resolve();
 
 const UNSERIALIZABLE = '[Unserializable]';
+
+// Each logger's config, kept off the instance so it is never an own property that
+// JSON, spread or inspect could reach. Replaces a protectSecrets() call per logger.
+const CONFIGS = new WeakMap<object, LoggerConfig>();
 
 // ANSI color codes by name; read-only, shared by every logger instance.
 const ANSI_COLORS: ReadonlyMap<string, string> = new Map([
@@ -163,6 +167,19 @@ function namespacePatternToRegex(pattern: string): RegExp {
 
 /** Max compiled patterns to keep in memory. Oldest entry is evicted when full. */
 const _NS_CACHE_MAX = 1000;
+
+// `LOGIXIA_LEVEL_<NS>` for a context, built once per distinct context. The variable
+// itself is still read on every resolve, so a change to it is seen by the next child.
+const _nsEnvNames = new Map<string, string>();
+function nsEnvName(ns: string): string {
+  let name = _nsEnvNames.get(ns);
+  if (name === undefined) {
+    name = `LOGIXIA_LEVEL_${ns.split('.')[0]!.toUpperCase()}`;
+    if (_nsEnvNames.size >= _NS_CACHE_MAX) _nsEnvNames.clear();
+    _nsEnvNames.set(ns, name);
+  }
+  return name;
+}
 const _nsPatternCache = new Map<string, RegExp>();
 /**
  * One-shot warning so operators notice runaway pattern growth.
@@ -265,43 +282,55 @@ export class LogixiaLogger<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- index signature for dynamic custom level methods
   [K: string]: any;
 
-  private config: TConfig;
+  private get config(): TConfig {
+    return CONFIGS.get(this) as TConfig;
+  }
+  private set config(value: TConfig) {
+    CONFIGS.set(this, value);
+  }
+
   private context?: string;
-  private timers: Map<string, TimingEntry> = new Map();
+  /** Created by the first time() call. */
+  private timers: Map<string, TimingEntry> | undefined;
   private contextData: ContextData = {};
   private transportManager: TransportManager | undefined;
-  private fieldState: Map<string, boolean> = new Map();
+  /** Runtime field overrides; created by the first enableField() / disableField(). */
+  private fieldState: Map<string, boolean> | undefined;
 
   /** Stable fallback trace ID generated ONCE per logger instance. */
   private readonly fallbackTraceId: string = TraceContext.instance.generate();
 
   // ── Performance: hot-path caches (rebuilt when config changes) ───────────────
   /** Numeric value for each known log level — built once, read on every log call. */
-  private _levelValues: Map<string, number> = new Map();
+  private _levelValues!: Map<string, number>;
   /** Numeric threshold for the currently active log level. */
   private _minLevelValue = 2;
   /** Level set via setLevel(); outranks every other level source until the process ends. */
   private _runtimeLevel: string | undefined;
   /** `source=value` pairs already reported as unknown levels — warn once per logger. */
-  private readonly _warnedInvalidLevels = new Set<string>();
+  private _warnedInvalidLevels: Set<string> | undefined;
   /** Pre-built ANSI color codes to avoid recreating the object in colorize(). */
   private _colorMap: ReadonlyMap<string, string> = ANSI_COLORS;
   /** Pre-computed field-enabled booleans so isFieldEnabled() isn't called per log. */
-  private _fieldCache: Map<string, boolean> = new Map();
+  private _fieldCache!: Map<string, boolean>;
+  /** False while _fieldCache is still the parent's map; it is copied before the first write. */
+  private _ownsFieldCache = false;
   /** True when contextData is non-empty — avoids Object.keys() check on hot path. */
   private _hasContextData = false;
   /**
    * Pre-computed `[INFO] `, `[WARN] ` etc. strings — avoids a colorize() call per log.
    * Key: lowercase level name. Value: formatted bracket string ready to concatenate.
    */
-  private _formattedLevels: Map<string, string> = new Map();
+  private _formattedLevels!: Map<string, string>;
   /** Pre-computed `[appName] ` string — avoids template literal allocation per log. */
   private _formattedAppName = '';
   /**
    * JSON line pieces between the timestamp and the message, keyed by level, for the
    * appName and environment they were built from. Rebuilt when either changes.
    */
-  private _jsonHeads: Map<string, string> = new Map();
+  private _jsonHeads!: Map<string, string>;
+  /** Custom level shortcuts as [method, level] pairs; a child reuses its parent's list. */
+  private _levelMethods!: ReadonlyArray<readonly [string, string]>;
   private _jsonHeadsApp = '';
   private _jsonHeadsEnv = '';
   /** The `,"context":"..."` piece for `_jsonContextKey`. */
@@ -328,38 +357,37 @@ export class LogixiaLogger<
     this._nsSeenVersion = this._nsStore.version;
     this._pluginRegistry = parent ? parent._pluginRegistry : new PluginRegistry();
 
-    const defaultConfig: LoggerConfig = {
-      appName: 'App',
-      environment: 'development',
-      traceId: true,
-      format: { timestamp: true, colorize: true, json: false },
-      silent: false,
-      levelOptions: {
-        level: LogLevel.INFO,
-        levels: {
-          [LogLevel.ERROR]: 0,
-          [LogLevel.WARN]: 1,
-          [LogLevel.INFO]: 2,
-          [LogLevel.DEBUG]: 3,
-          [LogLevel.TRACE]: 4,
-          [LogLevel.VERBOSE]: 5,
-        },
-        colors: {
-          [LogLevel.ERROR]: 'red',
-          [LogLevel.WARN]: 'yellow',
-          [LogLevel.INFO]: 'blue',
-          [LogLevel.DEBUG]: 'green',
-          [LogLevel.TRACE]: 'gray',
-          [LogLevel.VERBOSE]: 'cyan',
-        },
-      },
-    };
-
     if (parent) {
       // A child is handed its parent's config, which already has the defaults and a
       // validated level. Its own levelOptions keep child.setLevel() off the parent.
       this.config = { ...config, levelOptions: { ...config.levelOptions } };
     } else {
+      const defaultConfig: LoggerConfig = {
+        appName: 'App',
+        environment: 'development',
+        traceId: true,
+        format: { timestamp: true, colorize: true, json: false },
+        silent: false,
+        levelOptions: {
+          level: LogLevel.INFO,
+          levels: {
+            [LogLevel.ERROR]: 0,
+            [LogLevel.WARN]: 1,
+            [LogLevel.INFO]: 2,
+            [LogLevel.DEBUG]: 3,
+            [LogLevel.TRACE]: 4,
+            [LogLevel.VERBOSE]: 5,
+          },
+          colors: {
+            [LogLevel.ERROR]: 'red',
+            [LogLevel.WARN]: 'yellow',
+            [LogLevel.INFO]: 'blue',
+            [LogLevel.DEBUG]: 'green',
+            [LogLevel.TRACE]: 'gray',
+            [LogLevel.VERBOSE]: 'cyan',
+          },
+        },
+      };
       this.config = { ...defaultConfig, ...config };
       // ── Feature 5: Adaptive log level ─────────────────────────────────────
       const resolvedLevel = resolveInitialLevel(this.config);
@@ -377,7 +405,6 @@ export class LogixiaLogger<
     };
 
     this.context = toContextLabel(context);
-    protectSecrets(this, ['config']);
 
     if (parent) {
       this.transportManager = parent.transportManager;
@@ -416,7 +443,7 @@ export class LogixiaLogger<
     // ── Feature 1: Graceful shutdown ─────────────────────────────────────────
     if (!parent) this.setupGracefulShutdown();
 
-    this.createCustomLevelMethods();
+    this.createCustomLevelMethods(parent);
 
     // ── Feature 20: Seed with any plugins already in the global registry ─────
     // Plugins registered via usePlugin() before this logger was created are
@@ -450,22 +477,36 @@ export class LogixiaLogger<
     });
   }
 
-  private createCustomLevelMethods(): void {
-    const levels = this.config.levelOptions?.levels;
-    warnOnReservedLevelNames(levels);
-    if (!levels) return;
-    const self = this as unknown as Record<string, unknown>;
-    const names = Object.keys(levels);
-    const define = (method: string, levelName: string): void => {
-      if (!self[method]) {
-        self[method] = (message: string, data?: Record<string, unknown>): Promise<void> =>
-          this.logLevel(levelName, message, data);
+  private createCustomLevelMethods(parent?: LogixiaLogger<TConfig>): void {
+    if (parent) {
+      // Same levels and the same members as the parent, so the same shortcuts.
+      this._levelMethods = parent._levelMethods;
+    } else {
+      const levels = this.config.levelOptions?.levels;
+      warnOnReservedLevelNames(levels);
+      const names = Object.keys(levels ?? {});
+      const methods: [string, string][] = [];
+      const taken = new Set<string>();
+      // Exact names first, so a lowercase alias never takes the slot of a level that is really
+      // named that. The lowercase alias is kept for callers that used it (`dbquery` for a
+      // `dbQuery` level); it logs at the exact level. An existing member, method or field, is
+      // never replaced.
+      const candidates = [
+        ...names.map((name) => [name, name] as const),
+        ...names.map((name) => [name.toLowerCase(), name] as const),
+      ];
+      for (const [method, levelName] of candidates) {
+        if (method in this || taken.has(method)) continue;
+        taken.add(method);
+        methods.push([method, levelName]);
       }
-    };
-    // Exact names first, so a lowercase alias never takes the slot of a level that is really named that.
-    for (const levelName of names) define(levelName, levelName);
-    // Lowercase alias kept for callers that used it (`dbquery` for a `dbQuery` level); it logs at the exact level.
-    for (const levelName of names) define(levelName.toLowerCase(), levelName);
+      this._levelMethods = methods;
+    }
+    const self = this as unknown as Record<string, unknown>;
+    for (const [method, levelName] of this._levelMethods) {
+      self[method] = (message: string, data?: Record<string, unknown>): Promise<void> =>
+        this.logLevel(levelName, message, data);
+    }
   }
 
   /**
@@ -473,12 +514,17 @@ export class LogixiaLogger<
    * Keeps the actual log() call free of allocations in the common case.
    */
   private _buildPerfCaches(inheritFrom?: LogixiaLogger<TConfig>): void {
-    if (inheritFrom && inheritFrom.fieldState.size === 0) {
+    if (inheritFrom && !inheritFrom.fieldState?.size) {
       // A new child has its parent's config and no field toggles of its own, so the
       // config-derived caches are the parent's. Only the level threshold depends on
       // the child's context (namespace levels), so it is resolved here.
       this._levelValues = inheritFrom._levelValues;
-      this._fieldCache = new Map(inheritFrom._fieldCache);
+      // Shared until either side toggles a field: both copy before writing.
+      this._fieldCache = inheritFrom._fieldCache;
+      inheritFrom._ownsFieldCache = false;
+      this._jsonHeads = inheritFrom._jsonHeads;
+      this._jsonHeadsApp = inheritFrom._jsonHeadsApp;
+      this._jsonHeadsEnv = inheritFrom._jsonHeadsEnv;
       this._formattedLevels = inheritFrom._formattedLevels;
       this._formattedAppName = inheritFrom._formattedAppName;
       this._hasRedact = inheritFrom._hasRedact;
@@ -508,6 +554,8 @@ export class LogixiaLogger<
     this._colorMap = ANSI_COLORS;
 
     // 3. Field enabled cache — replaces per-call isFieldEnabled() calls
+    const fieldCache = this._writableFieldCache();
+    this._jsonHeads ??= new Map();
     const fieldNames = [
       'timestamp',
       'level',
@@ -518,12 +566,13 @@ export class LogixiaLogger<
       'payload',
     ];
     for (const f of fieldNames) {
-      if (this.fieldState.has(f)) {
-        this._fieldCache.set(f, this.fieldState.get(f)!);
+      const own = this.fieldState?.get(f);
+      if (own !== undefined) {
+        fieldCache.set(f, own);
       } else if (this.config.fields?.[f as keyof typeof this.config.fields] === undefined) {
-        this._fieldCache.set(f, true);
+        fieldCache.set(f, true);
       } else {
-        this._fieldCache.set(f, this.config.fields[f as keyof typeof this.config.fields] !== false);
+        fieldCache.set(f, this.config.fields[f as keyof typeof this.config.fields] !== false);
       }
     }
 
@@ -579,6 +628,14 @@ export class LogixiaLogger<
         (this.config.redact.patterns?.length ?? 0) > 0 ||
         !!this.config.redact.autoDetect)
     );
+  }
+
+  private _writableFieldCache(): Map<string, boolean> {
+    if (!this._ownsFieldCache) {
+      this._fieldCache = new Map(this._fieldCache);
+      this._ownsFieldCache = true;
+    }
+    return this._fieldCache;
   }
 
   // ── Public logging API ───────────────────────────────────────────────────────
@@ -653,6 +710,7 @@ export class LogixiaLogger<
 
   /** Start a named timer; finish it with {@link timeEnd}. Reusing a label restarts it. */
   time(label: string): void {
+    this.timers ??= new Map();
     this.timers.set(label, { label, startTime: Date.now() });
   }
 
@@ -669,7 +727,7 @@ export class LogixiaLogger<
    * ```
    */
   async timeEnd(label: string): Promise<number | undefined> {
-    const timer = this.timers.get(label);
+    const timer = this.timers?.get(label);
     if (!timer) {
       await this.warn(`Timer '${label}' does not exist`);
       return undefined;
@@ -683,7 +741,7 @@ export class LogixiaLogger<
       startTime: new Date(timer.startTime).toISOString(),
       endTime: new Date(endTime).toISOString(),
     });
-    this.timers.delete(label);
+    this.timers?.delete(label);
     return duration;
   }
 
@@ -752,6 +810,7 @@ export class LogixiaLogger<
     const canonical = canonicalLevel(level, this._levelValues);
     if (canonical === undefined) {
       const key = `${source}=${String(level)}`;
+      this._warnedInvalidLevels ??= new Set();
       if (!this._warnedInvalidLevels.has(key)) {
         this._warnedInvalidLevels.add(key);
         internalWarn(
@@ -822,8 +881,9 @@ export class LogixiaLogger<
 
   /** Show `fieldName` in log output, overriding the config for this logger instance. */
   enableField(fieldName: string): void {
+    this.fieldState ??= new Map();
     this.fieldState.set(fieldName, true);
-    this._fieldCache.set(fieldName, true);
+    this._writableFieldCache().set(fieldName, true);
     // Rebuild derivative caches that depend on field visibility
     if (fieldName === 'level' || fieldName === 'appName') this._buildPerfCaches();
     internalLog(`Field '${fieldName}' enabled`);
@@ -831,8 +891,9 @@ export class LogixiaLogger<
 
   /** Hide `fieldName` from log output, overriding the config for this logger instance. */
   disableField(fieldName: string): void {
+    this.fieldState ??= new Map();
     this.fieldState.set(fieldName, false);
-    this._fieldCache.set(fieldName, false);
+    this._writableFieldCache().set(fieldName, false);
     // Rebuild derivative caches that depend on field visibility
     if (fieldName === 'level' || fieldName === 'appName') this._buildPerfCaches();
     internalLog(`Field '${fieldName}' disabled`);
@@ -840,7 +901,8 @@ export class LogixiaLogger<
 
   /** Whether `fieldName` is currently shown: runtime override first, then config, default `true`. */
   isFieldEnabled(fieldName: string): boolean {
-    if (this.fieldState.has(fieldName)) return this.fieldState.get(fieldName)!;
+    const own = this.fieldState?.get(fieldName);
+    if (own !== undefined) return own;
     if (this.config.fields?.[fieldName as keyof typeof this.config.fields] !== undefined) {
       return this.config.fields[fieldName as keyof typeof this.config.fields] !== false;
     }
@@ -868,7 +930,7 @@ export class LogixiaLogger<
 
   /** Drop all runtime enable/disable overrides so field visibility follows the config again. */
   resetFieldState(): void {
-    this.fieldState.clear();
+    this.fieldState?.clear();
     internalLog('Field state reset to configuration defaults');
   }
 
@@ -993,13 +1055,13 @@ export class LogixiaLogger<
    * ```
    */
   async close(): Promise<void> {
-    for (const [label, timer] of this.timers) {
+    for (const [label, timer] of this.timers ?? []) {
       await this.warn(`Timer '${label}' was not ended properly`, {
         startTime: new Date(timer.startTime).toISOString(),
         duration: `${Date.now() - timer.startTime}ms (incomplete)`,
       });
     }
-    this.timers.clear();
+    this.timers?.clear();
 
     if (this._parent) return;
 
@@ -1170,11 +1232,8 @@ export class LogixiaLogger<
 
     if (ns) {
       // 1. ENV namespace override: LOGIXIA_LEVEL_DB → context "db" or "db.queries"
-      const nsKey = ns.split('.')[0]!.toUpperCase();
-      const envNsLevel = this._validLevel(
-        process.env[`LOGIXIA_LEVEL_${nsKey}`],
-        `LOGIXIA_LEVEL_${nsKey}`
-      );
+      const envName = nsEnvName(ns);
+      const envNsLevel = this._validLevel(process.env[envName], envName);
       if (envNsLevel) return envNsLevel;
 
       // 2. namespaceLevels config
@@ -1366,6 +1425,15 @@ export class LogixiaLogger<
     const sink = level === LogLevel.ERROR ? process.stderr : process.stdout;
     sink.write(this.formatLog(entry) + '\n');
   }
+}
+
+// The redacted toJSON / inspect view protectSecrets() gives other classes, defined
+// once on the prototype instead of on every logger and child.
+function loggerView(this: object): Record<string, unknown> {
+  return redactedView(this, new Map([['config', CONFIGS.get(this)]]));
+}
+for (const key of ['toJSON', Symbol.for('nodejs.util.inspect.custom')]) {
+  Object.defineProperty(LogixiaLogger.prototype, key, { value: loggerView, configurable: true });
 }
 
 // ── Factory ───────────────────────────────────────────────────────────────────

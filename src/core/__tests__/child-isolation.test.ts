@@ -127,8 +127,25 @@ describe('child() isolation', () => {
     expect(root.isFieldEnabled('appName')).toBe(true);
   });
 
+  it('keeps a parent field toggle made after child() off the child', async () => {
+    const root = new LogixiaLogger({
+      appName: 'fields',
+      levelOptions: { level: 'info' },
+      format: { json: false, timestamp: false, colorize: false },
+    } as never);
+    const child = root.child('c') as unknown as LogixiaLogger;
+    root.disableField('message');
+    await root.info('root-msg');
+    await child.info('child-msg');
+    const out = written.join('');
+    expect(out).not.toContain('root-msg');
+    expect(out).toContain('child-msg');
+    expect(child.isFieldEnabled('message')).toBe(true);
+  });
+
   it('redacts the bindings of a child', async () => {
     const root = jsonLogger({ redact: { paths: ['password'] } });
+    // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- a fake value the redaction must hide
     await root.child('c', { password: 'CHILD-PW-VALUE', user: 'u1' }).info('m');
     const [line] = lines();
     expect(JSON.stringify(line)).not.toContain('CHILD-PW-VALUE');
@@ -172,6 +189,31 @@ describe('child() isolation', () => {
     const child = root.child('c') as unknown as { audit(m: string): Promise<void> };
     await child.audit('audited');
     expect(lines()[0]).toMatchObject({ level: 'audit', message: 'audited', context: 'c' });
+  });
+
+  it('keeps the timers of a logger with a custom level named timers', async () => {
+    const root = createLogger({
+      appName: 'lv',
+      levelOptions: { level: 'info', levels: { error: 0, warn: 1, info: 2, timers: 2 } },
+      format: { json: true, timestamp: false, colorize: false },
+    });
+    for (const logger of [root, root.child('c')] as unknown as LogixiaLogger[]) {
+      logger.time('t');
+      expect(typeof (await logger.timeEnd('t'))).toBe('number');
+    }
+  });
+
+  it('never replaces an unset field with a level shortcut', async () => {
+    const root = createLogger({
+      appName: 'lv',
+      levelOptions: { level: 'info', levels: { error: 0, warn: 1, info: 2, context: 2 } },
+      format: { json: true, timestamp: false, colorize: false },
+    });
+    await root.info('plain');
+    await root.logLevel('context', 'at-context-level');
+    const [plain, atLevel] = lines();
+    expect(plain).not.toHaveProperty('context');
+    expect(atLevel).toMatchObject({ level: 'context', message: 'at-context-level' });
   });
 
   it('applies namespace levels by child context', async () => {
