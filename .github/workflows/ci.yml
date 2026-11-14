@@ -201,6 +201,11 @@ jobs:
           tarball_path="./release/logixia-${CHECK_VERSION}.tgz"
           npm publish "$tarball_path" --dry-run --access public --ignore-scripts --tag ci-dry-run
 
+      # Same CLI and flags as the publish-jsr job; catches a source change JSR
+      # can't publish before a tag exists.
+      - name: JSR dry-run publish
+        run: npx --yes jsr@0.14.3 publish --dry-run --allow-slow-types --allow-dirty
+
   # ─────────────────────────────────────────────────────────
   # 4. Release — only on direct push to main. Does NOT publish to npm.
   #
@@ -357,3 +362,43 @@ jobs:
 
       - name: Publish
         run: npm publish "$TARBALL_PATH" --provenance --access public --ignore-scripts
+
+  # ─────────────────────────────────────────────────────────
+  # 6. Publish to JSR (jsr.io/@logixia/logixia) — TypeScript source, for Deno,
+  # Bun and Node users who install from JSR.
+  #
+  # Kept out of the npm `publish` job because the jsr CLI is downloaded from
+  # the registry, and that job installs nothing. It runs in its own `jsr`
+  # Environment, so it has its own reviewer gate, and npm trusted publishing
+  # should be bound to the `npm` environment so this job's token can't publish
+  # to npm. Authenticates to JSR with OIDC (the package is linked to this repo
+  # on jsr.io); no JSR token exists.
+  # ─────────────────────────────────────────────────────────
+  publish-jsr:
+    name: Publish to JSR
+    runs-on: ubuntu-latest
+    needs: [release, publish]
+    if: ${{ !cancelled() && needs.release.outputs.released == 'true' && needs.publish.result == 'success' }}
+    environment: jsr
+    permissions:
+      id-token: write # JSR OIDC publishing
+      contents: read
+    steps:
+      - name: Checkout the release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v${{ needs.release.outputs.version }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.22.2'
+
+      - name: Set the version and publish
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          case "$VERSION" in *-*|'') echo "::error::Refusing to publish version '$VERSION'"; exit 1 ;; esac
+          node -e 'const f="jsr.json";const j=JSON.parse(require("fs").readFileSync(f,"utf8"));j.version=process.env.VERSION;require("fs").writeFileSync(f,JSON.stringify(j,null,2)+"\n")'
+          npx --yes jsr@0.14.3 publish --allow-slow-types --allow-dirty

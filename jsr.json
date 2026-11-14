@@ -1,0 +1,23 @@
+{
+  "name": "@logixia/logixia",
+  "version": "0.0.0",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./nest": "./src/nest.ts",
+    "./transports": "./src/transports.ts",
+    "./search": "./src/search.ts",
+    "./testing": "./src/testing.ts",
+    "./middleware": "./src/middleware.ts",
+    "./worker": "./src/worker.ts",
+    "./cloudwatch": "./src/cloudwatch.ts",
+    "./gcp": "./src/gcp.ts",
+    "./azure": "./src/azure.ts",
+    "./browser": "./src/browser.ts",
+    "./correlation": "./src/correlation.ts"
+  },
+  "publish": {
+    "include": ["src/**/*.ts", "README.md", "LICENSE"],
+    "exclude": ["src/**/__tests__/**", "src/**/*.test.ts"]
+  }
+}
