@@ -18,6 +18,14 @@ import type {
 /**
  * NLP-enhanced search engine
  */
+// Queries can come from users. The intent and entity patterns are cheap on a sentence
+// but some scale with length squared, so nothing past this many characters is parsed.
+const MAX_QUERY_LENGTH = 2000;
+
+function capQuery(query: string): string {
+  return query.length > MAX_QUERY_LENGTH ? query.slice(0, MAX_QUERY_LENGTH) : query;
+}
+
 export class NLPSearchEngine extends BasicSearchEngine {
   private intentPatterns!: Map<QueryIntent, RegExp[]>;
   private entityPatterns!: Map<EntityType, RegExp>;
@@ -30,7 +38,8 @@ export class NLPSearchEngine extends BasicSearchEngine {
   /**
    * Enhanced natural language query parsing
    */
-  override async parseNaturalLanguageQuery(query: string): Promise<ParsedNLQuery> {
+  override async parseNaturalLanguageQuery(rawQuery: string): Promise<ParsedNLQuery> {
+    const query = capQuery(rawQuery);
     const entities: QueryEntity[] = [];
     const filters: SearchFilters = {};
 
@@ -68,7 +77,8 @@ export class NLPSearchEngine extends BasicSearchEngine {
   /**
    * Enhanced natural language search
    */
-  override async naturalLanguageSearch(query: string): Promise<SearchResult[]> {
+  override async naturalLanguageSearch(rawQuery: string): Promise<SearchResult[]> {
+    const query = capQuery(rawQuery);
     const parsed = await this.parseNaturalLanguageQuery(query);
 
     // Adjust search options based on intent
@@ -153,8 +163,8 @@ export class NLPSearchEngine extends BasicSearchEngine {
       ['service', /(?:from|in)\s+(?:the\s+)?(\w+)\s+(?:service|app|application)/i],
       ['trace_id', /trace\s+(?:id\s+)?['"]?([\w-]+)['"]?/i],
       ['time', /(?:last|past|previous)\s+(\d+)\s+(second|minute|hour|day|week)s?/i],
-      // eslint-disable-next-line sonarjs/super-linear-regex -- bounded pattern, DoS risk is acceptable for log search
-      ['error_type', /(\w+Error|\w+Exception)/i],
+      // Anchored at a word start with a bounded run, so a long word can't backtrack quadratically.
+      ['error_type', /\b(\w{0,64}(?:Error|Exception))\b/i],
     ]);
   }
 
