@@ -10,6 +10,8 @@
     "paths": {
       "logixia": ["./src/index.ts"],
       "logixia/middleware": ["./src/middleware.ts"],
+      "logixia/fastify": ["./src/fastify.ts"],
+      "logixia/hono": ["./src/hono.ts"],
       "logixia/correlation": ["./src/correlation.ts"],
       "logixia/browser": ["./src/browser.ts"],
       "logixia/transports": ["./src/transports.ts"],

@@ -1,5 +1,5 @@
 /**
- * Hono example (Node.js): per-request trace ID via runWithTraceId.
+ * Hono example (Node.js): trace ID, response header and request logging via logixia/hono.
  *
  * Run:   npm run dev:hono
  * Try:   curl -H 'x-trace-id: abc' localhost:3000/
@@ -8,13 +8,8 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import {
-  createLogger,
-  DEFAULT_TRACE_HEADERS,
-  extractTraceId,
-  generateTraceId,
-  runWithTraceId,
-} from 'logixia';
+import { createLogger } from 'logixia';
+import { createHonoMiddleware } from 'logixia/hono';
 
 const logger = createLogger({
   appName: 'hono-example',
@@ -22,26 +17,14 @@ const logger = createLogger({
   redact: { paths: ['**.authorization', '**.cookie', '**.password'] },
 });
 
-const app = new Hono();
+const app = new Hono<{ Variables: { traceId: string } }>();
 
-app.use(async (c, next) => {
-  // Header names from c.req.header() are lower-cased, which is what extractTraceId expects.
-  const traceId =
-    extractTraceId({ headers: c.req.header() }, { header: DEFAULT_TRACE_HEADERS }) ??
-    generateTraceId();
-  const start = Date.now();
-  c.header('x-trace-id', traceId);
+// Resolves or generates a trace ID, echoes it as `x-trace-id`, runs the request inside
+// that trace scope and logs one "request completed" (or "request failed") entry with
+// method, path (secret query params redacted), status and duration.
+app.use(createHonoMiddleware(logger, { skip: (c) => c.req.url.endsWith('/health') }));
 
-  await runWithTraceId(traceId, async () => {
-    await next();
-    await logger.info('request completed', {
-      method: c.req.method,
-      path: c.req.path,
-      status: c.res.status,
-      duration: Date.now() - start,
-    });
-  });
-});
+app.get('/health', (c) => c.text('ok'));
 
 app.get('/', async (c) => {
   await logger.info('Handling index', { userId: 'u_42', plan: 'pro' });
@@ -56,11 +39,10 @@ app.get('/forbidden', () => {
   throw new HTTPException(403, { message: 'Forbidden' });
 });
 
-app.onError(async (err, c) => {
+// The middleware already logs the failure (error for 5xx, warn for a 403), so the error
+// handler only builds the response.
+app.onError((err, c) => {
   const status = err instanceof HTTPException ? err.status : 500;
-  // Client errors (4xx) are expected traffic; only 5xx are actual failures.
-  if (status >= 500) await logger.error(err);
-  else await logger.warn(err.message, { status });
   return c.json({ error: status >= 500 ? 'Internal Server Error' : err.message }, status);
 });
 

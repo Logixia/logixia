@@ -111,9 +111,9 @@ app.get('/orders', async (_req, res) => {
 });
 ```
 
-The trace ID is the first present header of `traceparent` (parsed to its 32-hex trace id), `x-trace-id`, `x-request-id`, `x-correlation-id` or `trace-id`, otherwise a generated UUID. Fastify has `createFastifyContextHook()` and `createFastifyPlugin()`; for anything else, wrap the handler in `runWithTraceId()`. `logixia/correlation` adds `X-Correlation-ID` propagation through `fetch`, axios, Kafka and SQS.
+The trace ID is the first present header of `traceparent` (parsed to its 32-hex trace id), `x-trace-id`, `x-request-id`, `x-correlation-id` or `trace-id`, otherwise a generated UUID. Fastify has `createFastifyContextHook()` and `createFastifyPlugin()`, and `createFastifyLogger()` from `logixia/fastify` makes a logixia logger Fastify's `loggerInstance`. Hono has `createHonoMiddleware()` from `logixia/hono`, which also runs on Bun and Cloudflare Workers. For anything else, wrap the handler in `runWithTraceId()`. `logixia/correlation` adds `X-Correlation-ID` propagation through `fetch`, axios, Kafka and SQS.
 
-→ [Tracing](https://logixia.github.io/logixia/guide/tracing) · [HTTP logging](https://logixia.github.io/logixia/guide/http-logging) · [Child loggers and context](https://logixia.github.io/logixia/guide/child-loggers-and-context)
+→ [Tracing](https://logixia.github.io/logixia/guide/tracing) · [HTTP logging](https://logixia.github.io/logixia/guide/http-logging) · [Fastify](https://logixia.github.io/logixia/guide/fastify) · [Hono](https://logixia.github.io/logixia/guide/hono) · [Child loggers and context](https://logixia.github.io/logixia/guide/child-loggers-and-context)
 
 ### NestJS
 

@@ -6,13 +6,15 @@ order: 25
 
 # API overview
 
-logixia has twelve import paths, listed in `package.json` under `exports`. Each ships ESM, CommonJS and type declarations. This page groups what each one exports; follow the links for details.
+logixia has fourteen import paths, listed in `package.json` under `exports`. Each ships ESM, CommonJS and type declarations. This page groups what each one exports; follow the links for details.
 
 | Import path           | Purpose                                                                            |
 | --------------------- | ---------------------------------------------------------------------------------- |
 | `logixia`             | Logger, context, redaction, sampling, metrics, OTel, OTLP, Slack, Discord, search. |
 | `logixia/nest`        | NestJS module, service, filter, decorators, interceptors.                          |
 | `logixia/middleware`  | Express middleware and Fastify plugin for request logging.                         |
+| `logixia/fastify`     | Pino-compatible logger facade for Fastify's `loggerInstance`.                      |
+| `logixia/hono`        | Hono request logging middleware for Node, Bun and Cloudflare Workers.              |
 | `logixia/correlation` | Correlation IDs for services and message queues.                                   |
 | `logixia/transports`  | Transport classes and `TransportManager`.                                          |
 | `logixia/worker`      | Worker-thread transport.                                                           |
@@ -107,6 +109,14 @@ Search: `SearchManagerConfig`, `SearchFilters`, `SearchOptions`, `SearchResult`,
 ## `logixia/middleware`
 
 `createExpressMiddleware`, `createFastifyPlugin`, and the types `HttpLoggerOptions`, `IncomingRequest`, `OutgoingResponse`, `FastifyInstance`. See [HTTP logging](/guide/http-logging).
+
+## `logixia/fastify`
+
+`createFastifyLogger`, `createFastifySerializers`, and the types `FastifyLoggerOptions`, `FastifySerializerOptions`, `PinoCompatibleLogger`, `PinoCompatibleLogFn`, `PinoChildOptions`, `PinoLevelName` and `SerializerFn`. See [Fastify](/guide/fastify).
+
+## `logixia/hono`
+
+`createHonoMiddleware`, and the types `HonoMiddlewareOptions`, `HonoLoggerLike`, `HonoContextLike` and `HonoNext`. See [Hono](/guide/hono).
 
 ## `logixia/correlation`
 
