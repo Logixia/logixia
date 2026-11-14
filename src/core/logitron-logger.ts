@@ -247,6 +247,16 @@ export class LogixiaLogger<
   private _formattedLevels: Map<string, string> = new Map();
   /** Pre-computed `[appName] ` string — avoids template literal allocation per log. */
   private _formattedAppName = '';
+  /**
+   * JSON line pieces between the timestamp and the message, keyed by level, for the
+   * appName and environment they were built from. Rebuilt when either changes.
+   */
+  private _jsonHeads: Map<string, string> = new Map();
+  private _jsonHeadsApp = '';
+  private _jsonHeadsEnv = '';
+  /** The `,"context":"..."` piece for `_jsonContextKey`. */
+  private _jsonContextKey: unknown = undefined;
+  private _jsonContext = '';
   /** True when a redact config is present — short-circuits applyRedaction when false. */
   private _hasRedact = false;
   /** Sampling engine — only created when sampling config is present. */
@@ -958,14 +968,16 @@ export class LogixiaLogger<
     message: string,
     data?: Record<string, unknown>
   ): void | Promise<void> {
-    if (this.config.silent) return;
+    // One read: protectSecrets() makes `this.config` a getter.
+    const config = this.config;
+    if (config.silent) return;
     if (!this.shouldLog(level)) return;
 
     // One read of each ALS store per call. TraceContext is the source of truth for
     // the trace ID; a traceId on a bare LogixiaContext scope is only a fallback.
     const alsContext = LogixiaContext.get();
     let activeTraceId: string | undefined;
-    if (this.config.traceId) {
+    if (config.traceId) {
       const ctxTraceId = alsContext?.traceId;
       activeTraceId =
         TraceContext.instance.getCurrentTraceId() ??
@@ -986,7 +998,7 @@ export class LogixiaLogger<
     const hasOtel = otelFields !== undefined && Object.keys(otelFields).length > 0;
     // The entry's top-level traceId is authoritative; an ALS traceId equal to it is
     // dropped from the payload so transports and plugins do not see it twice.
-    const traceId = this.config.traceId ? (activeTraceId ?? this.fallbackTraceId) : undefined;
+    const traceId = config.traceId ? (activeTraceId ?? this.fallbackTraceId) : undefined;
     let mergedData: typeof data;
     if (hasAls) {
       const als: Record<string, unknown> = { ...alsContext };
@@ -1008,7 +1020,7 @@ export class LogixiaLogger<
       if (this._hasRedact) {
         // Fail closed: if redaction cannot complete, never emit the raw payload.
         try {
-          payload = applyRedaction(rawPayload, this.config.redact) ?? rawPayload;
+          payload = applyRedaction(rawPayload, config.redact) ?? rawPayload;
         } catch (error) {
           internalError('Redaction failed', error);
           payload = { redaction: REDACTION_FAILED };
@@ -1027,7 +1039,7 @@ export class LogixiaLogger<
     let safeMessage: string = message;
     if (this._hasRedact) {
       try {
-        safeMessage = applyRedactionToString(message, this.config.redact);
+        safeMessage = applyRedactionToString(message, config.redact);
       } catch (error) {
         internalError('Redaction failed', error);
         safeMessage = REDACTION_FAILED;
@@ -1036,8 +1048,8 @@ export class LogixiaLogger<
     const entry: LogEntry = {
       timestamp: nowIso(),
       level,
-      appName: this.config.appName ?? 'App',
-      environment: this.config.environment ?? 'development',
+      appName: config.appName ?? 'App',
+      environment: config.environment ?? 'development',
       message: safeMessage,
     };
     // Same key order as the JSON line has always had, with the payload last.
@@ -1126,9 +1138,20 @@ export class LogixiaLogger<
   // ── Formatters ───────────────────────────────────────────────────────────────
 
   private formatLog(entry: LogEntry): string {
+    const format = this.config.format;
     // JSON mode. Native JSON.stringify beats a schema-compiled serializer here, because
     // the payload has no schema and is most of the line.
-    if (this.config.format?.json) {
+    if (format?.json) {
+      // Without plugins the entry is exactly what log() built, so its line can be
+      // assembled from cached pieces. Anything unusual takes the general path below.
+      if (this._pluginRegistry.size === 0) {
+        try {
+          const line = this._buildJsonLine(entry);
+          if (line !== undefined) return line;
+        } catch {
+          // A BigInt or a cycle in the payload: the general path handles it.
+        }
+      }
       let jsonEntry: unknown = entry;
       try {
         jsonEntry = toJsonEntry(entry);
@@ -1141,14 +1164,14 @@ export class LogixiaLogger<
 
     let formatted = '';
 
-    const doColorize = this.config.format?.colorize ?? true;
+    const doColorize = format?.colorize ?? true;
     const gray = doColorize ? this._colorMap.get('gray')! : '';
     const cyan = doColorize ? this._colorMap.get('cyan')! : '';
     const yellow = doColorize ? this._colorMap.get('yellow')! : '';
     const reset = doColorize ? this._colorMap.get('reset')! : '';
 
     // Use _fieldCache instead of calling isFieldEnabled() per field
-    if (this.config.format?.timestamp !== false && this._fieldCache.get('timestamp') !== false) {
+    if (format?.timestamp !== false && this._fieldCache.get('timestamp') !== false) {
       // entry.timestamp is already an ISO string — no need to re-parse it
       formatted += `${gray}[${entry.timestamp}]${reset} `;
     }
@@ -1174,6 +1197,59 @@ export class LogixiaLogger<
     }
 
     return formatted;
+  }
+
+  /**
+   * The same bytes JSON.stringify(entry) gives for an entry log() built, without
+   * walking the fixed fields. Returns undefined when a field has an unexpected type.
+   */
+  private _buildJsonLine(entry: LogEntry): string | undefined {
+    const { timestamp, level, appName, environment, message, context, traceId, payload } = entry;
+    if (
+      typeof timestamp !== 'string' ||
+      typeof message !== 'string' ||
+      typeof appName !== 'string' ||
+      typeof environment !== 'string'
+    ) {
+      return undefined;
+    }
+    if (appName !== this._jsonHeadsApp || environment !== this._jsonHeadsEnv) {
+      this._jsonHeads.clear();
+      this._jsonHeadsApp = appName;
+      this._jsonHeadsEnv = environment;
+    }
+    let head = this._jsonHeads.get(level);
+    if (head === undefined) {
+      if (typeof level !== 'string') return undefined;
+      head = `,"level":${JSON.stringify(level)},"appName":${JSON.stringify(appName)},"environment":${JSON.stringify(environment)},"message":`;
+      this._jsonHeads.set(level, head);
+    }
+    // An ISO timestamp has no characters that need escaping.
+    let line = `{"timestamp":"${timestamp}"${head}${JSON.stringify(message)}`;
+    if (context !== undefined) {
+      if (typeof context !== 'string') return undefined;
+      if (context !== this._jsonContextKey) {
+        this._jsonContextKey = context;
+        this._jsonContext = `,"context":${JSON.stringify(context)}`;
+      }
+      line += this._jsonContext;
+    }
+    if (traceId !== undefined) {
+      if (typeof traceId !== 'string') return undefined;
+      line += `,"traceId":${JSON.stringify(traceId)}`;
+    }
+    if (payload !== undefined) {
+      if (
+        payload === null ||
+        typeof payload !== 'object' ||
+        Array.isArray(payload) ||
+        typeof (payload as { toJSON?: unknown }).toJSON === 'function'
+      ) {
+        return undefined;
+      }
+      line += `,"payload":${JSON.stringify(payload)}`;
+    }
+    return `${line}}`;
   }
 
   private colorize(text: string, color: string): string {
