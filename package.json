@@ -292,7 +292,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-simple-import-sort": "^14.0.0",
     "eslint-plugin-sonarjs": "^4.2.2",
-    "eslint-plugin-unicorn": "^78.0.0",
+    "eslint-plugin-unicorn": "^79.0.0",
     "express": "^5.2.1",
     "fastify": "^5.12.7",
     "globals": "^17.4.0",
