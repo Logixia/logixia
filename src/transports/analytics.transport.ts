@@ -46,6 +46,9 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
   /** Set on the first write. Subclass fields don't exist yet while the base constructor runs. */
   private initPromise?: Promise<void> | undefined;
   private readonly cap: BufferCap;
+  /** Consecutive failed drains; drives the backoff that stops a failing provider being re-sent every Nth log. */
+  private failures = 0;
+  private retryAt = 0;
 
   constructor(name: string, config: AnalyticsTransportConfig) {
     this.name = name;
@@ -90,14 +93,18 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
     this.batch.push(entry);
     this.cap.enforce(this.batch);
 
-    if (this.batch.length >= (this.config.batchSize || 50)) {
+    const backoff = this.retryAt - Date.now();
+    if (this.batch.length >= (this.config.batchSize || 50) && backoff <= 0) {
       this.flush().catch((err: unknown) => internalError(`${this.name} batch flush failed`, err));
-    } else if (!this.batchTimer && this.config.flushInterval) {
-      this.batchTimer = setTimeout(() => {
-        this.flush().catch((err: unknown) =>
-          internalError(`${this.name} interval flush failed`, err)
-        );
-      }, this.config.flushInterval);
+    } else if (!this.batchTimer && (this.config.flushInterval || backoff > 0)) {
+      this.batchTimer = setTimeout(
+        () => {
+          this.flush().catch((err: unknown) =>
+            internalError(`${this.name} interval flush failed`, err)
+          );
+        },
+        Math.max(this.config.flushInterval || 0, backoff)
+      );
       this.batchTimer.unref?.();
     }
   }
@@ -134,7 +141,11 @@ export abstract class AnalyticsTransport implements ITransport, IBatchTransport 
 
       try {
         await this.sendBatch(entriesToSend);
+        this.failures = 0;
+        this.retryAt = 0;
       } catch (error) {
+        this.failures += 1;
+        this.retryAt = Date.now() + Math.min(60_000, 1000 * 2 ** (this.failures - 1));
         scrubError(error, this.secretValues());
         internalError(`Analytics transport ${this.name} flush failed`, error);
         // Re-add failed entries to the front of the batch for retry, then stop.
