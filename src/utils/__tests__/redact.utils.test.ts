@@ -258,6 +258,73 @@ describe('redactObject — excludePaths', () => {
 
 // ── redactObject — array handling ─────────────────────────────────────────────
 
+describe('redactObject — trace and request IDs', () => {
+  const aggressive = { autoDetect: 'aggressive' as const };
+  const ids = [
+    '1731580000000-ab12',
+    '1857420394827364352',
+    'req-1234567890',
+    'job-123456789',
+    // eslint-disable-next-line sonarjs/no-hardcoded-ip -- an ID that looks like an IP
+    '10.12.0.7',
+    'api-7f3b2c1d9e8a4b6c0a1b',
+    'Root=1-5759e988-bd862e3fe1be46a994272793;Sampled=1',
+  ];
+
+  it.each(ids)('keeps the ID %s under correlation keys', (id) => {
+    const payload = {
+      requestId: id,
+      trace_id: id,
+      spanId: id,
+      'x-request-id': id,
+      ctx: { correlationId: id },
+    };
+    expect(applyRedaction(payload, aggressive)).toEqual(payload);
+  });
+
+  it('still scans a value under an ID key that is not shaped like an ID', () => {
+    expect(applyRedaction({ requestId: 'Bearer abc.def.ghi' }, { autoDetect: true })).toEqual({
+      requestId: '[REDACTED]',
+    });
+  });
+
+  it('still applies explicit paths to ID keys, and patterns to other keys', () => {
+    expect(
+      applyRedaction(
+        { requestId: 'req-1', orderRef: '1857420394827364352' },
+        { ...aggressive, paths: ['requestId'] }
+      )
+    ).toEqual({ requestId: '[REDACTED]', orderRef: '[REDACTED]' });
+  });
+});
+
+describe('redactObject — query secrets in URLs', () => {
+  it('redacts query secrets in URL objects and URL strings', () => {
+    const out = applyRedaction(
+      {
+        urlObj: new URL('https://user:pw@h.example/cb?token=S3CR3T&page=2'),
+        config: { url: 'https://api.example/v1?api_key=K3Y&q=shoes' },
+        note: 'redirected to /login?code=OAUTH-CODE',
+      },
+      { autoDetect: true }
+    ) as Record<string, unknown>;
+    const text = JSON.stringify(out);
+    for (const secret of ['S3CR3T', 'K3Y', 'OAUTH-CODE', 'user:pw']) {
+      expect(text).not.toContain(secret);
+    }
+    expect(text).toContain('page=2');
+    expect(text).toContain('q=shoes');
+  });
+
+  it('honours redact.queryParams and leaves strings without a query alone', () => {
+    const out = applyRedaction(
+      { link: '/invite?invite=I-123&ref=mail', plain: 'no query here' },
+      { autoDetect: true, queryParams: ['invite'] }
+    );
+    expect(out).toEqual({ link: '/invite?invite=[REDACTED]&ref=mail', plain: 'no query here' });
+  });
+});
+
 describe('redactObject — array handling', () => {
   it('recurses into array items that are plain objects', () => {
     const obj = {

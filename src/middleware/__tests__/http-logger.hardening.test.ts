@@ -88,6 +88,25 @@ describe('http-logger hardening', () => {
     );
   });
 
+  it('redacts query secrets in URL-bearing headers such as Referer', () => {
+    const { calls, run } = setup({ redactQueryParams: ['ticket'] }, false);
+    run({
+      method: 'POST',
+      url: '/api/reset',
+      headers: {
+        referer: 'https://app.example.com/reset?token=RESET-SECRET&email=a%40b.c',
+        'x-forwarded-uri': '/callback?code=OAUTH-CODE&state=s1',
+        'x-original-url': ['/a?ticket=T1', '/b?page=2'],
+        'user-agent': 'curl/8',
+      },
+    });
+    const h = calls[0]!.data.headers as Record<string, unknown>;
+    expect(h['referer']).toBe('https://app.example.com/reset?token=[REDACTED]&email=a%40b.c');
+    expect(h['x-forwarded-uri']).toBe('/callback?code=[REDACTED]&state=s1');
+    expect(h['x-original-url']).toEqual(['/a?ticket=[REDACTED]', '/b?page=2']);
+    expect(h['user-agent']).toBe('curl/8');
+  });
+
   it('supports custom query parameter names', () => {
     const { calls, run } = setup({ redactQueryParams: ['ticket'] }, false);
     run({ method: 'GET', url: '/x?ticket=t1&keep=1', headers: {} });

@@ -23,7 +23,13 @@ import type { RedactConfig } from '../types';
 import { safeToString } from './coerce.utils';
 import { serializeError } from './error.utils';
 import { assignOwn } from './own-property';
-import { SENSITIVE_KEY_NAMES } from './sensitive-names';
+import {
+  buildNameSet,
+  DEFAULT_REDACT_QUERY_PARAMS,
+  redactUrlQuery,
+  redactUrlsInText,
+  SENSITIVE_KEY_NAMES,
+} from './sensitive-names';
 
 export type { RedactConfig };
 
@@ -260,6 +266,44 @@ function joinPath(parent: string, key: string): string {
   return parent ? `${parent}.${key}` : key;
 }
 
+// Trace and request IDs are logged so they can be searched, and a digit run in one
+// can look like a card, phone or IP to the patterns. An ID-shaped value under one of
+// these keys skips pattern scanning; `paths` rules still apply to it.
+const CORRELATION_ID_KEYS = new Set([
+  'traceid',
+  'spanid',
+  'parentspanid',
+  'requestid',
+  'correlationid',
+  'traceparent',
+  'xrequestid',
+  'xcorrelationid',
+  'xtraceid',
+  'xamzntraceid',
+]);
+const ID_SHAPED = /^[\w.:;=-]{1,256}$/;
+
+// Query parameters such as token, code and api_key, plus redact.queryParams: the
+// same names the middleware, exception filter and trace context redact in URLs.
+const DEFAULT_QUERY_NAMES = buildNameSet(DEFAULT_REDACT_QUERY_PARAMS, undefined);
+const queryNameSets = new WeakMap<readonly string[], Set<string>>();
+
+function queryNamesOf(config: RedactConfig): ReadonlySet<string> {
+  const extra = config.queryParams;
+  if (!extra || extra.length === 0) return DEFAULT_QUERY_NAMES;
+  let names = queryNameSets.get(extra);
+  if (!names) {
+    names = buildNameSet(DEFAULT_REDACT_QUERY_PARAMS, extra);
+    queryNameSets.set(extra, names);
+  }
+  return names;
+}
+
+function isCorrelationId(fullPath: string, value: string): boolean {
+  const key = fullPath.slice(fullPath.lastIndexOf('.') + 1);
+  return CORRELATION_ID_KEYS.has(key.toLowerCase().replace(/[-_]/g, '')) && ID_SHAPED.test(value);
+}
+
 function walkValue(
   value: unknown,
   state: WalkState,
@@ -280,8 +324,12 @@ function walkValue(
 
   if (typeof value === 'string') {
     if (patterns.length === 0) return value;
+    if (isCorrelationId(fullPath, value)) return value;
     if (excludePaths.some((p) => matchesPath(fullPath, p) || matchesPath(bare, p))) return value;
-    return applyPatterns(value, patterns, censor);
+    const withoutQuerySecrets = value.includes('?')
+      ? redactUrlsInText(value, queryNamesOf(state.config))
+      : value;
+    return applyPatterns(withoutQuerySecrets, patterns, censor);
   }
 
   if (Array.isArray(value)) {
@@ -296,7 +344,8 @@ function walkValue(
     const url = new URL(value.href);
     url.username = '';
     url.password = '';
-    const redacted = walkValue(url.href, state, fullPath, bare, depth);
+    const href = redactUrlQuery(url.href, queryNamesOf(state.config));
+    const redacted = walkValue(href, state, fullPath, bare, depth);
     return redacted === value.href ? value : redacted;
   }
 
@@ -416,14 +465,32 @@ export function redactObject(
   return result === obj ? { ...obj } : result;
 }
 
+// Each element of an array message is redacted as if it were logged on its own, so
+// path rules anchored at the top level still match. Nested arrays use the payload
+// walk, which guards against cycles.
+function redactMessageObject(value: object, config: RedactConfig): unknown {
+  if (!Array.isArray(value)) return applyRedaction(value as Record<string, unknown>, config);
+  return value.map((item: unknown) => {
+    if (typeof item === 'string') return applyRedactionToString(item, config);
+    if (item === null || typeof item !== 'object') return item;
+    if (!Array.isArray(item)) return applyRedaction(item as Record<string, unknown>, config);
+    return applyRedaction({ items: item }, config)?.['items'];
+  });
+}
+
 /**
- * Apply pattern-based redaction to a single string (e.g. the log message).
+ * Apply redaction to the log message and return it as a string.
  *
- * Path-based rules don't apply to a bare string — only the `patterns` are run.
+ * A string message gets only the `patterns`, because path rules don't apply to a
+ * bare string. An object logged as the message (`logger.log(dto)` in NestJS) gets
+ * every rule, as a payload would, before it is turned into a string.
  * Returns the input unchanged when no patterns are configured, so the hot path
  * stays allocation-free for the common no-redact case.
  */
 export function applyRedactionToString(value: unknown, config: RedactConfig | undefined): string {
+  if (config && value !== null && typeof value === 'object') {
+    return safeToString(redactMessageObject(value, config));
+  }
   const text = typeof value === 'string' ? value : safeToString(value);
   if (!config) return text;
   const resolved = resolveConfig(config);

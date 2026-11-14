@@ -114,6 +114,17 @@ describe('FileTransport hardening', () => {
       );
     });
 
+    it('neutralizes spreadsheet formulas at the start of a field', async () => {
+      const t = new FileTransport({ filename: 'c.csv', dirname: dir, format: 'csv', batchSize: 1 });
+      await t.write(
+        makeEntry({ message: '=HYPERLINK("https://evil.example","Click")', context: '@SUM(1+1)' })
+      );
+      await t.close();
+      expect(read('c.csv').trimEnd()).toBe(
+        '2026-01-01T00:00:00.000Z,"error","\'=HYPERLINK(""https://evil.example"",""Click"")","\'@SUM(1+1)","","{}"'
+      );
+    });
+
     it('emits empty quoted fields for a missing context and trace id', async () => {
       const t = new FileTransport({ filename: 'c.csv', dirname: dir, format: 'csv', batchSize: 1 });
       await t.write(makeEntry());

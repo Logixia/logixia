@@ -1053,8 +1053,11 @@ export class LogixiaLogger<
     // Pattern-based redaction also applies to the message string — a secret
     // interpolated into the message (e.g. `Auth: Bearer ${token}`) would
     // otherwise bypass redaction entirely and leak in plaintext. Path rules
-    // don't apply to a bare string, so only `patterns` run here.
-    let safeMessage: string = message;
+    // don't apply to a bare string, so only `patterns` run here. An object passed
+    // as the message by JS or NestJS code gets every rule, then becomes a string.
+    const rawMessage: unknown = message;
+    let safeMessage: string =
+      rawMessage !== null && typeof rawMessage === 'object' ? safeToString(rawMessage) : message;
     if (this._hasRedact) {
       try {
         safeMessage = applyRedactionToString(message, config.redact);

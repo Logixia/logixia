@@ -119,3 +119,36 @@ describe('@LogMethod — preserves sync/async contract', () => {
     expect(fake.logs.some((l) => l.level === 'error')).toBe(true);
   });
 });
+
+describe('@LogMethod — arguments', () => {
+  it('leaves positional arguments out by default', () => {
+    const fake = makeFakeLogger();
+
+    class LocalStrategy {
+      logger = fake.logger;
+      @LogMethod()
+      validate(username: string, password: string): boolean {
+        return username.length > 0 && password.length > 0;
+      }
+    }
+
+    new LocalStrategy().validate('alice', 'correct-horse-battery-staple');
+    expect(JSON.stringify(fake.logs)).not.toContain('correct-horse-battery-staple');
+    expect(fake.logs.length).toBeGreaterThan(0);
+  });
+
+  it('logs arguments when logArgs is on', () => {
+    const fake = makeFakeLogger();
+
+    class Orders {
+      logger = fake.logger;
+      @LogMethod({ logArgs: true })
+      find(orderId: string): string {
+        return orderId;
+      }
+    }
+
+    new Orders().find('o-42');
+    expect(fake.logs.some((l) => JSON.stringify(l.data?.['args']) === '["o-42"]')).toBe(true);
+  });
+});

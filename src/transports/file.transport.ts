@@ -12,6 +12,7 @@ import type {
   TransportLogEntry,
 } from '../types/transport.types';
 import { safeToString } from '../utils/coerce.utils';
+import { csvField as formulaSafeCsvField } from '../utils/csv.utils';
 import { internalError, internalWarn } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
 import { stripControlChars } from '../utils/sanitize.utils';
@@ -35,8 +36,9 @@ const DEFAULT_MAX_QUEUE = 10_000;
 const DEFAULT_FILE_MODE = 0o600;
 const DEFAULT_DIR_MODE = 0o700;
 
+// Quoted, and a leading = + - @ is neutralized so a spreadsheet won't run it as a formula.
 function csvField(value: unknown): string {
-  return `"${stripControlChars(safeToString(value)).replace(/"/g, '""')}"`;
+  return formulaSafeCsvField(stripControlChars(safeToString(value)), true);
 }
 
 const SIZE_UNITS: Record<string, number> = {
