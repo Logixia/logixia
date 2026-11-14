@@ -304,6 +304,8 @@ describe('OtlpLogTransport close() against a collector that never answers', () =
       closeTimeoutMs: 100,
     });
     transport.write({ timestamp: new Date(), level: 'info', message: 'x' });
+    void transport.flush().catch(() => {});
+    await new Promise((r) => setTimeout(r, 20));
     const start = Date.now();
     await transport.close();
     expect(Date.now() - start).toBeLessThan(2000);

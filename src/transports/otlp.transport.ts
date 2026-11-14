@@ -58,7 +58,7 @@ export interface OtlpLogTransportConfig {
   requestTimeoutMs?: number;
   /**
    * Request timeout (ms) while closing, so a hung collector cannot outlast the
-   * shutdown budget (5 s by default; close() tries twice). Default: 2000.
+   * shutdown budget (5 s by default); also caps a request already in flight when close() starts, and close() tries twice. Default: 1500.
    */
   closeTimeoutMs?: number;
   /** Max buffered entries; the oldest are dropped past this. Default: 10000. */
@@ -66,7 +66,7 @@ export interface OtlpLogTransportConfig {
   level?: string;
 }
 
-const DEFAULT_CLOSE_TIMEOUT_MS = 2000;
+const DEFAULT_CLOSE_TIMEOUT_MS = 1500;
 
 const HEX_32 = /^[0-9a-f]{32}$/;
 const HEX_16 = /^[0-9a-f]{16}$/;
@@ -210,6 +210,7 @@ export class OtlpLogTransport implements IAsyncTransport {
   private readonly requestTimeoutMs: number;
   private readonly closeTimeoutMs: number;
   private closing = false;
+  private readonly inFlight = new Set<AbortController>();
   private readonly resourceAttrs: Array<{ key: string; value: unknown }>;
 
   private readonly buffer: BatchBuffer<TransportLogEntry>;
@@ -314,6 +315,7 @@ export class OtlpLogTransport implements IAsyncTransport {
       return;
     }
     const controller = new AbortController();
+    this.inFlight.add(controller);
     const timeoutMs = this.closing
       ? Math.min(this.requestTimeoutMs, this.closeTimeoutMs)
       : this.requestTimeoutMs;
@@ -336,6 +338,7 @@ export class OtlpLogTransport implements IAsyncTransport {
       throw err;
     } finally {
       clearTimeout(timer);
+      this.inFlight.delete(controller);
     }
   }
 
@@ -345,6 +348,12 @@ export class OtlpLogTransport implements IAsyncTransport {
       this.flushTimer = null;
     }
     this.closing = true;
+    // A flush already in flight (say, from a periodic flush or beforeExit) was
+    // started with the full request timeout; cap it too, or close() would wait
+    // for it past the shutdown budget.
+    for (const controller of this.inFlight) {
+      setTimeout(() => controller.abort(), this.closeTimeoutMs).unref?.();
+    }
     await this.buffer.close(2);
   }
 }

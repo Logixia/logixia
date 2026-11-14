@@ -536,9 +536,19 @@ export class TransportManager extends EventEmitter {
   }
 
   async flush(): Promise<void> {
+    await this.flushTransports(false);
+  }
+
+  /**
+   * @param skipClosable  Leave out transports with a close(): close() flushes
+   *   them itself, and a second flush first would double the time a hung
+   *   endpoint can hold shutdown.
+   */
+  private async flushTransports(skipClosable: boolean): Promise<void> {
     const flushPromises: Promise<void>[] = [];
 
     for (const [id, transport] of this.transports) {
+      if (skipClosable && transport.close) continue;
       if (this.isBatchTransport(transport)) {
         const flushPromise = transport.flush().catch((error) => {
           this.emit('error', error, id);
@@ -561,7 +571,7 @@ export class TransportManager extends EventEmitter {
   private async closeOnce(): Promise<void> {
     // Flush first so any in-flight log calls that race in during shutdown still
     // get written — only block new writes once we move to the close phase.
-    await this.flush();
+    await this.flushTransports(true);
 
     this.isShuttingDown = true;
     await Promise.allSettled(
