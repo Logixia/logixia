@@ -45,7 +45,8 @@ app.get('/', async () => ({ ok: true }));
 
 app.get<{ Params: { id: string } }>('/orders/:id', async (request) => {
   const { id: orderId } = request.params;
-  request.log.info({ orderId }, 'loading order %s', orderId);
+  // User input goes in fields, not the message text, so it can't shape the log line.
+  request.log.info({ orderId }, 'loading order');
   await logger.info('Loading order', { orderId });
   return { orderId, status: 'shipped' };
 });
