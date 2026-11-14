@@ -23,6 +23,14 @@ export { MixpanelTransport } from './transports/mixpanel.transport';
 export type { OtlpLogTransportConfig } from './transports/otlp.transport';
 export { OtlpLogTransport, toOtelSeverity } from './transports/otlp.transport';
 export { SegmentTransport } from './transports/segment.transport';
+export type {
+  SentryLike,
+  SentryLoggerLike,
+  SentryScopeLike,
+  SentrySeverity,
+  SentryTransportConfig,
+} from './transports/sentry.transport';
+export { SentryTransport } from './transports/sentry.transport';
 export type { SlackMessage, SlackTransportConfig } from './transports/slack.transport';
 export { SlackTransport } from './transports/slack.transport';
 export { TransportManager } from './transports/transport.manager';
