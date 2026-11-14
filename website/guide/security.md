@@ -41,7 +41,7 @@ Control characters in messages, contexts, trace IDs and custom level names are s
 
 ## Supply chain
 
-- **Three runtime dependencies**: `commander`, `fast-json-stringify` and `picocolors`. NestJS, Express, `reflect-metadata` and database drivers are optional and only loaded if you use them.
+- **Two runtime dependencies**: `commander` and `picocolors`. NestJS, Express, `reflect-metadata` and database drivers are optional and only loaded if you use them.
 - **No install scripts.** The published package declares no `preinstall`, `install` or `postinstall` script, so installing it runs no code from logixia.
 - **Provenance.** Releases are published to npm with provenance, so each version links to the commit and workflow run that built it. Check with `npm audit signatures`.
 - **Trusted publishing.** The publish job authenticates to npm with GitHub OIDC trusted publishing; there is no long-lived npm token. It publishes a tarball built earlier in the pipeline, after verifying its SHA-256, with `--ignore-scripts`.

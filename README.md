@@ -35,7 +35,7 @@ Most Node loggers give you a fast `info()` and leave the rest to you. logixia ke
 - **Transports for real destinations.** Console, rotating files, PostgreSQL, MySQL, MongoDB, SQLite, CloudWatch, Google Cloud Logging, Azure Monitor, Datadog, OTLP, Slack, Discord, and a worker-thread wrapper. Several can run on one log call.
 - **OpenTelemetry-native.** Read the active span for trace/log correlation, or export logs as OTLP/HTTP records. The OTLP transport builds the JSON itself, so no `@opentelemetry/*` SDK is required to emit logs.
 - **Runs outside Node too.** `logixia/browser` has no Node built-ins and is written for browsers and edge runtimes such as Cloudflare Workers.
-- **Small footprint.** Three runtime dependencies (`commander`, `fast-json-stringify`, `picocolors`), no install scripts, ESM and CommonJS builds with types.
+- **Small footprint.** Two runtime dependencies (`commander`, `picocolors`), no install scripts, ESM and CommonJS builds with types.
 
 Log calls are `async` and transport failures are caught internally, so a full disk or a flaky database does not crash your process.
 
