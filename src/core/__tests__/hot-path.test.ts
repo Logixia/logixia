@@ -11,6 +11,7 @@
  *  - The cached timestamp still yields a valid ISO-8601 string and advances.
  */
 
+import { LogixiaContext } from '../../context/async-context';
 import type { ITransport, TransportLogEntry } from '../../types/transport.types';
 import { resetShutdownHandlers } from '../../utils/shutdown.utils';
 import { LogixiaLogger } from '../logitron-logger';
@@ -68,6 +69,64 @@ describe('hot path — synchronous console write', () => {
     spy.restore();
     expect(spy.joined()).toContain('with-payload');
     expect(spy.joined()).toContain('u-1');
+  });
+});
+
+describe('hot path — every log method returns a Promise', () => {
+  it('returns a Promise even when the write completed synchronously', () => {
+    const spy = spyStdout();
+    const logger = new LogixiaLogger({ ...BASE, levelOptions: { level: 'debug' } });
+    try {
+      for (const ret of [
+        logger.info('a'),
+        logger.warn('b'),
+        logger.error(new Error('c')),
+        logger.debug('d'),
+        logger.logLevel('info', 'e'),
+      ]) {
+        expect(ret).toBeInstanceOf(Promise);
+      }
+    } finally {
+      spy.restore();
+    }
+  });
+
+  it('rejects instead of throwing when the call fails synchronously', async () => {
+    const logger = new LogixiaLogger({ ...BASE, levelOptions: { level: 'info' } });
+    const hostile = Object.defineProperty({}, 'boom', {
+      enumerable: true,
+      get() {
+        throw new Error('getter failed');
+      },
+    });
+    // The ALS merge spreads the payload, which runs the throwing getter.
+    let ret: Promise<void> | undefined;
+    LogixiaContext.run({ requestId: 'r1' }, () => {
+      expect(() => {
+        ret = logger.info('m', hostile);
+      }).not.toThrow();
+    });
+    await expect(ret).rejects.toThrow('getter failed');
+  });
+
+  it('waits for an async plugin before writing', async () => {
+    const spy = spyStdout();
+    const logger = new LogixiaLogger({ ...BASE, levelOptions: { level: 'info' } });
+    logger.use({
+      name: 'slow',
+      onLog: async (entry) => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return { ...entry, message: 'rewritten' };
+      },
+    });
+    try {
+      const ret = logger.info('original');
+      expect(spy.count('rewritten')).toBe(0);
+      await ret;
+      expect(spy.count('rewritten')).toBe(1);
+    } finally {
+      spy.restore();
+    }
   });
 });
 
