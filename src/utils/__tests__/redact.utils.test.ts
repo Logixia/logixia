@@ -258,6 +258,46 @@ describe('redactObject — excludePaths', () => {
 
 // ── redactObject — array handling ─────────────────────────────────────────────
 
+describe('redactObject — trace and request IDs', () => {
+  const aggressive = { autoDetect: 'aggressive' as const };
+  const ids = [
+    '1731580000000-ab12',
+    '1857420394827364352',
+    'req-1234567890',
+    'job-123456789',
+    // eslint-disable-next-line sonarjs/no-hardcoded-ip -- an ID that looks like an IP
+    '10.12.0.7',
+    'api-7f3b2c1d9e8a4b6c0a1b',
+    'Root=1-5759e988-bd862e3fe1be46a994272793;Sampled=1',
+  ];
+
+  it.each(ids)('keeps the ID %s under correlation keys', (id) => {
+    const payload = {
+      requestId: id,
+      trace_id: id,
+      spanId: id,
+      'x-request-id': id,
+      ctx: { correlationId: id },
+    };
+    expect(applyRedaction(payload, aggressive)).toEqual(payload);
+  });
+
+  it('still scans a value under an ID key that is not shaped like an ID', () => {
+    expect(applyRedaction({ requestId: 'Bearer abc.def.ghi' }, { autoDetect: true })).toEqual({
+      requestId: '[REDACTED]',
+    });
+  });
+
+  it('still applies explicit paths to ID keys, and patterns to other keys', () => {
+    expect(
+      applyRedaction(
+        { requestId: 'req-1', orderRef: '1857420394827364352' },
+        { ...aggressive, paths: ['requestId'] }
+      )
+    ).toEqual({ requestId: '[REDACTED]', orderRef: '[REDACTED]' });
+  });
+});
+
 describe('redactObject — array handling', () => {
   it('recurses into array items that are plain objects', () => {
     const obj = {

@@ -260,6 +260,28 @@ function joinPath(parent: string, key: string): string {
   return parent ? `${parent}.${key}` : key;
 }
 
+// Trace and request IDs are logged so they can be searched, and a digit run in one
+// can look like a card, phone or IP to the patterns. An ID-shaped value under one of
+// these keys skips pattern scanning; `paths` rules still apply to it.
+const CORRELATION_ID_KEYS = new Set([
+  'traceid',
+  'spanid',
+  'parentspanid',
+  'requestid',
+  'correlationid',
+  'traceparent',
+  'xrequestid',
+  'xcorrelationid',
+  'xtraceid',
+  'xamzntraceid',
+]);
+const ID_SHAPED = /^[\w.:;=-]{1,256}$/;
+
+function isCorrelationId(fullPath: string, value: string): boolean {
+  const key = fullPath.slice(fullPath.lastIndexOf('.') + 1);
+  return CORRELATION_ID_KEYS.has(key.toLowerCase().replace(/[-_]/g, '')) && ID_SHAPED.test(value);
+}
+
 function walkValue(
   value: unknown,
   state: WalkState,
@@ -280,6 +302,7 @@ function walkValue(
 
   if (typeof value === 'string') {
     if (patterns.length === 0) return value;
+    if (isCorrelationId(fullPath, value)) return value;
     if (excludePaths.some((p) => matchesPath(fullPath, p) || matchesPath(bare, p))) return value;
     return applyPatterns(value, patterns, censor);
   }
