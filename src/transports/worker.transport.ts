@@ -119,7 +119,7 @@ export class WorkerTransport implements ITransport {
   private readonly flushForExit = (): void => {
     const worker = this.worker;
     if (!worker || this.closing || !this.dirty) return;
-    worker.ref();
+    worker.ref?.();
     const timer = setTimeout(() => worker.unref(), this.FLUSH_TIMEOUT_MS);
     const done = (): void => {
       clearTimeout(timer);
@@ -230,7 +230,7 @@ export class WorkerTransport implements ITransport {
     const worker = this.worker;
     this.dirty = false;
     // Unref'd between flushes; ref'd here so an awaited flush() keeps the process alive.
-    worker.ref();
+    worker.ref?.();
     return new Promise<void>((resolve) => {
       // Time-box the flush: if the worker dies or restarts before answering,
       // the 'flushed' message would never arrive and this promise would hang
@@ -283,7 +283,7 @@ export class WorkerTransport implements ITransport {
     this.drainBufferTo(worker);
     worker.postMessage({ type: 'shutdown' });
     // The worker is unref'd, so hold the process open until it has drained and exited.
-    worker.ref();
+    worker.ref?.();
 
     await new Promise<void>((resolve) => {
       // Don't wait forever for a wedged worker — terminate() it after a timeout.
