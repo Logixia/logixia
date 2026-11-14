@@ -85,8 +85,6 @@ const logixiaJson = createLogger({
   environment: 'production',
   format: { json: true, timestamp: true, colorize: false },
 });
-const logixiaChild = logixia.child('request-42');
-const logixiaJsonChild = logixiaJson.child('request-42');
 
 // ── Payloads ─────────────────────────────────────────────────────────────────
 const META = { requestId: 'abc-123-xyz', userId: 42, action: 'login', ip: '127.0.0.1', latency: 14 };
@@ -186,10 +184,10 @@ const suites = [
     winston: () => winstonLogger.child({ reqId: 'r-42' }).info('handled', META),
     bunyan: () => bunyanLogger.child({ reqId: 'r-42' }).info(META, 'handled'),
     logixia: () => {
-      logixiaChild.info('handled', META);
+      logixia.child('request-42', { reqId: 'r-42' }).info('handled', META);
     },
     logixiaJson: () => {
-      logixiaJsonChild.info('handled', META);
+      logixiaJson.child('request-42', { reqId: 'r-42' }).info('handled', META);
     },
   }),
   suite('Deep nested object', {

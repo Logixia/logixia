@@ -125,6 +125,24 @@ function viewOf(target: object): Record<string, unknown> {
   return view;
 }
 
+// One toJSON / inspect function for every protected object. It finds the protected
+// object up the prototype chain, so an Object.create() of one shows the same view.
+function protectedOwner(value: object): object {
+  let target: object | null = value;
+  while (target !== null && !hiddenKeys.has(target))
+    target = Object.getPrototypeOf(target) as object | null;
+  return target ?? value;
+}
+
+function protectedView(this: object): Record<string, unknown> {
+  return viewOf(protectedOwner(this));
+}
+const VIEW_DESCRIPTOR: PropertyDescriptor = {
+  value: protectedView,
+  enumerable: false,
+  configurable: true,
+};
+
 /**
  * Hides `keys` on `target` (assigned or not yet) and gives it a redacted `toJSON()` /
  * inspect view. Fields stay readable and writable. Safe to call more than once.
@@ -144,13 +162,8 @@ export function protectSecrets(target: object, keys: readonly string[]): void {
     values = new Map();
     hiddenKeys.set(target, hidden);
     hiddenValues.set(target, values);
-    const view = (): Record<string, unknown> => viewOf(target);
-    Object.defineProperty(target, 'toJSON', { value: view, enumerable: false, configurable: true });
-    Object.defineProperty(target, INSPECT_CUSTOM, {
-      value: view,
-      enumerable: false,
-      configurable: true,
-    });
+    Object.defineProperty(target, 'toJSON', VIEW_DESCRIPTOR);
+    Object.defineProperty(target, INSPECT_CUSTOM, VIEW_DESCRIPTOR);
   }
   const store = values;
   for (const key of keys) {
