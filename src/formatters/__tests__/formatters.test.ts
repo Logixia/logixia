@@ -54,6 +54,18 @@ describe('JsonFormatter', () => {
 });
 
 describe('TextFormatter', () => {
+  it('strips control characters from payload keys and string values', () => {
+    const formatter = new TextFormatter({ colorize: false });
+    const forged = 'bob\n2026-11-14T11:00:00.000Z [INFO ] [api] user admin granted';
+    const one = formatter.format(baseEntry({ payload: { username: forged } }));
+    const many = formatter.format(
+      baseEntry({ payload: { ['role\r\nx']: 'superuser\u001b]0;pwned\u0007', ok: true } })
+    );
+    for (const out of [one, many]) {
+      for (const ch of ['\r', '\n', '\u001b', '\u0007']) expect(out).not.toContain(ch);
+    }
+  });
+
   it('escapes line breaks in the message so one entry stays on one line', () => {
     const out = new TextFormatter({ colorize: false }).format(
       baseEntry({ message: 'a\nERROR forged\r\x1b[0m' })
