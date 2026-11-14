@@ -73,7 +73,8 @@ export function deregisterFromShutdown(logger: Closeable): void {
  * the process exits. Idempotent — the first call wins and later calls with
  * conflicting options print a warning. The process is ended with 128 + signal
  * number only when logixia's handler is the sole listener for that signal (see
- * `exit`); otherwise it just flushes and leaves shutdown to the application.
+ * `exit`), closing the loggers first; otherwise it only flushes them and leaves
+ * shutdown to the application.
  * Loggers are also flushed (not closed) on `beforeExit`.
  *
  * @example
@@ -123,8 +124,14 @@ export function flushOnExit(options: FlushOnExitOptions = {}): void {
     try {
       if (beforeFlush) await beforeFlush();
 
-      // Flush all registered loggers concurrently, ignoring individual failures
-      await Promise.allSettled([...registry].map((logger) => logger.close()));
+      // Flush all registered loggers concurrently, ignoring individual failures.
+      // Close them only when logixia is about to end the process: when the app
+      // owns the exit its own handler may still log (and await) after this one,
+      // and a closed logger would drop those lines.
+      const ownsExit = shouldExit(signal);
+      await Promise.allSettled(
+        [...registry].map((logger) => (ownsExit || !logger.flush ? logger.close() : logger.flush()))
+      );
 
       if (afterFlush) await afterFlush();
     } catch (err) {

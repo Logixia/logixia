@@ -11,6 +11,7 @@ import type {
   TransportType,
 } from '../types/transport.types';
 import { internalError, internalLog, internalWarn } from '../utils/internal-log';
+import { stringifyForLog } from '../utils/safe-stringify';
 import { ConsoleTransport } from './console.transport';
 import { DatabaseTransport } from './database.transport';
 import { DataDogTransport } from './datadog.transport';
@@ -44,6 +45,7 @@ export class TransportManager extends EventEmitter {
   private isShuttingDown = false;
   private transportLevelPreferences: Map<string, string[]> = new Map(); // Store user preferences for transport levels
   private warnedPromptDeprecated = false;
+  private closePromise: Promise<void> | undefined;
   private retryStates: Map<string, RetryState> = new Map();
 
   private readonly levelValues: LevelValues;
@@ -185,7 +187,10 @@ export class TransportManager extends EventEmitter {
    * sync path.
    */
   write(entry: LogEntry): void | Promise<void> {
-    if (this.isShuttingDown) return;
+    if (this.isShuttingDown) {
+      this.writeAfterClose(entry);
+      return;
+    }
 
     // Build the transport entry — exactOptionalPropertyTypes requires we only set
     // optional properties when they have a real value (not undefined).
@@ -233,6 +238,30 @@ export class TransportManager extends EventEmitter {
         this.emit('error', new Error(`Transport write failures: ${errors.join(', ')}`), 'multiple');
       }
     });
+  }
+
+  /**
+   * Transports are gone once closed, but the app may still log (its own signal
+   * handler, a late async callback). Emit such lines on stdout/stderr rather
+   * than losing them silently.
+   */
+  private writeAfterClose(entry: LogEntry): void {
+    const line = `${stringifyForLog({
+      timestamp: entry.timestamp,
+      level: entry.level,
+      message: entry.message,
+      appName: entry.appName,
+      context: entry.context,
+      traceId: entry.traceId,
+      ...(entry.payload as Record<string, unknown> | undefined),
+    })}\n`;
+    const level = String(entry.level).toLowerCase();
+    const stream = level === 'error' || level === 'warn' ? 'stderr' : 'stdout';
+    try {
+      process[stream].write(line);
+    } catch {
+      // a closed stdio stream must not turn a log call into a crash
+    }
   }
 
   private writeToTransport(
@@ -522,7 +551,14 @@ export class TransportManager extends EventEmitter {
     this.emit('flush', 'all', this.transports.size);
   }
 
-  async close(): Promise<void> {
+  close(): Promise<void> {
+    // Concurrent callers (signal handler + logger.close()) share one close, so
+    // transports are never closed twice.
+    this.closePromise ??= this.closeOnce();
+    return this.closePromise;
+  }
+
+  private async closeOnce(): Promise<void> {
     // Flush first so any in-flight log calls that race in during shutdown still
     // get written — only block new writes once we move to the close phase.
     await this.flush();

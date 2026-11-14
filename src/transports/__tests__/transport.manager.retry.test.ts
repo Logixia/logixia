@@ -109,3 +109,28 @@ describe('TransportManager retry queue', () => {
     await sleep(10);
   });
 });
+
+describe('TransportManager after close', () => {
+  it('writes late log lines to stdout/stderr instead of dropping them', async () => {
+    const manager = new TransportManager({ custom: [{ name: 'mem', write: () => {} }] });
+    await manager.close();
+    const out = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const err = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      manager.write(entry(1));
+      manager.write({ ...entry(2), level: 'error' });
+      expect(String(out.mock.calls[0]?.[0])).toContain('"message":"m1"');
+      expect(String(err.mock.calls[0]?.[0])).toContain('"message":"m2"');
+    } finally {
+      out.mockRestore();
+      err.mockRestore();
+    }
+  });
+
+  it('closes each transport once when close() is called concurrently', async () => {
+    const close = jest.fn(async () => {});
+    const manager = new TransportManager({ custom: [{ name: 'mem', write: () => {}, close }] });
+    await Promise.all([manager.close(), manager.close()]);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+});
