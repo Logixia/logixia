@@ -108,6 +108,7 @@ describe('fields assigned after construction stay hidden', () => {
       flushInterval: 60_000,
     });
     await t.write(entry);
+    await t.flush();
     expect((t as unknown as { connection: unknown }).connection).toBeDefined();
     expect(Object.keys(t)).not.toContain('connection');
     expectNoLeak(t, ['LATE-DRIVER-PASSWORD']);

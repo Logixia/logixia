@@ -56,10 +56,17 @@ export interface OtlpLogTransportConfig {
   flushIntervalMs?: number;
   /** Abort a request that has not finished after this many ms. Default: 10000. */
   requestTimeoutMs?: number;
+  /**
+   * Request timeout (ms) while closing, so a hung collector cannot outlast the
+   * shutdown budget (5 s by default); also caps a request already in flight when close() starts, and close() tries twice. Default: 1500.
+   */
+  closeTimeoutMs?: number;
   /** Max buffered entries; the oldest are dropped past this. Default: 10000. */
   maxBufferSize?: number;
   level?: string;
 }
+
+const DEFAULT_CLOSE_TIMEOUT_MS = 1500;
 
 const HEX_32 = /^[0-9a-f]{32}$/;
 const HEX_16 = /^[0-9a-f]{16}$/;
@@ -201,6 +208,9 @@ export class OtlpLogTransport implements IAsyncTransport {
   private readonly batchSize: number;
   private readonly flushIntervalMs: number;
   private readonly requestTimeoutMs: number;
+  private readonly closeTimeoutMs: number;
+  private closing = false;
+  private readonly inFlight = new Set<AbortController>();
   private readonly resourceAttrs: Array<{ key: string; value: unknown }>;
 
   private readonly buffer: BatchBuffer<TransportLogEntry>;
@@ -212,6 +222,7 @@ export class OtlpLogTransport implements IAsyncTransport {
     this.batchSize = config.batchSize ?? 100;
     this.flushIntervalMs = config.flushIntervalMs ?? 5000;
     this.requestTimeoutMs = config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    this.closeTimeoutMs = config.closeTimeoutMs ?? DEFAULT_CLOSE_TIMEOUT_MS;
     this.level = config.level;
     this.buffer = new BatchBuffer<TransportLogEntry>({
       name: 'OtlpLogTransport',
@@ -304,7 +315,11 @@ export class OtlpLogTransport implements IAsyncTransport {
       return;
     }
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    this.inFlight.add(controller);
+    const timeoutMs = this.closing
+      ? Math.min(this.requestTimeoutMs, this.closeTimeoutMs)
+      : this.requestTimeoutMs;
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const res = await fetch(this.url, {
         method: 'POST',
@@ -318,11 +333,12 @@ export class OtlpLogTransport implements IAsyncTransport {
     } catch (err) {
       scrubError(err, this.secretValues());
       if (controller.signal.aborted) {
-        throw new Error(`OTLP export timed out after ${this.requestTimeoutMs}ms`, { cause: err });
+        throw new Error(`OTLP export timed out after ${timeoutMs}ms`, { cause: err });
       }
       throw err;
     } finally {
       clearTimeout(timer);
+      this.inFlight.delete(controller);
     }
   }
 
@@ -331,6 +347,13 @@ export class OtlpLogTransport implements IAsyncTransport {
       clearInterval(this.flushTimer);
       this.flushTimer = null;
     }
-    await this.buffer.close();
+    this.closing = true;
+    // A flush already in flight (say, from a periodic flush or beforeExit) was
+    // started with the full request timeout; cap it too, or close() would wait
+    // for it past the shutdown budget.
+    for (const controller of this.inFlight) {
+      setTimeout(() => controller.abort(), this.closeTimeoutMs).unref?.();
+    }
+    await this.buffer.close(2);
   }
 }

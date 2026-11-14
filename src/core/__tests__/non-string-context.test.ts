@@ -164,7 +164,8 @@ describe('LogixiaLoggerService — NestJS adapter', () => {
       format: { json: false, colorize: false, timestamp: false },
     });
     expect(() => service.error('Boom', 'stack-trace-here', 'AuthService')).not.toThrow();
-    expect(service.getContext()).toBe('AuthService');
+    // The context applies to that call only (see nest-logger-service-contract.test.ts).
+    expect(service.getContext()).toBeUndefined();
   });
 
   it('warn/debug/verbose ignore non-string second args silently', () => {

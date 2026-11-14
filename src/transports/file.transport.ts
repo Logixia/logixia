@@ -139,6 +139,8 @@ export class FileTransport implements ITransport, IBatchTransport {
   private lastDropWarning = 0;
   /** Gzip and pruning of rotated files run off the write path, one at a time. */
   private housekeeping: Promise<void> = Promise.resolve();
+  private exitListenerAttached = false;
+  private readonly onExit = (): void => this.flushSyncOnExit();
 
   constructor(config: FileTransportConfig) {
     this.config = {
@@ -250,6 +252,7 @@ export class FileTransport implements ITransport, IBatchTransport {
   }
 
   private enqueue(entry: TransportLogEntry): void {
+    this.attachExitListener();
     if (this.queueFull()) {
       // Block waits in write(); a caller that got here anyway (addToBatch) has
       // nowhere to wait, so it sheds the new entry. The batch being written
@@ -265,6 +268,35 @@ export class FileTransport implements ITransport, IBatchTransport {
     }
     this.batch.push(entry);
     this.enqueued += 1;
+  }
+
+  private attachExitListener(): void {
+    if (this.exitListenerAttached) return;
+    this.exitListenerAttached = true;
+    process.on('exit', this.onExit);
+  }
+
+  private detachExitListener(): void {
+    if (!this.exitListenerAttached) return;
+    this.exitListenerAttached = false;
+    process.removeListener('exit', this.onExit);
+  }
+
+  /**
+   * Last chance on process exit: async writes cannot finish, so whatever is still
+   * batched is appended synchronously to the current file.
+   */
+  private flushSyncOnExit(): void {
+    if (this.batch.length === 0) return;
+    const pending = this.batch;
+    this.batch = [];
+    this.enqueued -= pending.length;
+    try {
+      const content = pending.map((entry) => this.formatEntry(entry)).join('\n') + '\n';
+      fs.appendFileSync(this.currentFilePath, content, { mode: this.fileMode });
+    } catch {
+      /* the process is exiting; nothing useful left to do with the error */
+    }
   }
 
   private queueFull(): boolean {
@@ -369,6 +401,10 @@ export class FileTransport implements ITransport, IBatchTransport {
               timestamp: entry.timestamp.toISOString(),
               level: entry.level,
               message: entry.message,
+              context: entry.context,
+              traceId: entry.traceId,
+              appName: entry.appName,
+              environment: entry.environment,
             },
             entry.data
           )
@@ -413,6 +449,9 @@ export class FileTransport implements ITransport, IBatchTransport {
           internalError('FileTransport interval flush failed', err)
         );
       }, this.config.flushInterval);
+      // The exit hook writes whatever is still batched, so this timer must not
+      // keep an otherwise idle process alive for up to flushInterval.
+      this.batchTimer.unref();
     }
   }
 
@@ -636,6 +675,7 @@ export class FileTransport implements ITransport, IBatchTransport {
       this.batchTimer = undefined;
     }
     await this.flush();
+    this.detachExitListener();
     await this.housekeeping;
     this.reportDropped(0);
   }

@@ -8,6 +8,11 @@ export interface TransportRetryConfig {
   backoff?: 'fixed' | 'linear' | 'exponential';
   delay?: number;
   maxDelay?: number;
+  /**
+   * Most entries kept waiting for a retry per transport (default 1000). Past
+   * this the oldest are dropped, with a rate-limited warning.
+   */
+  maxPending?: number;
   fallback?: ITransport;
   onExhausted?: (error: Error, entry: TransportLogEntry) => void;
 }
