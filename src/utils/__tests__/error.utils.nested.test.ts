@@ -92,6 +92,21 @@ describe('serializeNestedErrors', () => {
     expect(late.failure).toBeInstanceOf(Error);
   });
 
+  it('keeps its node budget when a getter re-enters it', () => {
+    const big = { rows: Array.from({ length: 1999 }, () => ({})) };
+    const meta = Object.defineProperty({}, 'reentrant', {
+      enumerable: true,
+      get() {
+        serializeNestedErrors(big);
+        return 'ok';
+      },
+    });
+    const result = serializeNestedErrors({ meta, job: { failure: new Error('after the getter') } });
+    const { failure } = result.job as { failure: unknown };
+    expect(failure).not.toBeInstanceOf(Error);
+    expect(failure).toMatchObject({ message: 'after the getter' });
+  });
+
   it('leaves dates, maps and class instances alone', () => {
     class Money {
       constructor(readonly paise: number) {}

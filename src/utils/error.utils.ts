@@ -197,56 +197,72 @@ const MAX_ERROR_SEARCH_NODES = 2000;
  * what to show. The caller's objects are never mutated.
  */
 export function serializeNestedErrors(data: Record<string, unknown>): Record<string, unknown> {
-  const ancestors: object[] = [];
-  let nodes = 0;
+  // Saved and restored, because a getter read during the walk can log and re-enter.
+  const outerBudget = errorSearchBudget;
+  errorSearchBudget = MAX_ERROR_SEARCH_NODES;
+  try {
+    return walkForErrors(data, MAX_ERROR_SEARCH_DEPTH, undefined, undefined) as Record<
+      string,
+      unknown
+    >;
+  } finally {
+    errorSearchBudget = outerBudget;
+  }
+}
 
-  const walk = (value: object, depth: number): unknown => {
-    if (value instanceof Error) {
-      return typeof (value as { toJSON?: unknown }).toJSON === 'function'
-        ? value
-        : serializeError(value);
+let errorSearchBudget = 0;
+const hasOwn = Object.prototype.hasOwnProperty;
+
+// Allocates nothing until it finds an Error. With the depth cap, a node has at most
+// two ancestors that can still recurse, so they are passed as arguments for the cycle check.
+function walkForErrors(
+  value: object,
+  depth: number,
+  parent?: object,
+  grandparent?: object
+): unknown {
+  if (value instanceof Error) {
+    return typeof (value as { toJSON?: unknown }).toJSON === 'function'
+      ? value
+      : serializeError(value);
+  }
+  if (depth === 0 || --errorSearchBudget < 0 || value === parent || value === grandparent) {
+    return value;
+  }
+
+  let copy: unknown;
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      const item: unknown = value[i];
+      if (item === null || typeof item !== 'object') continue;
+      const next = walkForErrors(item, depth - 1, value, parent);
+      if (next !== item) {
+        copy ??= value.slice();
+        (copy as unknown[])[i] = next;
+      }
     }
-    if (depth === 0 || ++nodes > MAX_ERROR_SEARCH_NODES || ancestors.includes(value)) return value;
-
-    ancestors.push(value);
-    let copy: unknown;
-    if (Array.isArray(value)) {
-      for (let i = 0; i < value.length; i++) {
-        const item: unknown = value[i];
-        if (item === null || typeof item !== 'object') continue;
-        const next = walk(item, depth - 1);
-        if (next !== item) {
-          copy ??= value.slice();
-          (copy as unknown[])[i] = next;
-        }
+  } else {
+    const proto: unknown = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) return value;
+    const record = value as Record<string, unknown>;
+    // for...in avoids the key array that Object.keys allocates on every call.
+    for (const key in record) {
+      if (!hasOwn.call(record, key)) continue;
+      let item: unknown;
+      try {
+        item = record[key];
+      } catch {
+        continue;
       }
-    } else {
-      const proto: unknown = Object.getPrototypeOf(value);
-      if (proto !== Object.prototype && proto !== null) {
-        ancestors.pop();
-        return value;
-      }
-      const record = value as Record<string, unknown>;
-      for (const key of Object.keys(record)) {
-        let item: unknown;
-        try {
-          item = record[key];
-        } catch {
-          continue;
-        }
-        if (item === null || typeof item !== 'object') continue;
-        const next = walk(item, depth - 1);
-        if (next !== item) {
-          copy ??= { ...record };
-          assignOwn(copy as Record<string, unknown>, key, next);
-        }
+      if (item === null || typeof item !== 'object') continue;
+      const next = walkForErrors(item, depth - 1, record, parent);
+      if (next !== item) {
+        copy ??= { ...record };
+        assignOwn(copy as Record<string, unknown>, key, next);
       }
     }
-    ancestors.pop();
-    return copy ?? value;
-  };
-
-  return walk(data, MAX_ERROR_SEARCH_DEPTH) as Record<string, unknown>;
+  }
+  return copy ?? value;
 }
 
 /**
