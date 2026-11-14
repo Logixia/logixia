@@ -69,6 +69,24 @@ describe('natural-language parsing edge cases', () => {
   });
 });
 
+describe('natural-language query cost', () => {
+  it('parses a 100 KB query quickly', async () => {
+    const engine = new NLPSearchEngine();
+    const started = Date.now();
+    await engine.parseNaturalLanguageQuery('a'.repeat(100_000));
+    await engine.parseNaturalLanguageQuery('before '.repeat(15_000));
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it('still finds error type names', async () => {
+    const parsed = await new NLPSearchEngine().parseNaturalLanguageQuery(
+      'show TypeError and DatabaseException from the payments service'
+    );
+    const types = parsed.entities.filter((e) => e.type === 'error_type').map((e) => e.value);
+    expect(types).toEqual(['TypeError', 'DatabaseException']);
+  });
+});
+
 describe('robustness and field matching', () => {
   it('minSeverity tolerates missing or non-string levels', async () => {
     const eng = new BasicSearchEngine();

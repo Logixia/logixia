@@ -248,12 +248,12 @@ export class PaymentService {
 | Option      | Default        | Description                      |
 | ----------- | -------------- | -------------------------------- |
 | `level`     | `'debug'`      | Level for entry and exit lines.  |
-| `logArgs`   | `true`         | Include the arguments.           |
+| `logArgs`   | `false`        | Include the arguments.           |
 | `logResult` | `false`        | Include the return value.        |
 | `logErrors` | `true`         | Log thrown errors, then rethrow. |
 | `label`     | `Class.method` | Name used in the messages.       |
 
-Synchronous methods stay synchronous; async methods are awaited so the exit line reflects the result. Arguments are logged as they are, so combine this with [`redact`](/guide/redaction) or turn `logArgs` off for sensitive methods.
+Synchronous methods stay synchronous; async methods are awaited so the exit line reflects the result. Arguments are off by default: they are positional, so key-based [`redact`](/guide/redaction) rules can't recognise a password passed as an argument. Turn `logArgs` on only for methods whose arguments are safe to log.
 
 ## Kafka and WebSocket interceptors
 

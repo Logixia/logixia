@@ -75,14 +75,16 @@ Only `patterns` apply to the message string; path rules need an object to walk.
 - patterns for JWTs, `Bearer` values, `sk-` / `pk-` / `api-` / `key-` / `secret-` / `token-` prefixed keys, AWS access key IDs and AWS secret access keys;
 - name-based rules (`**.<name>`) for common secret field names: `password`, `passwd`, `secret`, `token`, `apiKey`, `api_key`, `accessToken`, `access_token`, `refreshToken`, `refresh_token`, `authorization`, `credentials`, `privateKey`, `private_key`, `clientSecret`, `client_secret`, `cookie`, `set-cookie`, `x-api-key`, `session`, `proxy-authorization`, `x-auth-token`, `x-access-token` and the AWS secret key names.
 
-`'aggressive'` adds patterns for email addresses, US Social Security numbers, card numbers, US phone numbers and IPv4 addresses, plus field names such as `email`, `phone`, `ssn`, `dob`, `creditCard`, `cardNumber`, `cvv` and `ipAddress`. Aggressive matching is blunt: a long run of digits can look like a card or phone number. Use `excludePaths` for identifiers that trip it:
+`'aggressive'` adds patterns for email addresses, US Social Security numbers, card numbers, US phone numbers and IPv4 addresses, plus field names such as `email`, `phone`, `ssn`, `dob`, `creditCard`, `cardNumber`, `cvv` and `ipAddress`. Aggressive matching is blunt: a long run of digits can look like a card or phone number.
+
+Trace and request IDs are left alone: an ID-shaped value (letters, digits and `._:;=-`, no spaces) under `traceId`, `spanId`, `parentSpanId`, `requestId`, `correlationId`, `traceparent`, `x-request-id`, `x-correlation-id`, `x-trace-id` or `x-amzn-trace-id` (in any case, with or without `_` or `-`) is not pattern-scanned, so `req-1234567890` or a Snowflake ID stays searchable. `paths` rules still apply to those keys. Use `excludePaths` for other identifiers that trip the patterns:
 
 ```ts
 import { createLogger } from 'logixia';
 
 const logger = createLogger({
   appName: 'api',
-  redact: { autoDetect: 'aggressive', excludePaths: ['**.vendorRefId', '**.traceId'] },
+  redact: { autoDetect: 'aggressive', excludePaths: ['**.vendorRefId'] },
 });
 
 await logger.info('synced', { vendorRefId: '1234567890123', email: 'ada@example.com' });

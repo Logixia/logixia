@@ -90,9 +90,10 @@ export interface LogMethodOptions {
    */
   level?: LogLevelString;
   /**
-   * Whether to log the arguments passed to the method.
-   * Disable for high-throughput hot paths.
-   * @default true
+   * Whether to log the method's arguments. Off by default: positional arguments
+   * have no key names, so redaction rules can't recognise a password passed as
+   * `validate(username, password)`.
+   * @default false
    */
   logArgs?: boolean;
   /**
@@ -127,7 +128,7 @@ export interface LogMethodOptions {
  * ```
  */
 export function LogMethod(options: LogMethodOptions = {}): MethodDecorator {
-  const { level = 'debug', logArgs = true, logResult = false, logErrors = true } = options;
+  const { level = 'debug', logArgs = false, logResult = false, logErrors = true } = options;
 
   // Use PropertyDescriptor (not generic TypedPropertyDescriptor<T>) to avoid
   // strict generic inference issues with exactOptionalPropertyTypes.

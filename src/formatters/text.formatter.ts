@@ -130,6 +130,8 @@ export class TextFormatter implements ILogFormatter {
 
   private formatPayload(payload: Record<string, unknown>): string {
     try {
+      // Keys and string values are stripped of control characters too, so a CR/LF
+      // or ANSI escape in a payload can't forge a log line or drive the terminal.
       // Handle simple objects
       if (Object.keys(payload).length === 1) {
         const entry = Object.entries(payload)[0];
@@ -140,19 +142,20 @@ export class TextFormatter implements ILogFormatter {
             typeof value === 'number' ||
             typeof value === 'boolean'
           ) {
-            return `${key}=${value}`;
+            return `${stripControls(key)}=${stripControls(value)}`;
           }
         }
       }
 
       // Handle multiple properties or complex objects
       const formatted = Object.entries(payload)
-        .map(([key, value]) => {
+        .map(([rawKey, value]) => {
+          const key = stripControls(rawKey);
           if (value === null || value === undefined) {
             return `${key}=${value}`;
           }
           if (typeof value === 'string') {
-            return `${key}="${value}"`;
+            return `${key}="${stripControls(value)}"`;
           }
           if (typeof value === 'number' || typeof value === 'boolean') {
             return `${key}=${value}`;
@@ -166,7 +169,7 @@ export class TextFormatter implements ILogFormatter {
             // control-char strip keeps the CWE-117 guarantee for object values.
             return `${key}=${stripControls(safeToString(value))}`;
           }
-          return `${key}=${String(value)}`;
+          return `${key}=${stripControls(String(value))}`;
         })
         .join(' ');
 
