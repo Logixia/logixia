@@ -403,6 +403,13 @@ describe('DataDogTransport errors', () => {
 });
 
 describe('DataDogTransport metrics and events', () => {
+  it('names metrics with metricPrefix when it is set', async () => {
+    await makeTransport({ enableLogs: false, enableMetrics: true, metricPrefix: 'logitron' }).write(
+      makeEntry({ level: 'warn' })
+    );
+    expect(callBody().series[0].metric).toBe('logitron.logs.warn');
+  });
+
   it('posts a count metric to /api/v1/series', async () => {
     await makeTransport({ enableLogs: false, enableMetrics: true, service: 'api' }).write(
       makeEntry({ level: 'error', context: 'Db', appName: 'web' })
@@ -411,7 +418,7 @@ describe('DataDogTransport metrics and events', () => {
     expect(fetchMock.mock.calls[0][1].headers['DD-API-KEY']).toBe('secret-key');
     const [series] = callBody().series;
     expect(series).toMatchObject({
-      metric: 'logitron.logs.error',
+      metric: 'logixia.logs.error',
       type: 'count',
       points: [[1767225600, 1]],
     });

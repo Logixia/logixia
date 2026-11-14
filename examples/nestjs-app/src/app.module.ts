@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { LogixiaLoggerModule } from '../../../src/core/logitron-logger.module';
+import { LogixiaLoggerModule } from '../../../src/core/logixia-logger.module';
 import { LogLevel } from '../../../src/types';
 import type { TransportConfig } from '../../../src/types/transport.types';
 import { UsersModule } from './users/users.module';

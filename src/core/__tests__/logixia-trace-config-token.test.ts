@@ -5,7 +5,7 @@
  * trace interceptor factories inject it through one shared constant.
  */
 
-import { LOGIXIA_TRACE_CONFIG, LogixiaLoggerModule } from '../logitron-logger.module';
+import { LOGIXIA_TRACE_CONFIG, LogixiaLoggerModule } from '../logixia-logger.module';
 
 describe('LogixiaLoggerModule trace config token', () => {
   it('registers the resolved trace config under LOGIXIA_TRACE_CONFIG', () => {

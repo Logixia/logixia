@@ -3,7 +3,7 @@
  * Demonstrates how to enable/disable fields and customize their formats
  */
 
-import { LogixiaLogger } from '../src/core/logitron-logger';
+import { LogixiaLogger } from '../src/core/logixia-logger';
 import { LoggerConfig } from '../src/types';
 
 // Example 1: Basic field configuration

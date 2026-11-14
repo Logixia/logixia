@@ -4,7 +4,7 @@
  */
 
 import * as internalLog from '../../utils/internal-log';
-import { createLogger } from '../logitron-logger';
+import { createLogger } from '../logixia-logger';
 
 function hostileError(): Error {
   const error = new Error('lazy');

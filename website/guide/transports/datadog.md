@@ -110,7 +110,7 @@ If the payload has `spanId` or `span_id`, it is converted the same way into `dd.
 
 ## Metrics
 
-With `enableMetrics: true`, each entry also posts a count of 1 to `/api/v1/series`, named `logitron.logs.<level>`, with tags for `level`, `service`, `env`, `context` and `app`. The `logitron.` prefix is kept so existing dashboards keep working.
+With `enableMetrics: true`, each entry also posts a count of 1 to `/api/v1/series`, named `logixia.logs.<level>`, with tags for `level`, `service`, `env`, `context` and `app`. Versions before 2.3 named them `logitron.logs.<level>`; set `metricPrefix: 'logitron'` to keep dashboards and monitors built on those names.
 
 If metrics fail after the logs were delivered, the logs are not re-sent. Turn off logs with `enableLogs: false` to send metrics only.
 

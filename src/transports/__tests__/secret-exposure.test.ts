@@ -8,7 +8,7 @@ import { generateKeyPairSync } from 'node:crypto';
 import * as util from 'node:util';
 
 import { BrowserRemoteTransport } from '../../browser';
-import { LogixiaLogger } from '../../core/logitron-logger';
+import { LogixiaLogger } from '../../core/logixia-logger';
 import type { TransportLogEntry } from '../../types/transport.types';
 import { AzureMonitorTransport } from '../azure-monitor.transport';
 import { HttpError } from '../batch-buffer';

@@ -16,7 +16,7 @@
 import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import { ForbiddenException, Inject, Injectable, Optional } from '@nestjs/common';
 
-import { LOGIXIA_LOGGER_CONFIG } from '../../../../src/core/logitron-logger.module';
+import { LOGIXIA_LOGGER_CONFIG } from '../../../../src/core/logixia-logger.module';
 import type { LoggerConfig, TraceIdExtractorConfig } from '../../../../src/types';
 import { getCurrentTraceId } from '../../../../src/utils/trace.utils';
 

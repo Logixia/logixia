@@ -1,5 +1,5 @@
 import { Controller, Get, Post } from '@nestjs/common';
-import { LogixiaLoggerService } from '../../../../src/core/logitron-nestjs.service';
+import { LogixiaLoggerService } from '../../../../src/core/logixia-nestjs.service';
 import { getCurrentTraceId } from '../../../../src/utils/trace.utils';
 import { EventsGateway } from '../events/events.gateway';
 

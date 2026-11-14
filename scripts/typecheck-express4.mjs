@@ -41,7 +41,7 @@ try {
       include: [
         path.join(root, 'src/middleware/http-logger.ts'),
         path.join(root, 'src/metrics.ts'),
-        path.join(root, 'src/core/logitron-logger.module.ts'),
+        path.join(root, 'src/core/logixia-logger.module.ts'),
         path.join(root, 'src/core/trace.middleware.ts'),
       ],
       exclude: [],

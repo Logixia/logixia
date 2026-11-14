@@ -3,7 +3,7 @@
  * reject and lose the line, because formatting went through JSON.stringify.
  */
 
-import { createLogger } from '../logitron-logger';
+import { createLogger } from '../logixia-logger';
 
 function captureStdout(): { lines: string[]; restore(): void } {
   const lines: string[] = [];

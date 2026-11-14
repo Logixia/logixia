@@ -2,7 +2,7 @@ import { Body, Controller, Post } from '@nestjs/common';
 import type { CallHandler } from '@nestjs/common';
 import type { KafkaContext } from '@nestjs/microservices';
 import { firstValueFrom, of } from 'rxjs';
-import { LogixiaLoggerService } from '../../../../src/core/logitron-nestjs.service';
+import { LogixiaLoggerService } from '../../../../src/core/logixia-nestjs.service';
 import { KafkaTraceInterceptor } from '../../../../src/core/kafka-trace.interceptor';
 import { runWithTraceId, generateTraceId } from '../../../../src/utils/trace.utils';
 import { KafkaController } from './kafka.controller';

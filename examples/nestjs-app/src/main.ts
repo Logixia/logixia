@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { Transport, MicroserviceOptions } from '@nestjs/microservices';
 import { AppModule } from './app.module';
-import { LogixiaLoggerService } from '../../../src/core/logitron-nestjs.service';
+import { LogixiaLoggerService } from '../../../src/core/logixia-nestjs.service';
 import { LogixiaExceptionFilter } from '../../../src/core/nestjs-extras';
 import { HttpLoggingInterceptor } from './interceptors/http-logging.interceptor';
 

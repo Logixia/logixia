@@ -11,7 +11,7 @@ import {
 } from '@nestjs/websockets';
 import type { Server, Socket } from 'socket.io';
 import { WebSocketTraceInterceptor } from '../../../../src/core/websocket-trace.interceptor';
-import { LogixiaLoggerService } from '../../../../src/core/logitron-nestjs.service';
+import { LogixiaLoggerService } from '../../../../src/core/logixia-nestjs.service';
 import { getCurrentTraceId, generateTraceId, runWithTraceId } from '../../../../src/utils/trace.utils';
 
 /**

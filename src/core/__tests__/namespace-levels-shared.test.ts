@@ -3,7 +3,7 @@
  * level names cannot collide with logger methods.
  */
 
-import { createLogger } from '../logitron-logger';
+import { createLogger } from '../logixia-logger';
 
 const BASE_CONFIG = {
   appName: 'TestApp',

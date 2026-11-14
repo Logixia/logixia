@@ -60,7 +60,7 @@ npm install          # should succeed in a clean node_modules
 
 ## BUG-02 🔴 `createLogger` factory calls a private method — TypeScript crash
 
-**File:** `src/core/logitron-logger.ts`
+**File:** `src/core/logixia-logger.ts`
 **Line:** ~597
 **Severity:** P0 — Calling a private method at runtime produces a TypeError in strict mode
 and a compile error under `--strict`.
@@ -108,9 +108,9 @@ breaks any "silence all output" testing approach.
 
 | File                                  | Line(s)       | Call                                   |
 | ------------------------------------- | ------------- | -------------------------------------- |
-| `src/core/logitron-logger.ts`         | 227, 232      | `console.error(...)` in flush          |
-| `src/core/logitron-logger.ts`         | 284, 292, 300 | `console.warn(...)` transport fallback |
-| `src/core/logitron-logger.ts`         | 316, 325      | `console.error(...)` healthCheck       |
+| `src/core/logixia-logger.ts`          | 227, 232      | `console.error(...)` in flush          |
+| `src/core/logixia-logger.ts`          | 284, 292, 300 | `console.warn(...)` transport fallback |
+| `src/core/logixia-logger.ts`          | 316, 325      | `console.error(...)` healthCheck       |
 | `src/utils/error.utils.ts`            | 248           | `console.error(...)` in serializeError |
 | `src/transports/transport.manager.ts` | 556–559       | `console.error(...)` fallback          |
 
@@ -146,7 +146,7 @@ Replace every `console.error(...)` / `console.warn(...)` in source with the appr
 
 ## BUG-04 🟠 Silent `.catch(console.error)` in `LogixiaLoggerService`
 
-**File:** `src/core/logitron-nestjs.service.ts`
+**File:** `src/core/logixia-nestjs.service.ts`
 **Lines:** 63, 75, 78 (approximate)
 **Severity:** P1 — Swallows every transport or formatting error silently.
 NestJS apps will have invisible logging failures in production.
@@ -187,7 +187,7 @@ so the error is written to stderr and not silently discarded.
 
 ## BUG-05 🟠 Trace-ID generator collision risk in `LogixiaLoggerModule`
 
-**File:** `src/core/logitron-logger.module.ts`
+**File:** `src/core/logixia-logger.module.ts`
 **Lines:** 79–83
 **Severity:** P1 — Under moderate concurrent request load, `Date.now().toString(36)`
 produces duplicate trace IDs because it only has millisecond resolution.
@@ -250,7 +250,7 @@ async close(): Promise<void> {
 
 ## BUG-07 🟠 NestJS module `static loggerConfig` — not safe for tests
 
-**File:** `src/core/logitron-logger.module.ts`
+**File:** `src/core/logixia-logger.module.ts`
 **Line:** ~59
 **Severity:** P1 — Static class property persists across Jest test runs that use
 multiple `Test.createTestingModule()` calls. The second module receives the first

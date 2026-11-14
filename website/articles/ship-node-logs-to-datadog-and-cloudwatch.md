@@ -68,7 +68,7 @@ Supported `site` values are `datadoghq.com`, `datadoghq.eu`, `us3.datadoghq.com`
 - The trace ID is converted to the decimal 64-bit form Datadog uses and sent as `dd.trace_id`; a `spanId` field in your payload becomes `dd.span_id`. Whether that links to your traces depends on your tracer producing the same ID, so verify it in your account.
 - Defaults: batches of `50`, a flush every `10000` ms, and a `10000`-entry buffer cap. Set `batchSize`, `flushInterval` and `maxBufferSize` to change them.
 - **`debug` and `trace` entries are skipped** by the analytics transports. If you expect debug logs in Datadog, they will not arrive.
-- Optional `enableMetrics: true` also sends a per-level count metric. It is off by default, and the metric names still start with the legacy prefix `logitron.logs.`.
+- Optional `enableMetrics: true` also sends a per-level count metric. It is off by default, and the metrics are named `logixia.logs.<level>` (`metricPrefix` changes the first part).
 
 The [Datadog transport guide](/guide/transports/datadog) lists every option.
 

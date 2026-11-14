@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import express from 'express';
 import Fastify from 'fastify';
 
-import { createLogger } from '../../core/logitron-logger';
+import { createLogger } from '../../core/logixia-logger';
 import { createFastifyPlugin } from '../../middleware/http-logger';
 import type { ITransport, TransportLogEntry } from '../../types/transport.types';
 import { getCurrentTraceId, runWithTraceId } from '../../utils/trace.utils';

@@ -8,7 +8,7 @@
 
 ## TS-01 🟠 `[K: string]: any` index signature on `LogixiaLogger`
 
-**File:** `src/core/logitron-logger.ts`
+**File:** `src/core/logixia-logger.ts`
 **Why it exists:** To let the factory function attach dynamic custom-level methods
 (`logger.payment()`, `logger.order()`, etc.) without a TypeScript error.
 
@@ -113,7 +113,7 @@ try {
 
 ## TS-03 🟠 Dynamic method creation in factory bypasses type checker
 
-**File:** `src/core/logitron-logger.ts` (`createLogger` function)
+**File:** `src/core/logixia-logger.ts` (`createLogger` function)
 
 ### What's wrong
 
@@ -157,7 +157,7 @@ happens once, internally, not at every call site.
 
 ## TS-04 🟡 `LogixiaLoggerService` methods lack `data` typing
 
-**File:** `src/core/logitron-nestjs.service.ts`
+**File:** `src/core/logixia-nestjs.service.ts`
 
 ### What's wrong
 

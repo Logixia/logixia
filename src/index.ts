@@ -13,7 +13,7 @@
  */
 
 import { DEFAULT_CONFIG } from './core/default-config';
-import { createLogger as createLoggerFromCore, LogixiaLogger } from './core/logitron-logger';
+import { createLogger as createLoggerFromCore, LogixiaLogger } from './core/logixia-logger';
 
 // Type exports
 export * from './formatters';

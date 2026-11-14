@@ -6,7 +6,7 @@ import { EMPTY, Observable } from 'rxjs';
 
 import type { TraceIdConfig } from '../types';
 import { extractTraceId, TraceContext } from '../utils/trace.utils';
-import { LogixiaLoggerModule } from './logitron-logger.module';
+import { LogixiaLoggerModule } from './logixia-logger.module';
 
 /**
  * Observable counters exposed for monitoring Kafka consumer trace hygiene.

@@ -10,8 +10,8 @@
  *  3. LogixiaLogger — logLevel() / shouldLog with custom levels
  */
 
-import { createLogger, LogixiaLogger } from '../logitron-logger';
-import { LogixiaLoggerService } from '../logitron-nestjs.service';
+import { createLogger, LogixiaLogger } from '../logixia-logger';
+import { LogixiaLoggerService } from '../logixia-nestjs.service';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

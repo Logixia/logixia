@@ -1,4 +1,4 @@
-import { LogixiaLoggerModule } from '../logitron-logger.module';
+import { LogixiaLoggerModule } from '../logixia-logger.module';
 
 describe('LogixiaLoggerModule internal warnings', () => {
   afterEach(() => {

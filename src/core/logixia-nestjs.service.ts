@@ -113,7 +113,7 @@ import { protectSecrets } from '../transports/secret-config';
 import { safeToString } from '../utils/coerce.utils';
 import { internalError } from '../utils/internal-log';
 import { getTraceContextKey, TraceContext } from '../utils/trace.utils';
-import { LogixiaLogger } from './logitron-logger';
+import { LogixiaLogger } from './logixia-logger';
 
 // A trailing string param is a stack trace only when it looks like one.
 const looksLikeStack = (value: string): boolean => value.includes('\n    at ');

@@ -2,7 +2,7 @@ import type { ArgumentsHost } from '@nestjs/common';
 import { NotFoundException } from '@nestjs/common';
 
 import { createLogger } from '../../index';
-import type { LogixiaLoggerService } from '../logitron-nestjs.service';
+import type { LogixiaLoggerService } from '../logixia-nestjs.service';
 import { LogixiaExceptionFilter } from '../nestjs-extras';
 
 function makeHost(url: string, extra: Record<string, unknown> = {}) {

@@ -4,7 +4,7 @@
  */
 
 import * as shutdownUtils from '../../utils/shutdown.utils';
-import { LogixiaLoggerService } from '../logitron-nestjs.service';
+import { LogixiaLoggerService } from '../logixia-nestjs.service';
 
 interface Captured {
   level: string;

@@ -129,7 +129,7 @@ async function main() {
 
   // ── Scenario 5: secrets in the MESSAGE string are redacted (security) ───────
   {
-    const { LogixiaLogger } = await import('../src/core/logitron-logger');
+    const { LogixiaLogger } = await import('../src/core/logixia-logger');
     const captured: string[] = [];
     const origWrite = process.stdout.write.bind(process.stdout);
     (process.stdout as NodeJS.WriteStream).write = ((chunk: unknown) => {

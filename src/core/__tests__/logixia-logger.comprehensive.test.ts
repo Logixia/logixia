@@ -18,7 +18,7 @@
 
 import { LogixiaContext } from '../../context/async-context';
 import { resetShutdownHandlers } from '../../utils/shutdown.utils';
-import { createLogger, LogixiaLogger } from '../logitron-logger';
+import { createLogger, LogixiaLogger } from '../logixia-logger';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

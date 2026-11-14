@@ -10,9 +10,9 @@
 
 **Files:**
 
-- `src/core/logitron-logger.ts` — inline defaults
-- `src/core/logitron-nestjs.service.ts` — duplicated inline defaults
-- `src/core/logitron-logger.module.ts` — partial defaults again
+- `src/core/logixia-logger.ts` — inline defaults
+- `src/core/logixia-nestjs.service.ts` — duplicated inline defaults
+- `src/core/logixia-logger.module.ts` — partial defaults again
 
 ### Fix — single source of truth
 
@@ -37,7 +37,7 @@ Import `DEFAULT_LOGGER_CONFIG` in every file that needs defaults. No more drift.
 
 ## DX-02 🟡 Static `loggerConfig` on `LogixiaLoggerModule` breaks parallel tests
 
-**File:** `src/core/logitron-logger.module.ts`
+**File:** `src/core/logixia-logger.module.ts`
 **Line:** ~59
 
 ```typescript
@@ -78,7 +78,7 @@ inject `@Inject(LOGIXIA_LOGGER_CONFIG) private config: LoggerConfig`.
 
 ## DX-03 🟡 `forFeature(context)` — no way to dispose a feature logger
 
-**File:** `src/core/logitron-logger.module.ts`
+**File:** `src/core/logixia-logger.module.ts`
 
 `forFeature()` creates a new logger instance per context, but there's no `OnModuleDestroy`
 lifecycle hook to close/flush it when the module is torn down.
@@ -143,7 +143,7 @@ types and JSON Schema validation from a single definition — no runtime Zod nee
 
 ## DX-05 🟡 `healthCheck()` return type is not clearly documented
 
-**File:** `src/core/logitron-logger.ts`
+**File:** `src/core/logixia-logger.ts`
 
 ```typescript
 // Current — return type is implicit
@@ -173,7 +173,7 @@ async healthCheck(): Promise<HealthCheckResult> { ... }
 
 ## DX-06 🟡 `child()` method — no TypeScript typing for merged context
 
-**File:** `src/core/logitron-logger.ts`
+**File:** `src/core/logixia-logger.ts`
 
 ```typescript
 // Current

@@ -1,5 +1,5 @@
 /**
- * Trace ID utilities for Logitron
+ * Trace ID utilities for Logixia
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';

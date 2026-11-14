@@ -1,4 +1,4 @@
-import { LogixiaLogger } from '../src/core/logitron-logger';
+import { LogixiaLogger } from '../src/core/logixia-logger';
 
 // Basic configuration with console and file output
 const logger = new LogixiaLogger({

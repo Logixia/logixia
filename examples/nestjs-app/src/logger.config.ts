@@ -1,5 +1,5 @@
 import { LogLevel } from '../../../src/types';
-import type { LogixiaServiceWith } from '../../../src/core/logitron-nestjs.service';
+import type { LogixiaServiceWith } from '../../../src/core/logixia-nestjs.service';
 
 /**
  * Shared Logixia config — define custom levels once with `as const`,

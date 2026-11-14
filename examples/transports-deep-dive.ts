@@ -20,7 +20,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { LogixiaLogger } from '../src/core/logitron-logger';
+import { LogixiaLogger } from '../src/core/logixia-logger';
 import { FileTransport } from '../src/transports/file.transport';
 import { DatabaseTransport } from '../src/transports/database.transport';
 

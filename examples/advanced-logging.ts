@@ -1,4 +1,4 @@
-import { LogixiaLogger } from "../src/core/logitron-logger";
+import { LogixiaLogger } from "../src/core/logixia-logger";
 import { TransportConfig } from "../src/types/transport.types";
 
 // Advanced logging configuration with multiple transports

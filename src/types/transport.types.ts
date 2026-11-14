@@ -161,6 +161,11 @@ export interface DataDogTransportConfig extends AnalyticsTransportConfig {
   version?: string;
   env?: string;
   enableMetrics?: boolean;
+  /**
+   * First part of the metric name, `<metricPrefix>.logs.<level>`. Default `'logixia'`.
+   * Set `'logitron'` to keep the names logixia sent before 2.3.
+   */
+  metricPrefix?: string;
   enableLogs?: boolean;
   /** @deprecated No effect. Trace correlation is added to every log as `dd.trace_id`. */
   enableTraces?: boolean;

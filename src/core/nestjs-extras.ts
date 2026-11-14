@@ -54,8 +54,8 @@ import {
   LOGIXIA_LOGGER_CONFIG,
   LOGIXIA_LOGGER_PREFIX,
   LogixiaLoggerModule,
-} from './logitron-logger.module';
-import { LogixiaLoggerService } from './logitron-nestjs.service';
+} from './logixia-logger.module';
+import { LogixiaLoggerService } from './logixia-nestjs.service';
 import { resolveResponseHeader } from './trace.middleware';
 
 // ── @InjectLogger() ──────────────────────────────────────────────────────────

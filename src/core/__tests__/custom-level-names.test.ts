@@ -2,7 +2,7 @@
  * Custom level names that contain capitals, and namespace levels that depend on setContext().
  */
 
-import { createLogger, LogixiaLogger } from '../logitron-logger';
+import { createLogger, LogixiaLogger } from '../logixia-logger';
 
 function setup(extra: Record<string, unknown> = {}) {
   const lines: string[] = [];

@@ -1,7 +1,7 @@
 import type { ITransport, TransportLogEntry } from '../../types/transport.types';
 import { resetShutdownHandlers } from '../../utils/shutdown.utils';
-import { LogixiaLogger } from '../logitron-logger';
-import { LogixiaLoggerService } from '../logitron-nestjs.service';
+import { LogixiaLogger } from '../logixia-logger';
+import { LogixiaLoggerService } from '../logixia-nestjs.service';
 
 const BASE = { appName: 'app', environment: 'test' };
 

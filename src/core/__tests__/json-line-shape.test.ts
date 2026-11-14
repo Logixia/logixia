@@ -5,7 +5,7 @@
 
 import type { LogEntry } from '../../types';
 import { resetShutdownHandlers } from '../../utils/shutdown.utils';
-import { createLogger } from '../logitron-logger';
+import { createLogger } from '../logixia-logger';
 
 // Error lines go to stderr, everything else to stdout.
 function captureOutput(): { lines: string[]; restore(): void } {
