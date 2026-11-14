@@ -299,12 +299,10 @@ describe('Sampler', () => {
 
     it('keeps per-trace decisions across resetStats', () => {
       const s = new Sampler({ rate: 0.5, traceConsistent: true });
-      const randomSpy = jest.spyOn(Math, 'random').mockReturnValueOnce(0.9);
-      expect(s.shouldEmit('info', 'trace-1')).toBe(false);
+      const before = Array.from({ length: 50 }, (_, i) => s.shouldEmit('info', `trace-${i}`));
       s.resetStats();
-      randomSpy.mockReturnValue(0.0);
-      expect(s.shouldEmit('info', 'trace-1')).toBe(false);
-      randomSpy.mockRestore();
+      const after = Array.from({ length: 50 }, (_, i) => s.shouldEmit('info', `trace-${i}`));
+      expect(after).toEqual(before);
       s.destroy();
     });
   });
@@ -344,23 +342,18 @@ describe('Sampler', () => {
       s.destroy();
     });
 
-    it('re-decides a trace that has been idle past the TTL', () => {
+    it('keeps the same decision for a trace that has been idle past the TTL', () => {
       const s = new Sampler({ rate: 0.5, traceConsistent: true });
       const nowSpy = jest.spyOn(Date, 'now');
       const t0 = 1_000_000;
       nowSpy.mockReturnValue(t0);
-      const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.9);
-      expect(s.shouldEmit('info', 'trace-1')).toBe(false);
+      const ids = Array.from({ length: 50 }, (_, i) => `trace-${i}`);
+      const before = ids.map((id) => s.shouldEmit('info', id));
 
-      nowSpy.mockReturnValue(t0 + 60_000);
-      randomSpy.mockReturnValue(0.0);
-      expect(s.shouldEmit('info', 'trace-1')).toBe(false);
-
-      nowSpy.mockReturnValue(t0 + 60_000 + 6 * 60_000);
-      expect(s.shouldEmit('info', 'trace-1')).toBe(true);
+      nowSpy.mockReturnValue(t0 + 6 * 60_000);
+      expect(ids.map((id) => s.shouldEmit('info', id))).toEqual(before);
 
       nowSpy.mockRestore();
-      randomSpy.mockRestore();
       s.destroy();
     });
   });
@@ -424,7 +417,7 @@ describe('Sampler', () => {
       s.destroy();
     });
 
-    it('compacts the window and keeps counts correct over many entries', () => {
+    it('keeps a fixed-size ring and correct counts over many entries', () => {
       const nowSpy = jest.spyOn(Date, 'now');
       let t = 9_000_000;
       nowSpy.mockImplementation(() => t);
@@ -433,22 +426,32 @@ describe('Sampler', () => {
         adaptive: { windowMs: 100, errorRateThreshold: 0.5, minSamples: 10 },
       });
       const internals = s as unknown as {
-        _adaptiveWindow: unknown[];
-        _adaptiveHead: number;
+        _adaptiveTotals: Float64Array;
+        _adaptiveTotal: number;
         _adaptiveErrors: number;
       };
+      const ringLength = internals._adaptiveTotals.length;
 
       for (let i = 0; i < 5000; i += 1) {
         t += 1;
         s.shouldEmit(i % 2 === 0 ? 'info' : 'error');
       }
 
-      const live = internals._adaptiveWindow.length - internals._adaptiveHead;
-      expect(live).toBeLessThanOrEqual(101);
-      expect(internals._adaptiveWindow.length).toBeLessThan(2500);
-      expect(internals._adaptiveErrors).toBeGreaterThanOrEqual(live / 2 - 1);
-      expect(internals._adaptiveErrors).toBeLessThanOrEqual(live / 2 + 1);
+      expect(internals._adaptiveTotals).toHaveLength(ringLength);
+      expect(internals._adaptiveTotal).toBeLessThanOrEqual(101);
+      expect(internals._adaptiveTotal).toBeGreaterThanOrEqual(99);
+      expect(internals._adaptiveErrors).toBeGreaterThanOrEqual(internals._adaptiveTotal / 2 - 1);
+      expect(internals._adaptiveErrors).toBeLessThanOrEqual(internals._adaptiveTotal / 2 + 1);
       nowSpy.mockRestore();
+      s.destroy();
+    });
+
+    it('does not retain per-log state however many logs are evaluated in one window', () => {
+      const s = new Sampler({ rate: 1.0, adaptive: { windowMs: 10_000 } });
+      for (let i = 0; i < 200_000; i += 1) s.shouldEmit('info');
+      const internals = s as unknown as { _adaptiveTotals: Float64Array; _adaptiveTotal: number };
+      expect(internals._adaptiveTotals).toHaveLength(100);
+      expect(internals._adaptiveTotal).toBe(200_000);
       s.destroy();
     });
   });

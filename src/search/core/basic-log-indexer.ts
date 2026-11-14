@@ -3,6 +3,7 @@
  */
 
 import type { LogEntry } from '../../types';
+import { stringifyForLog } from '../../utils/safe-stringify';
 import type { LogCluster, SearchQuery, SemanticIndex } from '../types';
 import type { ILogIndexer } from './log-indexer.interface';
 
@@ -169,8 +170,8 @@ export class BasicLogIndexer implements ILogIndexer {
     for (const [logId, log] of this.index.entries()) {
       const logTime = new Date(log.timestamp).getTime();
       if (logTime < cutoffTime) {
+        this.removeFromFieldIndices(logId, log);
         this.trackDelete(logId);
-        this.removeFromFieldIndices(logId);
         removedCount++;
       }
     }
@@ -245,11 +246,22 @@ export class BasicLogIndexer implements ILogIndexer {
     fieldIndex.get(normalizedValue)!.add(logId);
   }
 
-  private removeFromFieldIndices(logId: string): void {
-    for (const fieldIndex of this.fieldIndices.values()) {
-      for (const logIds of fieldIndex.values()) {
-        logIds.delete(logId);
-      }
+  private removeFromFieldIndices(logId: string, log: LogEntry): void {
+    const values: Array<[string, string | undefined]> = [
+      ['level', log.level],
+      ['appName', log.appName],
+      ['traceId', log.traceId],
+      ['context', log.context],
+      ['environment', log.environment],
+    ];
+    for (const [field, value] of values) {
+      if (!value) continue;
+      const fieldIndex = this.fieldIndices.get(field);
+      const key = value.toLowerCase();
+      const logIds = fieldIndex?.get(key);
+      if (!logIds) continue;
+      logIds.delete(logId);
+      if (logIds.size === 0) fieldIndex!.delete(key);
     }
   }
 
@@ -270,7 +282,7 @@ export class BasicLogIndexer implements ILogIndexer {
     const existing = this.logSizeById.get(logId);
     if (existing !== undefined) this.indexSizeBytes -= existing;
 
-    const size = JSON.stringify(log).length;
+    const size = stringifyForLog(log).length;
     this.index.set(logId, log);
     this.logSizeById.set(logId, size);
     this.indexSizeBytes += size;
@@ -287,13 +299,17 @@ export class BasicLogIndexer implements ILogIndexer {
   }
 
   private async removeOldestLogs(count: number): Promise<void> {
-    const logs = Array.from(this.index.entries())
-      .sort((a, b) => new Date(a[1].timestamp).getTime() - new Date(b[1].timestamp).getTime())
-      .slice(0, count);
+    // The Map iterates in insertion order, so the first entries are the oldest
+    // indexed ones; no sort and no scan of the field indices is needed.
+    const oldest: Array<[string, LogEntry]> = [];
+    for (const entry of this.index) {
+      if (oldest.length >= count) break;
+      oldest.push(entry);
+    }
 
-    for (const [logId] of logs) {
+    for (const [logId, log] of oldest) {
+      this.removeFromFieldIndices(logId, log);
       this.trackDelete(logId);
-      this.removeFromFieldIndices(logId);
     }
   }
 
