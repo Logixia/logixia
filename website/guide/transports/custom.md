@@ -156,8 +156,11 @@ The `TransportManager` can retry a transport's `write()` and fall back to anothe
 | `backoff`     | `'fixed' \| 'linear' \| 'exponential'` | `'exponential'` | How the wait grows between attempts.                                                                                |
 | `delay`       | `number` (ms)                          | `500`           | Base wait.                                                                                                          |
 | `maxDelay`    | `number` (ms)                          | `30000`         | Cap for the exponential wait only.                                                                                  |
+| `maxPending`  | `number`                               | `1000`          | Entries kept waiting for a retry. Past this the oldest are dropped, with a rate-limited warning.                    |
 | `fallback`    | transport                              | none            | Receives the entry after the last failed attempt.                                                                   |
-| `onExhausted` | `(error, entry) => void`               | none            | Called when retries and the fallback both failed. The error is then thrown to the logger.                           |
+| `onExhausted` | `(error, entry) => void`               | none            | Called when retries and the fallback both failed. The manager then emits `error`.                                   |
+
+Only the first attempt is awaited by the log call. If it fails, the entry joins a per-transport retry queue and the call resolves; retries run in the background, one at a time per transport.
 
 The wait before attempt `n + 1` is `delay` for `fixed`, `delay * (n + 1)` for `linear`, and `min(delay * 2^n, maxDelay)` for `exponential`, where `n` counts from 0.
 

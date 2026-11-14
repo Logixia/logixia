@@ -39,7 +39,9 @@ await logger.info('serving');
 
 When logixia exits it uses status `128 + signal number`. The force-exit timer is only armed when logixia owns the exit, and exits with status 1 and a message on stderr if flushing hangs.
 
-On signal, each registered logger has `close()` called, so the logger is closed afterwards. Loggers are also flushed, not closed, on `beforeExit`.
+On signal, each registered logger is flushed. When logixia owns the exit (`exit: 'always'`, or `'auto'` with no other listener for the signal) the loggers are closed as well, just before the process ends. When your app owns the exit (`'never'`, or `'auto'` with your own handler), they are only flushed and stay usable, so lines your handler logs while it drains are still written. Loggers are also flushed, not closed, on `beforeExit`.
+
+A log call made after a logger was closed is written to stdout (stderr for `warn` and `error`) as a JSON line instead of being dropped.
 
 ::: warning Do not add a second exit
 Do not combine `gracefulShutdown` with a manual signal handler that calls `process.exit()` straight away; it can cut the flush short. Close your server in your handler and let the process end naturally, or set `exit: 'never'`.

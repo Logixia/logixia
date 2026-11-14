@@ -231,6 +231,7 @@ function byteLength(s: string): number {
 }
 
 const FAILURE_REPORT_INTERVAL_MS = 60_000;
+const MAX_RETRY_BACKOFF_MS = 60_000;
 
 /**
  * Error name/code, HTTP status and host only. The error message is never
@@ -301,6 +302,8 @@ export class BrowserRemoteTransport implements IBrowserTransport {
   private readonly silent: boolean;
   private readonly onError: ((error: unknown) => void) | undefined;
   private reporting = false;
+  private consecutiveFailures = 0;
+  private retryAt = 0;
   private failureReported = false;
   private lastReportAt: number | undefined;
   private lastRecoveryAt: number | undefined;
@@ -388,7 +391,7 @@ export class BrowserRemoteTransport implements IBrowserTransport {
       this.batch.shift();
       this.droppedEntries += 1;
     }
-    if (this.batch.length >= this.batchSize) {
+    if (this.batch.length >= this.batchSize && Date.now() >= this.retryAt) {
       this.flush();
     }
   }
@@ -451,6 +454,13 @@ export class BrowserRemoteTransport implements IBrowserTransport {
   private recordFailure(entries: BrowserLogEntry[], error: unknown): void {
     this.batch.unshift(...entries);
     this.failedFlushCount += 1;
+    if (entries.length > 0) {
+      // Exponential backoff so a down endpoint is not re-POSTed on every write
+      // or timer tick; a manual flush() or destroy() still goes through.
+      this.consecutiveFailures += 1;
+      this.retryAt =
+        Date.now() + Math.min(MAX_RETRY_BACKOFF_MS, 1000 * 2 ** (this.consecutiveFailures - 1));
+    }
     this.lastFlushError = error;
     const now = Date.now();
     const shouldReport =
@@ -472,6 +482,8 @@ export class BrowserRemoteTransport implements IBrowserTransport {
   }
 
   private reportRecovery(): void {
+    this.consecutiveFailures = 0;
+    this.retryAt = 0;
     if (!this.failureReported) return;
     this.failureReported = false;
     const now = Date.now();
@@ -501,8 +513,11 @@ export class BrowserRemoteTransport implements IBrowserTransport {
       typeof (globalThis as Record<string, unknown>)['setInterval'] === 'function'
     ) {
       this.timer = setInterval(() => {
+        if (Date.now() < this.retryAt) return;
         this.flush().catch(() => {});
       }, this.flushIntervalMs);
+      // Do not keep an SSR / Node process alive just to flush logs.
+      (this.timer as { unref?: () => void }).unref?.();
     }
   }
 

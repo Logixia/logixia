@@ -10,6 +10,9 @@
 // OTLP collectors are conventionally reached over plain http on localhost in
 // dev/test (e.g. http://localhost:4318/v1/logs); these are test URLs, not prod.
 /* eslint-disable sonarjs/no-clear-text-protocols */
+import type { AddressInfo, Socket } from 'node:net';
+import * as net from 'node:net';
+
 import type { TransportLogEntry } from '../../types/transport.types';
 import { disableOtelBridge, initOtelBridge } from '../../utils/otel';
 import { OtlpLogTransport, toOtelSeverity } from '../otlp.transport';
@@ -281,5 +284,32 @@ describe('OtlpLogTransport', () => {
         expect(keys(rec)).not.toContain('span_id');
       });
     });
+  });
+});
+
+describe('OtlpLogTransport close() against a collector that never answers', () => {
+  it('gives up within the close timeout instead of the full request timeout', async () => {
+    const sockets: Socket[] = [];
+    const server = net.createServer((s) => {
+      sockets.push(s);
+      s.on('error', () => {});
+      s.on('data', () => {});
+    });
+    await new Promise<void>((r) => server.listen(0, r));
+    const port = (server.address() as AddressInfo).port;
+    process.env['LOGIXIA_SILENT_INTERNAL'] = '1';
+    const transport = new OtlpLogTransport({
+      url: `http://127.0.0.1:${port}/v1/logs`,
+      requestTimeoutMs: 10_000,
+      closeTimeoutMs: 100,
+    });
+    transport.write({ timestamp: new Date(), level: 'info', message: 'x' });
+    void transport.flush().catch(() => {});
+    await new Promise((r) => setTimeout(r, 20));
+    const start = Date.now();
+    await transport.close();
+    expect(Date.now() - start).toBeLessThan(2000);
+    for (const s of sockets) s.destroy();
+    await new Promise((r) => server.close(r));
   });
 });

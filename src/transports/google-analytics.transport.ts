@@ -2,6 +2,7 @@ import type { GoogleAnalyticsTransportConfig, TransportLogEntry } from '../types
 import { internalError, internalLog } from '../utils/internal-log';
 import { stringifyForLog } from '../utils/safe-stringify';
 import { AnalyticsTransport } from './analytics.transport';
+import { fetchWithTimeout } from './fetch-timeout';
 import { protectSecrets } from './secret-config';
 
 /**
@@ -157,7 +158,7 @@ export class GoogleAnalyticsTransport extends AnalyticsTransport {
     });
 
     try {
-      const response = await fetch(`${url}?${params}`, {
+      const response = await fetchWithTimeout(`${url}?${params}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

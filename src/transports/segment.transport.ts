@@ -4,6 +4,7 @@ import { stringifyForLog } from '../utils/safe-stringify';
 import { LOGIXIA_VERSION } from '../version';
 import type { AnalyticsUser } from './analytics.transport';
 import { AnalyticsTransport } from './analytics.transport';
+import { fetchWithTimeout } from './fetch-timeout';
 import { protectSecrets } from './secret-config';
 
 /**
@@ -143,7 +144,7 @@ export class SegmentTransport extends AnalyticsTransport {
     const auth = Buffer.from(`${this.segmentConfig.writeKey}:`).toString('base64');
 
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

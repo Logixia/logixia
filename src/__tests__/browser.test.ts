@@ -478,3 +478,37 @@ describe('BrowserLogger.child()', () => {
     expect(lastJsonEntry().payload).toEqual({ requestId: 'r-1', userId: '42' });
   });
 });
+
+describe('BrowserRemoteTransport — failure backoff', () => {
+  it('does not re-POST a failing batch on every write once it is full', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({ ok: false, status: 503 });
+    const original = globalThis.fetch;
+    (globalThis as { fetch: unknown }).fetch = fetchMock;
+    try {
+      const transport = new BrowserRemoteTransport({
+        url: 'https://logs.example.com/ingest',
+        silent: true,
+        flushIntervalMs: 0,
+        batchSize: 10,
+      });
+      for (let i = 0; i < 300; i++) {
+        transport.write({ level: 'info', message: `m${i}`, timestamp: new Date().toISOString() });
+        await new Promise((r) => setImmediate(r));
+      }
+      expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(2);
+    } finally {
+      (globalThis as { fetch: unknown }).fetch = original;
+    }
+  });
+
+  it('unrefs its flush timer so an SSR script can exit', () => {
+    const transport = new BrowserRemoteTransport({
+      url: 'https://logs.example.com/ingest',
+      silent: true,
+      flushIntervalMs: 1000,
+    });
+    const timer = (transport as unknown as { timer: NodeJS.Timeout }).timer;
+    expect(timer.hasRef()).toBe(false);
+    transport.destroy();
+  });
+});
