@@ -23,7 +23,13 @@ import type { RedactConfig } from '../types';
 import { safeToString } from './coerce.utils';
 import { serializeError } from './error.utils';
 import { assignOwn } from './own-property';
-import { SENSITIVE_KEY_NAMES } from './sensitive-names';
+import {
+  buildNameSet,
+  DEFAULT_REDACT_QUERY_PARAMS,
+  redactUrlQuery,
+  redactUrlsInText,
+  SENSITIVE_KEY_NAMES,
+} from './sensitive-names';
 
 export type { RedactConfig };
 
@@ -277,6 +283,22 @@ const CORRELATION_ID_KEYS = new Set([
 ]);
 const ID_SHAPED = /^[\w.:;=-]{1,256}$/;
 
+// Query parameters such as token, code and api_key, plus redact.queryParams: the
+// same names the middleware, exception filter and trace context redact in URLs.
+const DEFAULT_QUERY_NAMES = buildNameSet(DEFAULT_REDACT_QUERY_PARAMS, undefined);
+const queryNameSets = new WeakMap<readonly string[], Set<string>>();
+
+function queryNamesOf(config: RedactConfig): ReadonlySet<string> {
+  const extra = config.queryParams;
+  if (!extra || extra.length === 0) return DEFAULT_QUERY_NAMES;
+  let names = queryNameSets.get(extra);
+  if (!names) {
+    names = buildNameSet(DEFAULT_REDACT_QUERY_PARAMS, extra);
+    queryNameSets.set(extra, names);
+  }
+  return names;
+}
+
 function isCorrelationId(fullPath: string, value: string): boolean {
   const key = fullPath.slice(fullPath.lastIndexOf('.') + 1);
   return CORRELATION_ID_KEYS.has(key.toLowerCase().replace(/[-_]/g, '')) && ID_SHAPED.test(value);
@@ -304,7 +326,10 @@ function walkValue(
     if (patterns.length === 0) return value;
     if (isCorrelationId(fullPath, value)) return value;
     if (excludePaths.some((p) => matchesPath(fullPath, p) || matchesPath(bare, p))) return value;
-    return applyPatterns(value, patterns, censor);
+    const withoutQuerySecrets = value.includes('?')
+      ? redactUrlsInText(value, queryNamesOf(state.config))
+      : value;
+    return applyPatterns(withoutQuerySecrets, patterns, censor);
   }
 
   if (Array.isArray(value)) {
@@ -319,7 +344,8 @@ function walkValue(
     const url = new URL(value.href);
     url.username = '';
     url.password = '';
-    const redacted = walkValue(url.href, state, fullPath, bare, depth);
+    const href = redactUrlQuery(url.href, queryNamesOf(state.config));
+    const redacted = walkValue(href, state, fullPath, bare, depth);
     return redacted === value.href ? value : redacted;
   }
 

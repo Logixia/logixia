@@ -298,6 +298,33 @@ describe('redactObject — trace and request IDs', () => {
   });
 });
 
+describe('redactObject — query secrets in URLs', () => {
+  it('redacts query secrets in URL objects and URL strings', () => {
+    const out = applyRedaction(
+      {
+        urlObj: new URL('https://user:pw@h.example/cb?token=S3CR3T&page=2'),
+        config: { url: 'https://api.example/v1?api_key=K3Y&q=shoes' },
+        note: 'redirected to /login?code=OAUTH-CODE',
+      },
+      { autoDetect: true }
+    ) as Record<string, unknown>;
+    const text = JSON.stringify(out);
+    for (const secret of ['S3CR3T', 'K3Y', 'OAUTH-CODE', 'user:pw']) {
+      expect(text).not.toContain(secret);
+    }
+    expect(text).toContain('page=2');
+    expect(text).toContain('q=shoes');
+  });
+
+  it('honours redact.queryParams and leaves strings without a query alone', () => {
+    const out = applyRedaction(
+      { link: '/invite?invite=I-123&ref=mail', plain: 'no query here' },
+      { autoDetect: true, queryParams: ['invite'] }
+    );
+    expect(out).toEqual({ link: '/invite?invite=[REDACTED]&ref=mail', plain: 'no query here' });
+  });
+});
+
 describe('redactObject — array handling', () => {
   it('recurses into array items that are plain objects', () => {
     const obj = {
