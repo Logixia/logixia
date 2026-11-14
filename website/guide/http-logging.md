@@ -57,7 +57,7 @@ const fastify = Fastify();
 await fastify.register(createFastifyPlugin(logger, { slowRequestThresholdMs: 500 }));
 ```
 
-The plugin uses the `onRequest` and `onResponse` hooks and is registered without Fastify's encapsulation, so it applies to every route. It supports the same options as the Express middleware except body logging: `logBody` and `bodyMaxBytes` are Express only.
+To make Fastify's own logs go through logixia instead, see [Fastify](/guide/fastify). The plugin uses the `onRequest` and `onResponse` hooks and is registered without Fastify's encapsulation, so it applies to every route. It supports the same options as the Express middleware except body logging: `logBody` and `bodyMaxBytes` are Express only.
 
 ## Options
 
