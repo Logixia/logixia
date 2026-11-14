@@ -14,7 +14,9 @@
     "./gcp": "./src/gcp.ts",
     "./azure": "./src/azure.ts",
     "./browser": "./src/browser.ts",
-    "./correlation": "./src/correlation.ts"
+    "./correlation": "./src/correlation.ts",
+    "./fastify": "./src/fastify.ts",
+    "./hono": "./src/hono.ts"
   },
   "publish": {
     "include": ["src/**/*.ts", "README.md", "LICENSE"],
